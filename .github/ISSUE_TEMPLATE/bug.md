@@ -12,7 +12,7 @@ assignees: ""
 
 ## Окружение
 
-- Профиль: local-dev | local-full | prod
+- Профиль: `local-dev` | `local-full` | `prod`
 - Версия платформы: <версия>
 
 ## Шаги воспроизведения
@@ -33,4 +33,3 @@ assignees: ""
 
 - Size: S | M | L
 - Priority: p0 | p1 | p2
-

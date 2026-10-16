@@ -12,9 +12,9 @@ assignees: ""
 
 ## Ссылки
 
-- Требования: FR-XXX, NFR-XXX
-- ADR: ADR-XXX
-- Раздел: docs/architecture/SYSTEM_DESIGN.md section X.Y
+- Требования: `FR-XXX`, `NFR-XXX`
+- ADR: `ADR-XXX`
+- Раздел: `docs/architecture/SYSTEM_DESIGN.md` section X.Y
 
 ## Что сделать
 
@@ -42,4 +42,3 @@ assignees: ""
 - [ ] Тесты зелёные, покрытие >= 80%
 - [ ] Логи без секретов
 - [ ] Документация обновлена
-

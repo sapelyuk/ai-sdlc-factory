@@ -27,4 +27,3 @@ assignees: ""
 
 - Size: S | M | L
 - Priority: p0 | p1 | p2
-
