@@ -1,0 +1,71 @@
+version: "3.9"
+
+services:
+  langfuse-web:
+    image: langfuse/langfuse:latest
+    container_name: ai-sdlc-factory-langfuse-web
+    ports:
+      - "3030:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
+      - SALT=langfuse
+      - HASHED_SALT=langfuse
+    depends_on:
+      - langfuse-postgres
+      - langfuse-redis
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:latest
+    container_name: ai-sdlc-factory-langfuse-worker
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
+    depends_on:
+      - langfuse-postgres
+
+  langfuse-postgres:
+    image: postgres:16-alpine
+    container_name: ai-sdlc-factory-langfuse-postgres
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+    volumes:
+      - langfuse-postgres-data:/var/lib/postgresql/data
+
+  langfuse-redis:
+    image: redis:7-alpine
+    container_name: ai-sdlc-factory-langfuse-redis
+    volumes:
+      - langfuse-redis-data:/data
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: ai-sdlc-factory-langfuse-clickhouse
+    ports:
+      - "8123:8123"
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ai-sdlc-factory-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ai-sdlc-factory-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+
+volumes:
+  langfuse-postgres-data:
+  langfuse-redis-data:
+  langfuse-clickhouse-data:
+

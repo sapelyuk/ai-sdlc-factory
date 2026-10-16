@@ -1,0 +1,178 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-sdlc-factory-postgres
+    environment:
+      POSTGRES_DB: ai_sdlc_factory
+      POSTGRES_USER: ai_sdlc_factory
+      POSTGRES_PASSWORD: ${AI_DB_PASSWORD:-ai_sdlc_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_sdlc_factory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: ai-sdlc-factory-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${AI_MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${AI_MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  nats:
+    image: nats:latest
+    container_name: ai-sdlc-factory-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: --jetstream --store_dir /data
+    volumes:
+      - nats-data:/data
+
+  vault:
+    image: hashicorp/vault:latest
+    container_name: ai-sdlc-factory-vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${AI_VAULT_TOKEN:-root-dev-token}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: ai-sdlc-factory-opa
+    command: run --server --log-level=info --addr=:8181
+    ports:
+      - "8181:8181"
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: ai-sdlc-factory-temporal
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ai_sdlc_factory
+      POSTGRES_PWD: ${AI_DB_PASSWORD:-ai_sdlc_dev_password}
+      POSTGRES_DBNAME: temporal
+    ports:
+      - "7233:7233"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: ai-sdlc-factory-temporal-ui
+    ports:
+      - "8080:8080"
+    environment:
+      - TEMPORAL_GRPC_TARGET=temporal:7233
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on:
+      - temporal
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.api
+    container_name: ai-sdlc-factory-api
+    ports:
+      - "8000:8000"
+    environment:
+      AI_DB_HOST: postgres
+      AI_MINIO_ENDPOINT: minio:9000
+      AI_NATS_URL: nats://nats:4222
+      AI_VAULT_ADDR: http://vault:8200
+      AI_TEMPORAL_HOST: temporal:7233
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      vault:
+        condition: service_started
+      temporal:
+        condition: service_started
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.worker
+    container_name: ai-sdlc-factory-worker
+    environment:
+      AI_DB_HOST: postgres
+      AI_TEMPORAL_HOST: temporal:7233
+      AI_NATS_URL: nats://nats:4222
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+
+  semantic:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.semantic
+    container_name: ai-sdlc-factory-semantic
+    environment:
+      AI_DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway-llm:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.gateway-llm
+    container_name: ai-sdlc-factory-gateway-llm
+    environment:
+      AI_ANTHROPIC_API_KEY: ${AI_ANTHROPIC_API_KEY:-}
+      AI_OPENAI_API_KEY: ${AI_OPENAI_API_KEY:-}
+    depends_on:
+      - api
+
+  tool-gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.tool-gateway
+    container_name: ai-sdlc-factory-tool-gateway
+    depends_on:
+      - api
+
+  sandbox-manager:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.sandbox-manager
+    container_name: ai-sdlc-factory-sandbox-manager
+    depends_on:
+      - api
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.web
+    container_name: ai-sdlc-factory-web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  minio-data:
+  nats-data:

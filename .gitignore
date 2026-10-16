@@ -1,0 +1,90 @@
+# Go
+/bin/
+/pkg/
+/*.exe
+/*.exe~
+/*.dll
+/*.so
+/*.dylib
+/*.test
+/*.out
+/go.sum
+/vendor/
+/coverage.txt
+/coverage.html
+/.race/
+/.idea/
+/.vscode/
+
+# Node.js
+node_modules/
+/dist/
+/package-lock.json
+pnpm-lock.yaml
+yarn.lock
+*.tsbuildinfo
+.nyc_output/
+coverage/
+*.tgz
+
+# Docker
+*.pid
+*.pid.lock
+*.sock
+.docker/
+.dockerignore
+!/.dockerenv
+
+# IDE
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.project
+.settings/
+.classpath
+.replit
+
+# Build artifacts
+build/
+out/
+dist/
+target/
+
+# Environment
+.env
+.env.local
+.env.local-dev
+.env.local-full
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temp
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
+
+# Test coverage
+coverage/
+*.coverprofile
+*.out
+
+# Semantic indexer artifacts
+.semantic-indexer/
+
+# Build cache
+.gocache/
+.golangci-cache/

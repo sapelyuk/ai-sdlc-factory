@@ -1,0 +1,16 @@
+limit.maxIDLength:
+  - value: 255
+    overrides: []
+
+limit.taskListSize:
+  - value: 10000
+    overrides: []
+
+distribution.maxConcurrentActivityExecutionSize:
+  - value: 1000
+    overrides: []
+
+distribution.maxConcurrentWorkflowTaskPollers:
+  - value: 1000
+    overrides: []
+
