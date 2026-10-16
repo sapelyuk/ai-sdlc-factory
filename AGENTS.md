@@ -1,109 +1,121 @@
-# AI-SDLC Factory — Instructions for AI Agents
+# Инструкции для ИИ-агента: ai-sdlc-factory
 
-This document provides guidance for AI agents working on the `ai-sdlc-factory` project.
+Этот файл читают ИИ-агенты (Codex, Cline, Continue, Aider, Claude Code,
+Copilot и др.) при работе с репозиторием. Он определяет базовые правила
+поведения и ссылается на каноническую документацию проекта.
 
-## Repository Structure
+## Главное
 
-- `apps/` — Go microservices (api, worker, semantic, diagram, etc.)
-- `packages/` — Shared contracts, ontology, policies, SDKs
-- `backend/` — Legacy monolithic backend (deprecated, migrate to apps/)
-- `frontend/` — React/TypeScript Web UI
-- `deploy/` — Docker Compose and Kubernetes manifests
-- `docs/` — Architecture documentation and ADRs
-- `migrations/` — Database migrations (PostgreSQL, Graph)
-- `catalog/` — Role, team, and process YAML specifications
+Ты работаешь в репозитории `ai-sdlc-factory`.
+Перед началом любой задачи прочитай `CONTRIBUTING.md`.
 
-## Coding Standards
+## Базовые правила
 
-### Go (Backend)
+1. Любая работа идёт по пути: `issue → ветка → PR → main`.
+2. Никогда не коммить напрямую в `main`.
+3. Никогда не создавай ветку без issue.
+4. Никогда не мержи PR без явного approve владельца.
+5. Никогда не ослабляй тесты, чтобы получить зелёный CI.
+6. Никогда не отклоняйся от ADR без нового ADR.
+7. Никогда не придумывай требования — спрашивай владельца.
 
-- Use Go 1.23+
-- Follow [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md)
-- All public APIs must have godoc comments
-- Use `chi` or `echo` for HTTP routing
-- Use `go-playground/validator` for request validation
-- Use `temporalio/go` SDK for durable workflows
-- Use `nats-io/nats.go` for event streaming
-- Use `open-telemetry/opentelemetry-go` for observability
-- All new dependencies must be reviewed for license, maintenance, and CVEs
+## Именование веток
 
-### TypeScript/React (Frontend)
+`<тип>/<номер-issue>-<краткое-имя>`
 
-- Use React 18+ with strict TypeScript
-- Use Vite for build tooling
-- Use Tailwind CSS + shadcn/ui for styling
-- Use TanStack Query + Zustand for state management
-- Use Vitest + Playwright for testing
-- All API calls must go through `shared/api/httpClient`
+Типы: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `spike`.
 
-## Commit Convention
+## Сообщения коммитов
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
+Conventional Commits со ссылкой на issue.
 
 ```
-<type>(<scope>): <description>
-
-<optional body>
-
-Refs #<issue-number>
-Closes #<issue-number>
+<тип>(<область>): <краткое описание> (#<issue>)
 ```
 
-Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `ci`, `build`
+## Где что искать
 
-## Pull Request Rules
+| Вопрос | Файл |
+|---|---|
+| Как контрибьютить | `CONTRIBUTING.md` |
+| Архитектура | `docs/architecture/SYSTEM_DESIGN.md` |
+| ADR | `docs/architecture/ADR.md` |
+| Как планировать работу | `docs/AGENT_KICKOFF.md` |
+| Семантический слой | `docs/architecture/ONTOLOGY_SPEC.md` |
+| Состояния и гейты | `docs/architecture/SDLC_STATE_MACHINE.md` |
+| MCP-инструменты | `docs/architecture/MCP_TOOLS.md` |
+| Локальный запуск | `deploy/compose/README.md` |
+| Диаграммы | `docs/architecture/diagrams/README.md` |
 
-1. Every PR must reference FR/NFR/ADR identifiers
-2. Small PRs preferred — each PR should be reviewable in 15 minutes
-3. CI must pass before merge
-4. Use squash merge for all PRs
-5. After merge: delete branch
-6. Documentation must be updated in the same PR
+## Порядок чтения перед задачей
 
-## Security Rules
+1. Открой issue, к которому привязана задача.
+2. Прочитай тело issue целиком, включая ссылки на FR / NFR / ADR.
+3. Открой указанный раздел `SYSTEM_DESIGN.md` — прочитай.
+4. Открой связанные ADR — прочитай.
+5. Если что-то неясно — не начинай, задай вопрос владельцу.
 
-- Never commit secrets, tokens, or credentials
-- Never commit `.env.local-dev` or `.env.local-full`
-- Always use `.env.example` as template
-- Sandboxes must not have access to secrets or docker socket
-- All LLM calls must be logged with cost tracking
-- R3 actions (prod deploy, data deletion) require human approval
+## Стек
 
-## Semantic Layer Rules
+- Бэкенд: **Go** 1.23+.
+- Фронтенд: **TypeScript + React**.
+- Оркестрация: **Temporal** (Go SDK).
+- БД: **PostgreSQL 16 + pgvector**.
+- Шина событий: **NATS JetStream**.
+- Объектное хранилище: **MinIO (S3)**.
+- Политики: **OPA (Rego)**.
+- Секреты: **Vault / OpenBao**.
+- Наблюдаемость: **OpenTelemetry + Jaeger**; опционально **Langfuse**, **Prometheus**, **Grafana** под профилем `observability`.
 
-- All new entities must be added to SLP or SLPr ontology
-- Use URI format: `ai-sdlc-factory/product-domain:<path>#<fragment>`
-- Changes to SLP major version require human approval (R3)
-- Changes to SLPr require review (R2)
-- All artifacts must reference semantic entities by URI
+## Именование
 
-## Architecture Model Rules
+- Имя сервиса: `ai-sdlc-factory`.
+- `apiVersion` YAML: `ai-sdlc-factory/v1`.
+- Namespace онтологии: `ai-sdlc-factory/product-domain@^1`.
+- Корневой каталог: `ai-sdlc-factory/`.
+- Префикс контейнеров и Helm-релизов: `ai-sdlc-factory-*`.
 
-- C4 diagrams must be in Structurizr DSL (primary), Mermaid, or PlantUML
-- Diagrams must pass self-correction loop (max 3 iterations)
-- All diagram nodes must exist in Architecture Model
-- When AM changes, dependent diagrams become `stale`
-- Drift detection may block PRs at critical level
+## Правила для кода
 
-## Deployment Profiles
+1. Контракты первыми. Сначала OpenAPI, JSON Schema, MCP-схемы, события; затем реализация.
+2. Тесты — вместе с кодом, не после. Покрытие нового кода ≥ 80%.
+3. Не удаляй и не ослабляй тесты, чтобы получить зелёный CI.
+4. Малые PR: ≤ 400 строк diff там, где возможно.
+5. Ссылки на FR / NFR / ADR в описании PR обязательны.
+6. Не добавляй зависимости без проверки лицензии, поддержки и уязвимостей.
+7. Версии фиксированы. Не используй версии младше двух недель.
+8. Безопасность не откладывается: песочницы без секретов и сети, credential brokering, редактирование секретов в логах, аудит, бюджеты, R3-гейты.
+9. Профили развёртывания. При добавлении нового сервиса укажи, к какому профилю он относится (`всегда` или `observability`), и обнови оба override-файла Compose.
+10. Именование. Любое новое имя — производное от `ai-sdlc-factory`.
 
-- `local-dev`: ~10 GB RAM, no Langfuse/Prometheus/Grafana
-- `local-full`: ~30 GB RAM, full observability stack
-- `prod`: Kubernetes with managed PostgreSQL and S3
+## Что делать при неоднозначности
 
-Always specify which profile a new service belongs to.
+Не придумывай. Зафиксируй вопрос в комментарии issue, поставь метку `needs-clarification` и продолжай с наиболее безопасным вариантом, явно указав допущение. Владелец ответит — снимет метку.
 
-## Issue Creation
+## Что делать при обнаружении пробела в документации
 
-Every feature or bug fix starts with a GitHub Issue. Use templates in `.github/ISSUE_TEMPLATE/`.
+1. Не решай сам.
+2. Создай `spike` issue с time-box 2–4 часа.
+3. Опиши: что непонятно, где в документации, какие варианты возможны, что нужно решить.
+4. Поставь метки `type:spike` и `needs-approval`.
+5. Включи spike в план владельцу.
 
-Issue template fields:
-- Context (1-3 sentences)
-- References (FR-*, NFR-*, ADR-*)
-- What to do (checklist)
-- Acceptance criteria (Given/When/Then)
-- Test plan (unit, integration, contract, e2e)
-- Dependencies
-- Size estimate (S/M/L)
-- Priority (p0/p1/p2)
-- Definition of Done
+## Что делать при отклонении от ADR
+
+1. Не применяй отклонение самостоятельно.
+2. Предложи новый ADR с альтернативами и последствиями.
+3. Дождись approve владельца.
+4. Только после этого применяй.
+
+## Формат отчёта о завершённой задаче
+
+```
+Задача: #<N> <заголовок issue>
+Ветка: <branch-name>
+PR: <URL>
+Коммиты: <N>
+CI: <status>
+Покрытие нового кода: <N>%
+Документация обновлена: да / нет / не требуется
+Открытые вопросы: <список или "нет">
+```
