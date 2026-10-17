@@ -30,14 +30,14 @@ make ps-local
 
 - **Control Plane:** Web UI, Platform API, Registry, Policy & Approval, IAM, Semantic Service
 - **Execution Plane:** Orchestrator (Temporal), Agent Runtime, LLM Gateway, Tool Gateway (MCP), Sandbox Manager, Diagram Service
-- **Data Plane:** PostgreSQL 16 + pgvector (property graph), MinIO (S3), NATS JetStream, Knowledge Service
+- **Data Plane:** PostgreSQL 18 + pgvector (property graph), MinIO (S3), NATS JetStream, Knowledge Service
 - **Observability:** OTel Collector + Jaeger (всегда), Langfuse + Prometheus + Grafana (профиль observability)
 
 ## Стек
 
 - **Бэкенд:** Go 1.26+ (chi/echo, Temporal SDK, NATS, OTel)
 - **Фронтенд:** TypeScript + React 18+, Vite, Tailwind + shadcn/ui
-- **Данные:** PostgreSQL 17 + pgvector, MinIO, NATS JetStream
+- **Данные:** PostgreSQL 18 + pgvector, MinIO, NATS JetStream
 - **Инфраструктура:** Docker Compose → Kubernetes (Helm)
 
 ## Документация
@@ -45,7 +45,7 @@ make ps-local
 | Документ | Описание |
 |---|---|
 | [SYSTEM_DESIGN.md](docs/architecture/SYSTEM_DESIGN.md) | Полная архитектура платформы |
-| [ADR.md](docs/architecture/ADR.md) | 18 архитектурных решений |
+| [ADR.md](docs/architecture/ADR.md) | 19 архитектурных решений |
 | [ONTOLOGY_SPEC.md](docs/architecture/ONTOLOGY_SPEC.md) | Семантический слой (SLP/SLPr/AM) |
 | [SDLC_STATE_MACHINE.md](docs/architecture/SDLC_STATE_MACHINE.md) | Состояния задач и гейты |
 | [MCP_TOOLS.md](docs/architecture/MCP_TOOLS.md) | Инструменты агентов по ролям |

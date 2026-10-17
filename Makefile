@@ -74,16 +74,15 @@ health:
 
 MIGRATIONS_DIR ?= migrations/postgres
 DB_SERVICE ?= postgres
-# Credentials match the postgres service in deploy/compose/docker-compose.yml.
-DB_USER ?= ai_sdlc_factory
-DB_NAME ?= ai_sdlc_factory
 
 # Apply all .up.sql in ascending order. SQL is piped via stdin because the
 # migration files live on the host, not inside the postgres container.
+# Credentials are read from the standard POSTGRES_USER/POSTGRES_DB environment
+# variables that Compose sets inside the postgres container.
 migrate-up:
 	@for f in $$(ls $(MIGRATIONS_DIR)/*.up.sql 2>/dev/null | sort); do \
 		echo "==> Applying $$f"; \
-		$(COMPOSE) exec -T $(DB_SERVICE) psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < "$$f" || exit 1; \
+		$(COMPOSE) exec -T $(DB_SERVICE) sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$f" || exit 1; \
 	done
 	@echo "==> All migrations applied"
 
@@ -91,7 +90,7 @@ migrate-up:
 migrate-down:
 	@for f in $$(ls $(MIGRATIONS_DIR)/*.down.sql 2>/dev/null | sort -r); do \
 		echo "==> Rolling back $$f"; \
-		$(COMPOSE) exec -T $(DB_SERVICE) psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < "$$f" || exit 1; \
+		$(COMPOSE) exec -T $(DB_SERVICE) sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$f" || exit 1; \
 	done
 	@echo "==> All migrations rolled back"
 

@@ -84,19 +84,30 @@ CREATE TABLE sem_nodes (
 );
 
 CREATE TABLE sem_edges (
-  id UUID PRIMARY KEY, src_id UUID NOT NULL REFERENCES sem_nodes(id),
-  dst_id UUID NOT NULL REFERENCES sem_nodes(id), kind TEXT NOT NULL,
-  props JSONB NOT NULL DEFAULT '{}', valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
+  id UUID PRIMARY KEY,
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  src_id UUID NOT NULL REFERENCES sem_nodes(id) ON DELETE CASCADE,
+  dst_id UUID NOT NULL REFERENCES sem_nodes(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  props JSONB NOT NULL DEFAULT '{}',
+  valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
   valid_to TIMESTAMPTZ NULL
 );
 
 CREATE TABLE sem_embeddings (
   node_id UUID PRIMARY KEY REFERENCES sem_nodes(id) ON DELETE CASCADE,
-  embedding VECTOR(1536)
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  embedding VECTOR(1536) NOT NULL,
+  model_name TEXT NOT NULL DEFAULT 'text-embedding-3-small',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
 Row Level Security по `workspace_id`.
+
+> **Примечание:** `sem_edges` и `sem_embeddings` содержат денормализованный `workspace_id` (ссылка на `workspaces`) для оптимизации RLS-политик. Это позволяет применять RLS напрямую по `workspace_id` без подзапроса через `sem_nodes`, что критично для производительности (подробнее: ADR-019).
+
+> **Примечание:** Колонка `model_name` в `sem_embeddings` и `kb_embeddings` хранит название модели, сгенерировавшей эмбеддинг. Это необходимо для воспроизводимости (NFR-7) и возможности смены модели без пересчёта всех векторов (ADR-004).
 
 ## 7. Правила вывода
 
@@ -125,5 +136,6 @@ Row Level Security по `workspace_id`.
 
 | Версия | Дата | Изменения |
 |---|---|---|
+| 1.2 | 17.10.2026 | Денормализованный `workspace_id` в `sem_edges`/`sem_embeddings` для RLS; добавлена колонка `model_name` в `sem_embeddings` и `kb_embeddings`; обновлена схема §6.1 |
 | 1.1 | 16.10.2026 | Добавлены ADR-016, ADR-017 |
 | 1.0 | 16.10.2026 | Первичная спецификация |

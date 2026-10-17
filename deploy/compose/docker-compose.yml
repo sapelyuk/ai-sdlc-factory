@@ -3,15 +3,16 @@ services:
     image: pgvector/pgvector:pg18
     container_name: ai-sdlc-factory-postgres
     environment:
-      POSTGRES_DB: ai_sdlc_factory
-      POSTGRES_USER: ai_sdlc_factory
-      POSTGRES_PASSWORD: ${AI_DB_PASSWORD:-ai_sdlc_dev_password}
+      # Standard PostgreSQL variables (official Docker image convention).
+      POSTGRES_DB: ${POSTGRES_DB:-ai_sdlc_factory}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_sdlc_factory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ai_sdlc_dev_password}
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ai_sdlc_factory"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_sdlc_factory}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -64,8 +65,8 @@ services:
       DB: postgres12
       DB_PORT: 5432
       POSTGRES_HOST: postgres
-      POSTGRES_USER: ai_sdlc_factory
-      POSTGRES_PWD: ${AI_DB_PASSWORD:-ai_sdlc_dev_password}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_sdlc_factory}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-ai_sdlc_dev_password}
       POSTGRES_DBNAME: temporal
       DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
     ports:
@@ -119,6 +120,11 @@ services:
       - "8000:8000"
     environment:
       AI_DB_HOST: postgres
+      AI_DB_PORT: "5432"
+      # App DSN is assembled from the standard POSTGRES_* variables.
+      AI_DB_NAME: ${POSTGRES_DB:-ai_sdlc_factory}
+      AI_DB_USER: ${POSTGRES_USER:-ai_sdlc_factory}
+      AI_DB_PASSWORD: ${POSTGRES_PASSWORD:-ai_sdlc_dev_password}
       AI_MINIO_ENDPOINT: minio:9000
       AI_NATS_URL: nats://nats:4222
       AI_VAULT_ADDR: http://vault:8200
@@ -141,6 +147,11 @@ services:
     container_name: ai-sdlc-factory-worker
     environment:
       AI_DB_HOST: postgres
+      AI_DB_PORT: "5432"
+      # App DSN is assembled from the standard POSTGRES_* variables.
+      AI_DB_NAME: ${POSTGRES_DB:-ai_sdlc_factory}
+      AI_DB_USER: ${POSTGRES_USER:-ai_sdlc_factory}
+      AI_DB_PASSWORD: ${POSTGRES_PASSWORD:-ai_sdlc_dev_password}
       AI_TEMPORAL_HOST: temporal:7233
       AI_NATS_URL: nats://nats:4222
     depends_on:

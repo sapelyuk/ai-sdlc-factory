@@ -92,7 +92,7 @@ KBSRC --> Platform
 
 **Execution Plane:** Orchestrator (Temporal), Agent Runtime, LLM Gateway, Tool Gateway (MCP), Sandbox Manager, Diagram Service
 
-**Data Plane:** PostgreSQL 17 + pgvector, MinIO (S3), NATS JetStream, Knowledge Service
+**Data Plane:** PostgreSQL 18 + pgvector, MinIO (S3), NATS JetStream, Knowledge Service
 
 **Observability:** OTel Collector + Jaeger (always), Langfuse + Prometheus + Grafana (observability profile)
 

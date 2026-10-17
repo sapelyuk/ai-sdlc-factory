@@ -76,7 +76,7 @@ cd migrations/tests
 go test -v ./...
 ```
 
-Тесты используют Testcontainers (образ `pgvector/pgvector:pg17`).
+Тесты используют Testcontainers (образ `pgvector/pgvector:pg18`).
 Если Docker не запущен, контейнерные тесты пропускаются (`t.Skip`).
 
 Миграции находятся в `migrations/postgres/`:
