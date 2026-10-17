@@ -28,8 +28,8 @@ service:
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [jaeger]
+      exporters: [logging]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [jaeger]
+      exporters: [logging]

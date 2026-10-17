@@ -1,29 +1,39 @@
-version: "3.9"
+# local-full profile: core + OTel + Jaeger + Langfuse + Prometheus + Grafana
+# For machines with 32+ GB RAM
 
 services:
-  langfuse-web:
-    image: langfuse/langfuse:latest
-    container_name: ai-sdlc-factory-langfuse-web
-    ports:
-      - "3030:3000"
-    environment:
-      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
-      - SALT=langfuse
-      - HASHED_SALT=langfuse
-    depends_on:
-      - langfuse-postgres
-      - langfuse-redis
+  # ── Override OTel config for full observability ────────────
+  otel-collector:
+    volumes:
+      - ./otel/config-local-full.yaml:/etc/otel/config.yaml
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
 
-  langfuse-worker:
-    image: langfuse/langfuse-worker:latest
-    container_name: ai-sdlc-factory-langfuse-worker
+  # ── Langfuse Stack ─────────────────────────────────────────
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: ai-sdlc-factory-langfuse-clickhouse
+    ports:
+      - "8123:8123"
     environment:
-      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
-    depends_on:
-      - langfuse-postgres
+      - CLICKHOUSE_DB=langfuse
+      - CLICKHOUSE_USER=langfuse
+      - CLICKHOUSE_PASSWORD=langfuse
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
 
   langfuse-postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: ai-sdlc-factory-langfuse-postgres
     environment:
       POSTGRES_DB: langfuse
@@ -31,21 +41,66 @@ services:
       POSTGRES_PASSWORD: langfuse
     volumes:
       - langfuse-postgres-data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
 
   langfuse-redis:
     image: redis:7-alpine
     container_name: ai-sdlc-factory-langfuse-redis
     volumes:
       - langfuse-redis-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
 
-  langfuse-clickhouse:
-    image: clickhouse/clickhouse-server:latest
-    container_name: ai-sdlc-factory-langfuse-clickhouse
+  langfuse-web:
+    image: langfuse/langfuse:latest
+    container_name: ai-sdlc-factory-langfuse-web
     ports:
-      - "8123:8123"
-    volumes:
-      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - "3030:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
+      - REDIS_HOST=langfuse-redis
+      - REDIS_PORT=6379
+      - NEXTAUTH_SECRET=langfuse-nextauth-secret
+      - SALT=langfuse
+      - HASHED_SALT=langfuse
+    depends_on:
+      - langfuse-postgres
+      - langfuse-redis
+      - langfuse-clickhouse
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
 
+  langfuse-worker:
+    image: langfuse/langfuse-worker:latest
+    container_name: ai-sdlc-factory-langfuse-worker
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
+      - REDIS_HOST=langfuse-redis
+      - REDIS_PORT=6379
+    depends_on:
+      - langfuse-postgres
+      - langfuse-redis
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ── Prometheus ─────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:latest
     container_name: ai-sdlc-factory-prometheus
@@ -53,7 +108,14 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
 
+  # ── Grafana ────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:latest
     container_name: ai-sdlc-factory-grafana
@@ -63,9 +125,17 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     depends_on:
       - prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
 
 volumes:
+  langfuse-clickhouse-data:
   langfuse-postgres-data:
   langfuse-redis-data:
-  langfuse-clickhouse-data:
-
+  grafana-data:

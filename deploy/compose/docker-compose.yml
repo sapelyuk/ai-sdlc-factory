@@ -1,8 +1,6 @@
-version: "3.9"
-
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: ai-sdlc-factory-postgres
     environment:
       POSTGRES_DB: ai_sdlc_factory
@@ -69,8 +67,11 @@ services:
       POSTGRES_USER: ai_sdlc_factory
       POSTGRES_PWD: ${AI_DB_PASSWORD:-ai_sdlc_dev_password}
       POSTGRES_DBNAME: temporal
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
     ports:
       - "7233:7233"
+    volumes:
+      - ./temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,6 +87,29 @@ services:
     depends_on:
       - temporal
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: ai-sdlc-factory-otel-collector
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
+    volumes:
+      - ./otel/config-local-dev.yaml:/etc/otel/config.yaml
+    command: ["--config", "/etc/otel/config.yaml"]
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: ai-sdlc-factory-jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+    environment:
+      - MEMORY_MAX_TRACES=10000
+
   api:
     build:
       context: ../..
@@ -99,6 +123,7 @@ services:
       AI_NATS_URL: nats://nats:4222
       AI_VAULT_ADDR: http://vault:8200
       AI_TEMPORAL_HOST: temporal:7233
+      AI_OTEL_ENDPOINT: otel-collector:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -134,6 +159,42 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  semantic-indexer:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.semantic-indexer
+    container_name: ai-sdlc-factory-semantic-indexer
+    environment:
+      AI_DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  diagram:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.diagram
+    container_name: ai-sdlc-factory-diagram
+    environment:
+      AI_DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  knowledge:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.knowledge
+    container_name: ai-sdlc-factory-knowledge
+    environment:
+      AI_DB_HOST: postgres
+      AI_MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
 
   gateway-llm:
     build:
