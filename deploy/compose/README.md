@@ -54,3 +54,41 @@ make volumes           # ВСЕ тома (осторожно!)
 2. Уменьшите лимиты в `docker-compose.local-dev.yml`.
 3. Увеличьте swap на хосте.
 4. Отключите ненужные сервисы в override-файле.
+
+## Миграции БД
+
+PostgreSQL используется с образом `pgvector/pgvector:pg18` (встроенный pgvector).
+
+### Применение миграций
+
+```bash
+# Применить все .up.sql по порядку
+make migrate-up
+
+# Откатить все .down.sql в обратном порядке
+make migrate-down
+```
+
+### Тестирование миграций
+
+```bash
+cd migrations/tests
+go test -v ./...
+```
+
+Тесты используют Testcontainers (образ `pgvector/pgvector:pg17`).
+Если Docker не запущен, контейнерные тесты пропускаются (`t.Skip`).
+
+Миграции находятся в `migrations/postgres/`:
+
+| № | Файл | Описание |
+|---|---|---|
+| 1 | `0001_init_squads_and_agents` | workspaces, squads, agents, model_profiles |
+| 2 | `0002_init_tasks_and_sdlc` | runs, stage_runs, task_runs, approvals |
+| 3 | `0003_init_knowledge_base` | kb_documents, kb_sources |
+| 4 | `0004_init_pgvector` | pgvector extension, kb_embeddings, HNSW |
+| 5 | `0005_init_semantic_graph` | sem_nodes, sem_edges, sem_embeddings |
+| 6 | `0006_init_architecture_and_adr` | diagrams, architecture_models, adrs |
+| 7 | `0007_init_audit_and_cost` | audit_log, llm_calls |
+
+Каждая миграция имеет парный файл `.up.sql` / `.down.sql` для применения и отката.

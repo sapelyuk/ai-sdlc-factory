@@ -207,7 +207,7 @@ OTel Collector + Jaeger (always). Langfuse + Prometheus + Grafana (profile obser
 
 - **Бэкенд:** Go 1.23+, chi/echo, OpenAPI 3.1, Temporal Go SDK, NATS JetStream, OTel
 - **Фронтенд:** TypeScript + React 18+, Vite, Tailwind + shadcn/ui, TanStack Query
-- **Данные:** PostgreSQL 16 + pgvector, MinIO, NATS JetStream
+- **Данные:** PostgreSQL 18 + pgvector, MinIO, NATS JetStream
 - **Инфраструктура:** Docker Compose -> Kubernetes (Helm)
 
 ## 13. ADR

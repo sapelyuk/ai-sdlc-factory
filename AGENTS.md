@@ -60,7 +60,7 @@ Conventional Commits со ссылкой на issue.
 - Бэкенд: **Go** 1.23+.
 - Фронтенд: **TypeScript + React**.
 - Оркестрация: **Temporal** (Go SDK).
-- БД: **PostgreSQL 17 + pgvector**.
+- БД: **PostgreSQL 18 + pgvector**.
 - Шина событий: **NATS JetStream**.
 - Объектное хранилище: **MinIO (S3)**.
 - Политики: **OPA (Rego)**.
