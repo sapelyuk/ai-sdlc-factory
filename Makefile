@@ -1,5 +1,3 @@
-SHELL = powershell.exe
-
 # Profiles
 PROFILE ?= local-dev
 
@@ -23,7 +21,7 @@ API_SERVICE = api
 WORKER_SERVICE = worker
 WEB_SERVICE = web
 
-.PHONY: up-local up-full down-local down-full ps-local ps-full logs-local logs-full rebuild-local rebuild-full clean volumes
+.PHONY: up-local up-full down-local down-full ps-local ps-full logs-local logs-full rebuild-local rebuild-full clean volumes migrate-up migrate-down health dev-api dev-worker dev-web
 
 # ── Local Dev ──────────────────────────────────────────────
 
@@ -74,11 +72,27 @@ health:
 
 # ── Database ───────────────────────────────────────────────
 
-migrate-up:
-	docker compose $(COMPOSE_FILES) run --rm api migrate up
+MIGRATIONS_DIR ?= migrations/postgres
+DB_SERVICE ?= postgres
 
+# Apply all .up.sql in ascending order. SQL is piped via stdin because the
+# migration files live on the host, not inside the postgres container.
+# Credentials are read from the standard POSTGRES_USER/POSTGRES_DB environment
+# variables that Compose sets inside the postgres container.
+migrate-up:
+	@for f in $$(ls $(MIGRATIONS_DIR)/*.up.sql 2>/dev/null | sort); do \
+		echo "==> Applying $$f"; \
+		$(COMPOSE) exec -T $(DB_SERVICE) sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$f" || exit 1; \
+	done
+	@echo "==> All migrations applied"
+
+# Roll back all .down.sql in descending order (reverse of migrate-up).
 migrate-down:
-	docker compose $(COMPOSE_FILES) run --rm api migrate down
+	@for f in $$(ls $(MIGRATIONS_DIR)/*.down.sql 2>/dev/null | sort -r); do \
+		echo "==> Rolling back $$f"; \
+		$(COMPOSE) exec -T $(DB_SERVICE) sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$f" || exit 1; \
+	done
+	@echo "==> All migrations rolled back"
 
 # ── Development ────────────────────────────────────────────
 
