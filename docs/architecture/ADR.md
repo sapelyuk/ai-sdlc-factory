@@ -1,6 +1,6 @@
 # Реестр архитектурных решений (ADR) — ai-sdlc-factory
 
-**Версия 1.2 · 16.10.2026**
+**Версия 1.3 · 17.10.2026**
 
 Формат: MADR. Статусы: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
 
