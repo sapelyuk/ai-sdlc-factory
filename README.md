@@ -35,9 +35,9 @@ make ps-local
 
 ## Стек
 
-- **Бэкенд:** Go 1.23+ (chi/echo, Temporal SDK, NATS, OTel)
+- **Бэкенд:** Go 1.26+ (chi/echo, Temporal SDK, NATS, OTel)
 - **Фронтенд:** TypeScript + React 18+, Vite, Tailwind + shadcn/ui
-- **Данные:** PostgreSQL 16 + pgvector, MinIO, NATS JetStream
+- **Данные:** PostgreSQL 17 + pgvector, MinIO, NATS JetStream
 - **Инфраструктура:** Docker Compose → Kubernetes (Helm)
 
 ## Документация

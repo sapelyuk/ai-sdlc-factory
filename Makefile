@@ -5,10 +5,15 @@ PROFILE ?= local-dev
 
 # Compose files
 COMPOSE_FILES = -f deploy/compose/docker-compose.yml
+ifneq ($(strip $(ENV_FILE)),)
+  COMPOSE_FILES += --env-file $(ENV_FILE)
+endif
 ifeq ($(PROFILE),local-dev)
   COMPOSE_FILES += -f deploy/compose/docker-compose.local-dev.yml
+  ENV_FILE ?= deploy/compose/.env.local-dev
 else ifeq ($(PROFILE),local-full)
   COMPOSE_FILES += -f deploy/compose/docker-compose.local-full.yml
+  ENV_FILE ?= deploy/compose/.env.local-full
 endif
 
 COMPOSE = docker compose $(COMPOSE_FILES)
