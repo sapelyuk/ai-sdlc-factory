@@ -34,8 +34,50 @@ make ps-local
 | Grafana | — | http://localhost:3001 |
 | Prometheus | — | http://localhost:9090 |
 | Vault | http://localhost:8200 | http://localhost:8200 |
+| OPA   | http://localhost:8181 | http://localhost:8181 |
 
-## Остановка
+## Инфраструктурные сервисы
+
+| Сервис | Порт | Назначение | Профиль |
+|---|---|---|---|
+| MinIO | 9000 (API), 9001 (Console) | S3-хранилище для артефактов | всегда |
+| NATS | 4222 (клиент), 8222 (мониторинг) | Шина событий (JetStream) | всегда |
+| Vault | 8200 | Управление секретами (dev-режим) | всегда |
+| OPA | 8181 | Policy engine (Rego) | всегда |
+
+### Проверка здоровья
+
+```bash
+make check-infra
+```
+
+### MinIO — бакеты
+
+Бакеты создаются автоматически при первом запуске через `minio-init`:
+- `ai-sdlc-factory` — постоянное хранение (артефакты, диаграммы, логи).
+- `ai-sdlc-factory-temp` — временные артефакты (публичное чтение для отладки).
+
+### Vault — dev-режим
+
+Vault запущен в `server -dev` режиме:
+- `VAULT_DEV_ROOT_TOKEN` — фиксированный токен (из `.env`, по умолчанию `root`).
+- **Никогда не использовать в production!** Production-конфиг — отдельная задача.
+- Данные не персистятся между перезапусками в dev-режиме.
+
+### OPA — политики
+
+Rego-политики находятся в `packages/policy/`:
+- `autonomy.rego` — уровни автономности R0–R3 (ADR-013).
+- `risk_levels.rego` — оценка риска по категории задачи.
+
+Пример запроса:
+```bash
+curl -X POST http://localhost:8181/v1/data/ai_sdlc_factory/autonomy/risk_level \
+  -d '{"input":{"action":"deploy.prod"}}'
+# → {"result":"R3"}
+```
+
+### Остановка
 
 ```bash
 make down-local        # или make down-full
