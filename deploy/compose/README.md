@@ -110,9 +110,23 @@ docker run --rm --network host \
 open http://localhost:16686
 ```
 
-### Расширенный уровень (M6)
+### Langfuse exporter (M6)
 
-Langfuse, Prometheus, Grafana — под профилем `observability`, будут добавлены в M6.
+Langfuse exporter в OTel Collector остаётся закомментированным — будет добавлен в M6.
+Сейчас трейсы идут только в Jaeger.
+Инфраструктура Langfuse (ClickHouse, PostgreSQL, Redis, Web, Worker) уже доступна
+в профиле `local-full`, но интеграция LLM-трейсинга, evals и дашбордов качества —
+отдельная задача.
+
+### Legacy jaeger exporter и порты 14317/14318
+
+OTel Collector использует **legacy jaeger exporter** (`otlp/jaeger` на порт `4317`
+внутри сети Docker) для отправки трейсов в Jaeger. Это проверенный рабочий вариант.
+
+Порты `14317` (OTLP gRPC) и `14318` (OTLP HTTP) на Jaeger проброшены на хост
+**только для отладки** — внешние клиенты могут слать трейсы напрямую в Jaeger,
+минуя OTel Collector. В основной архитектуре все трейсы должны идти через
+OTel Collector (batch processor, memory_limiter, единая точка маршрутизации).
 
 Rego-политики находятся в `packages/policy/`:
 - `autonomy.rego` — уровни автономности R0–R3 (ADR-013).
