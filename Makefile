@@ -70,6 +70,19 @@ health:
 	@echo "Checking services..."
 	@docker inspect --format='{{.Name}}: {{.State.Status}}' $$(docker ps -q) 2>/dev/null || echo "Some services are not running"
 
+# ── Infrastructure Health ──────────────────────────────────
+
+check-infra:
+	@echo "Checking MinIO..."
+	@docker compose exec -T minio mc ready local || exit 1
+	@echo "Checking NATS..."
+	@curl -sf http://localhost:8222/healthz || exit 1
+	@echo "Checking Vault..."
+	@docker compose exec -T vault vault status || exit 1
+	@echo "Checking OPA..."
+	@curl -sf http://localhost:8181/health || exit 1
+	@echo "All infra services healthy"
+
 # ── Database ───────────────────────────────────────────────
 
 MIGRATIONS_DIR ?= migrations/postgres
