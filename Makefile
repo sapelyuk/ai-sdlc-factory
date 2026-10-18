@@ -74,11 +74,11 @@ health:
 
 check-infra:
 	@echo "Checking MinIO..."
-	@curl -sf http://localhost:9000/minio/health/live || exit 1
+	@docker compose exec -T minio mc ready local || exit 1
 	@echo "Checking NATS..."
 	@curl -sf http://localhost:8222/healthz || exit 1
 	@echo "Checking Vault..."
-	@curl -sf http://localhost:8200/v1/sys/health || exit 1
+	@docker compose exec -T vault vault status || exit 1
 	@echo "Checking OPA..."
 	@curl -sf http://localhost:8181/health || exit 1
 	@echo "All infra services healthy"

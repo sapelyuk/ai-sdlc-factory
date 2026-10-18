@@ -9,21 +9,18 @@ default risk_level := "R0"
 
 # R3 — необратимые действия (требуют approve человека)
 risk_level := "R3" if {
-    some action
     action_list := {"deploy.prod", "destroy.prod", "rotate.secrets", "delete.workspace", "merge.main"}
     input.action = action_list[_]
 }
 
 # R2 — значимые действия (по профилю автономности)
 risk_level := "R2" if {
-    some action
     action_list := {"merge.release", "update.production.config", "rotate.api.keys", "create.production.resource"}
     input.action = action_list[_]
 }
 
 # R1 — локальная запись (авто)
 risk_level := "R1" if {
-    some action
     action_list := {"create.branch", "commit.local", "update.pr", "create.issue", "edit.docs"}
     input.action = action_list[_]
 }
