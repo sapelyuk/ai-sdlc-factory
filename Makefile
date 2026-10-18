@@ -83,6 +83,15 @@ check-infra:
 	@curl -sf http://localhost:8181/health || exit 1
 	@echo "All infra services healthy"
 
+# ── Tracing ────────────────────────────────────────────────
+
+check-tracing:
+	@echo "Sending test trace..."
+	@docker run --rm --network host \
+	  ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+	  traces --otlp-endpoint localhost:4317 --otlp-insecure --traces 1
+	@echo "Open http://localhost:16686 to see traces"
+
 # ── Database ───────────────────────────────────────────────
 
 MIGRATIONS_DIR ?= migrations/postgres

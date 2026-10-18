@@ -75,6 +75,59 @@ Vault запущен в `server -dev` режиме:
 
 ### OPA — политики
 
+## Наблюдаемость (базовый уровень)
+
+| Сервис | Порт | Назначение |
+|---|---|---|
+| OTel Collector (gRPC) | 4317 | Приём OTLP-трейсов |
+| OTel Collector (HTTP) | 4318 | Приём OTLP-трейсов |
+| OTel Collector (metrics) | 8888 | Prometheus-метрики |
+| OTel Collector (health) | 13133 | Healthcheck |
+| Jaeger UI | 16686 | Просмотр трейсов |
+| Jaeger admin | 14269 | Healthcheck |
+| Jaeger OTLP gRPC | 14317 | Прямой приём OTLP gRPC |
+| Jaeger OTLP HTTP | 14318 | Прямой приём OTLP HTTP |
+
+### Профили
+
+- **`local-dev`**: Jaeger in-memory, `MEMORY_MAX_TRACES=10000` (≈500 МБ RAM).
+- **`local-full`**: Jaeger in-memory, `MEMORY_MAX_TRACES=50000` (≈1 ГБ RAM), расширенный OTel config.
+
+### Как отправить трейс
+
+Любое приложение шлёт трейсы на `otel-collector:4317` (OTLP gRPC).
+В `local-dev` трейсы доступны в Jaeger UI (`http://localhost:16686`).
+
+### Проверка
+
+```bash
+# Отправить тестовый трейс
+docker run --rm --network host \
+  ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  traces --otlp-endpoint localhost:4317 --otlp-insecure --traces 1
+
+# Открыть Jaeger UI
+open http://localhost:16686
+```
+
+### Langfuse exporter (M6)
+
+Langfuse exporter в OTel Collector остаётся закомментированным — будет добавлен в M6.
+Сейчас трейсы идут только в Jaeger.
+Инфраструктура Langfuse (ClickHouse, PostgreSQL, Redis, Web, Worker) уже доступна
+в профиле `local-full`, но интеграция LLM-трейсинга, evals и дашбордов качества —
+отдельная задача.
+
+### Legacy jaeger exporter и порты 14317/14318
+
+OTel Collector использует **legacy jaeger exporter** (`otlp/jaeger` на порт `4317`
+внутри сети Docker) для отправки трейсов в Jaeger. Это проверенный рабочий вариант.
+
+Порты `14317` (OTLP gRPC) и `14318` (OTLP HTTP) на Jaeger проброшены на хост
+**только для отладки** — внешние клиенты могут слать трейсы напрямую в Jaeger,
+минуя OTel Collector. В основной архитектуре все трейсы должны идти через
+OTel Collector (batch processor, memory_limiter, единая точка маршрутизации).
+
 Rego-политики находятся в `packages/policy/`:
 - `autonomy.rego` — уровни автономности R0–R3 (ADR-013).
 - `risk_levels.rego` — оценка риска по категории задачи.

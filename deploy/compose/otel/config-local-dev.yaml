@@ -8,28 +8,42 @@ receivers:
 
 processors:
   batch:
+    timeout: 5s
+    send_batch_size: 512
   memory_limiter:
-    check_interval: 1s
-    limit_mib: 1024
-    spike_limit_mib: 512
+    check_interval: 5s
+    limit_percentage: 70
+    spike_limit_percentage: 20
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
 
 exporters:
-  jaeger:
-    endpoint: jaeger:14250
+  otlp/jaeger:
+    endpoint: jaeger:4317
     tls:
       insecure: true
+  debug:
+    verbosity: basic
 
 service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      address: 0.0.0.0:8888
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [jaeger]
+      exporters: [otlp/jaeger]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [logging]
+      exporters: [debug]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [logging]
+      exporters: [debug]
