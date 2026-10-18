@@ -75,6 +75,45 @@ Vault запущен в `server -dev` режиме:
 
 ### OPA — политики
 
+## Наблюдаемость (базовый уровень)
+
+| Сервис | Порт | Назначение |
+|---|---|---|
+| OTel Collector (gRPC) | 4317 | Приём OTLP-трейсов |
+| OTel Collector (HTTP) | 4318 | Приём OTLP-трейсов |
+| OTel Collector (metrics) | 8888 | Prometheus-метрики |
+| OTel Collector (health) | 13133 | Healthcheck |
+| Jaeger UI | 16686 | Просмотр трейсов |
+| Jaeger admin | 14269 | Healthcheck |
+| Jaeger OTLP gRPC | 14317 | Прямой приём OTLP gRPC |
+| Jaeger OTLP HTTP | 14318 | Прямой приём OTLP HTTP |
+
+### Профили
+
+- **`local-dev`**: Jaeger in-memory, `MEMORY_MAX_TRACES=10000` (≈500 МБ RAM).
+- **`local-full`**: Jaeger in-memory, `MEMORY_MAX_TRACES=50000` (≈1 ГБ RAM), расширенный OTel config.
+
+### Как отправить трейс
+
+Любое приложение шлёт трейсы на `otel-collector:4317` (OTLP gRPC).
+В `local-dev` трейсы доступны в Jaeger UI (`http://localhost:16686`).
+
+### Проверка
+
+```bash
+# Отправить тестовый трейс
+docker run --rm --network host \
+  ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  traces --otlp-endpoint localhost:4317 --otlp-insecure --traces 1
+
+# Открыть Jaeger UI
+open http://localhost:16686
+```
+
+### Расширенный уровень (M6)
+
+Langfuse, Prometheus, Grafana — под профилем `observability`, будут добавлены в M6.
+
 Rego-политики находятся в `packages/policy/`:
 - `autonomy.rego` — уровни автономности R0–R3 (ADR-013).
 - `risk_levels.rego` — оценка риска по категории задачи.
