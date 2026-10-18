@@ -57,6 +57,15 @@ make check-infra
 - `ai-sdlc-factory` — постоянное хранение (артефакты, диаграммы, логи).
 - `ai-sdlc-factory-temp` — временные артефакты (публичное чтение для отладки).
 
+**Переменные окружения:** `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` — официальные
+имена переменных Docker-образа MinIO (см. [Docker Hub](https://hub.docker.com/r/minio/minio)).
+
+**Тег образа:** MinIO использует timestamp-теги (`RELEASE.YYYY-MM-DD...`) —
+это официальный формат rolling-release, не меняем на semantic version.
+
+**Именование томов:** Docker-тома используют дефисы: `minio-data`, `nats-data`,
+`vault-data` — современный стандарт Docker Compose.
+
 ### Vault — dev-режим
 
 Vault запущен в `server -dev` режиме:
