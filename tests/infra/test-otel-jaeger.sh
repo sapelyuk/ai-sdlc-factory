@@ -83,9 +83,11 @@ if ! docker run --rm --network host \
 fi
 
 # ── Ожидание обработки трейса ────────────────────────────────────────
-sleep 3
+# Jaeger нужно время для индексации трейса (batch processor + indexing)
+sleep 5
 
 # ── Проверка Jaeger API ──────────────────────────────────────────────
+# 1. Проверяем, что API отвечает
 echo ">>> Проверка Jaeger API (/api/services)..."
 SERVICES_RESPONSE=$(curl -sf "http://localhost:16686/api/services" 2>/dev/null || echo "")
 
@@ -108,7 +110,39 @@ if [ "$SERVICE_COUNT" -lt 1 ]; then
 fi
 
 echo ">>> Найдено сервисов: $SERVICE_COUNT"
-echo ">>> Тест пройден: трейс принят Jaeger"
+
+# 2. РЕАЛЬНАЯ ПРОВЕРКА: ищем трейс через /api/traces
+# Ищем трейсы от сервиса "telemetrygen" (имя по умолчанию у telemetrygen)
+echo ">>> Проверка Jaeger API (/api/traces) — поиск отправленного трейса..."
+TRACES_RESPONSE=$(curl -sf "http://localhost:16686/api/traces?service=telemetrygen&limit=10" 2>/dev/null || echo "")
+
+if [ -z "$TRACES_RESPONSE" ]; then
+  echo "WARN: /api/traces не ответил (возможно, трейс ещё индексируется)"
+  # Повторная попытка через 3 сек
+  sleep 3
+  TRACES_RESPONSE=$(curl -sf "http://localhost:16686/api/traces?service=telemetrygen&limit=10" 2>/dev/null || echo "")
+fi
+
+if [ -z "$TRACES_RESPONSE" ]; then
+  echo "FAIL: Jaeger /api/traces не отвечает — трейс не найден"
+  echo ">>> Логи Jaeger:"
+  $COMPOSE logs jaeger
+  $COMPOSE down
+  exit 1
+fi
+
+# Проверяем, что найден хотя бы один трейс
+TRACE_COUNT=$(echo "$TRACES_RESPONSE" | grep -c '"traceID"' || true)
+if [ "$TRACE_COUNT" -lt 1 ]; then
+  echo "FAIL: В Jaeger нет трейсов от telemetrygen (OTel → Jaeger pipeline не работает)"
+  echo ">>> Ответ /api/traces:"
+  echo "$TRACES_RESPONSE"
+  $COMPOSE down
+  exit 1
+fi
+
+echo ">>> Найдено трейсов от telemetrygen: $TRACE_COUNT"
+echo ">>> Тест пройден: трейс отправлен и найден в Jaeger"
 
 # ── Cleanup ──────────────────────────────────────────────────────────
 echo ">>> Cleanup..."
