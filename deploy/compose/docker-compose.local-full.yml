@@ -5,13 +5,23 @@ services:
   # ── Override OTel config for full observability ────────────
   otel-collector:
     volumes:
-      - ./otel/config-local-full.yaml:/etc/otel/config.yaml
+      - ./otel/config-local-full.yaml:/etc/otel/config.yaml:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  jaeger:
+    environment:
+      MEMORY_MAX_TRACES: "50000"
     deploy:
       resources:
         limits:
           memory: 1G
         reservations:
-          memory: 256M
+          memory: 512M
 
   # ── Langfuse Stack ─────────────────────────────────────────
   langfuse-clickhouse:

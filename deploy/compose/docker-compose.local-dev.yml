@@ -71,12 +71,14 @@ services:
           memory: 128M
 
   jaeger:
+    environment:
+      MEMORY_MAX_TRACES: "10000"
     deploy:
       resources:
         limits:
-          memory: 1G
-        reservations:
           memory: 512M
+        reservations:
+          memory: 256M
 
   # ── Application Services ───────────────────────────────────
   api:
