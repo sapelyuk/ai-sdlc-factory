@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Team Specification",
+  "description": "Declarative specification for a team of AI agents in the ai-sdlc-factory platform",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["description", "topology", "members", "budget", "review_matrix"],
+  "properties": {
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "topology": {
+      "type": "string",
+      "enum": ["orchestrated", "collaborative", "sequential"]
+    },
+    "members": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role_name", "role_version"],
+        "properties": {
+          "role_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+          }
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_cost_usd", "max_steps"],
+      "properties": {
+        "max_cost_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "review_matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_reviewers"],
+      "properties": {
+        "required_reviewers": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "allowed_roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "process_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "knowledge_scopes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

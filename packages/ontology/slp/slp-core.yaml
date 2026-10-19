@@ -1,0 +1,220 @@
+apiVersion: ai-sdlc-factory/v1
+kind: SLP
+metadata:
+  name: slp-core
+  version: 0.1.0
+roles:
+  - metadata:
+      name: product-manager
+      category: product
+    spec:
+      description: Defines product goals, requirements, and delivery plans.
+      system_prompt_ref: packages/ontology/prompts/product-manager.yaml
+      inputs:
+        - name: owner_goal
+          type: document
+      outputs:
+        - name: requirements
+          type: document
+      tools:
+        allow: [tracker.comment, kb.search]
+      model:
+        capability: reasoning-strong
+      knowledge:
+        scopes: [product]
+      limits:
+        max_steps: 60
+        max_cost_usd: 3.0
+      autonomy: balanced
+      quality_checks: [requirements_traceable]
+  - metadata:
+      name: software-architect
+      category: engineering
+    spec:
+      description: Designs system architecture and records technical decisions.
+      system_prompt_ref: packages/ontology/prompts/software-architect.yaml
+      inputs:
+        - name: requirements
+          type: document
+      outputs:
+        - name: architecture
+          type: document
+      tools:
+        allow: [sem.am_read, sem.am_write, diag.validate, adr.propose]
+        deny: [deploy.prod, secrets.read, git.push_protected]
+      model:
+        capability: reasoning-strong
+      knowledge:
+        scopes: [architecture]
+      limits:
+        max_steps: 80
+        max_cost_usd: 6.0
+      autonomy: balanced
+      quality_checks: [architecture_valid, dependencies_documented]
+  - metadata:
+      name: backend-developer
+      category: engineering
+    spec:
+      description: Implements backend features and maintains automated tests.
+      system_prompt_ref: packages/ontology/prompts/backend-developer.yaml
+      inputs:
+        - name: approved_design
+          type: document
+      outputs:
+        - name: implementation
+          type: code
+      tools:
+        allow: [git.clone, git.branch, git.commit, sandbox.exec, fs.read, fs.write]
+        deny: [deploy.prod, secrets.read, git.push_protected]
+      model:
+        capability: code-strong
+      knowledge:
+        scopes: [repository, engineering]
+      limits:
+        max_steps: 80
+        max_cost_usd: 5.0
+      autonomy: balanced
+      quality_checks: [tests_pass, lint_pass]
+  - metadata:
+      name: qa-engineer
+      category: qa
+    spec:
+      description: Validates changes against acceptance criteria and reports defects.
+      system_prompt_ref: packages/ontology/prompts/qa-engineer.yaml
+      inputs:
+        - name: implementation
+          type: code
+      outputs:
+        - name: test_report
+          type: document
+      tools:
+        allow: [sandbox.exec, test.run, test.report, bug.open]
+      model:
+        capability: code-strong
+      knowledge:
+        scopes: [testing, repository]
+      limits:
+        max_steps: 60
+        max_cost_usd: 3.0
+      autonomy: balanced
+      quality_checks: [acceptance_criteria_covered]
+  - metadata:
+      name: devops-engineer
+      category: devops
+    spec:
+      description: Maintains CI, build, and deployment configuration.
+      system_prompt_ref: packages/ontology/prompts/devops-engineer.yaml
+      inputs:
+        - name: merged_change
+          type: code
+      outputs:
+        - name: build_report
+          type: document
+      tools:
+        allow: [ci.trigger, ci.status, deploy.staging]
+        deny: [deploy.prod, secrets.read, git.push_protected]
+      model:
+        capability: code-fast
+      knowledge:
+        scopes: [operations, repository]
+      limits:
+        max_steps: 60
+        max_cost_usd: 3.0
+      autonomy: balanced
+      quality_checks: [ci_green, deployment_health_checked]
+teams:
+  - metadata:
+      name: mvp-startup
+    spec:
+      description: A balanced team for taking an MVP from requirements through QA.
+      topology: orchestrated
+      members:
+        - role_name: product-manager
+          role_version: 1.0.0
+          count: 1
+        - role_name: software-architect
+          role_version: 1.0.0
+          count: 1
+        - role_name: backend-developer
+          role_version: 1.0.0
+          count: 1
+        - role_name: qa-engineer
+          role_version: 1.0.0
+          count: 1
+        - role_name: devops-engineer
+          role_version: 1.0.0
+          count: 1
+      budget:
+        max_cost_usd: 20.0
+        max_steps: 300
+      review_matrix:
+        required_reviewers: 1
+        allowed_roles: [software-architect, qa-engineer]
+      process_ref: default-sdlc@1.0.0
+      knowledge_scopes: [product, architecture, engineering, testing, operations]
+processes:
+  - metadata:
+      name: default-sdlc
+    spec:
+      description: Default SDLC workflow aligned with the platform state machine.
+      stages:
+        - name: Idea
+          order: 0
+          gate: requirements_approved
+          agents: [product-manager]
+        - name: Research
+          order: 1
+          gate: research_complete
+          agents: [product-manager]
+        - name: Requirements
+          order: 2
+          gate: requirements_approved
+          agents: [product-manager]
+        - name: RequirementsReview
+          order: 3
+          gate: requirements_approved
+          agents: [qa-engineer]
+        - name: Design
+          order: 4
+          gate: architecture_approved
+          agents: [software-architect]
+        - name: Architecture
+          order: 5
+          gate: architecture_approved
+          agents: [software-architect]
+        - name: ArchitectureReview
+          order: 6
+          gate: architecture_approved
+          agents: [qa-engineer]
+        - name: Planning
+          order: 7
+          gate: plan_ready
+          agents: [product-manager, software-architect]
+        - name: InDev
+          order: 8
+          gate: ci_green
+          agents: [backend-developer]
+        - name: CodeReview
+          order: 9
+          gate: review_approved
+          agents: [software-architect]
+        - name: QA
+          order: 10
+          gate: qa_passed
+          agents: [qa-engineer]
+        - name: Build
+          order: 11
+          gate: sbom_signed
+          agents: [devops-engineer]
+        - name: Release
+          order: 12
+          gate: prod_approved
+          agents: [devops-engineer]
+        - name: Deploy
+          order: 13
+          gate: deploy_healthy
+          agents: [devops-engineer]
+        - name: Monitoring
+          order: 14
+          gate: conformance_ok
+          agents: [devops-engineer]
