@@ -1,3 +1,5 @@
+name: ai-sdlc-factory
+
 services:
   postgres:
     image: pgvector/pgvector:pg18
