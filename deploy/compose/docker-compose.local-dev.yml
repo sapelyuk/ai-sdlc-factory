@@ -11,7 +11,7 @@ services:
         reservations:
           memory: 1G
 
-  minio:
+  silo:
     deploy:
       resources:
         limits:

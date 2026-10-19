@@ -23,14 +23,14 @@ make ps-local
 | Web UI | http://localhost:3000 |
 | Platform API | http://localhost:8000 |
 | Temporal UI | http://localhost:8080 |
-| MinIO Console | http://localhost:9001 |
+| Silo Console | http://localhost:9001 |
 | Jaeger UI | http://localhost:16686 |
 
 ## Архитектура
 
 - **Control Plane:** Web UI, Platform API, Registry, Policy & Approval, IAM, Semantic Service
 - **Execution Plane:** Orchestrator (Temporal), Agent Runtime, LLM Gateway, Tool Gateway (MCP), Sandbox Manager, Diagram Service
-- **Data Plane:** PostgreSQL 18 + pgvector (property graph), MinIO (S3), NATS JetStream, Knowledge Service
+- **Data Plane:** PostgreSQL 18 + pgvector (property graph), Silo (S3), NATS JetStream, Knowledge Service
 - **Observability:** OTel Collector + Jaeger (всегда), Langfuse + Prometheus + Grafana (профиль observability)
 
 ## Registry API
@@ -71,7 +71,7 @@ SLP v0 загружается командой `cd apps/api && go run ./cmd/seed
 
 - **Бэкенд:** Go 1.26+ (chi/echo, Temporal SDK, NATS, OTel)
 - **Фронтенд:** TypeScript + React 18+, Vite, Tailwind + shadcn/ui
-- **Данные:** PostgreSQL 18 + pgvector, MinIO, NATS JetStream
+- **Данные:** PostgreSQL 18 + pgvector, Silo (S3), NATS JetStream
 - **Инфраструктура:** Docker Compose → Kubernetes (Helm)
 
 ## Документация

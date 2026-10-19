@@ -28,7 +28,7 @@ make ps-local
 | Web UI | http://localhost:3000 | http://localhost:3000 |
 | Platform API | http://localhost:8000 | http://localhost:8000 |
 | Temporal UI | http://localhost:8080 | http://localhost:8080 |
-| MinIO Console | http://localhost:9001 | http://localhost:9001 |
+| Silo Console | http://localhost:9001 | http://localhost:9001 |
 | Jaeger UI | http://localhost:16686 | http://localhost:16686 |
 | Langfuse | — | http://localhost:3030 |
 | Grafana | — | http://localhost:3001 |
@@ -40,7 +40,7 @@ make ps-local
 
 | Сервис | Порт | Назначение | Профиль |
 |---|---|---|---|
-| MinIO | 9000 (API), 9001 (Console) | S3-хранилище для артефактов | всегда |
+| Silo (S3) | 9000 (API), 9001 (Console) | S3-совместимое хранилище (форк MinIO) | всегда |
 | NATS | 4222 (клиент), 8222 (мониторинг) | Шина событий (JetStream) | всегда |
 | Vault | 8200 | Управление секретами (dev-режим) | всегда |
 | OPA | 8181 | Policy engine (Rego) | всегда |
@@ -51,20 +51,26 @@ make ps-local
 make check-infra
 ```
 
-### MinIO — бакеты
+### Silo — бакеты
 
-Бакеты создаются автоматически при первом запуске через `minio-init`:
+Бакеты создаются автоматически при первом запуске через `silo-init`:
 - `ai-sdlc-factory` — постоянное хранение (артефакты, диаграммы, логи).
 - `ai-sdlc-factory-temp` — временные артефакты (публичное чтение для отладки).
 
-**Переменные окружения:** `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` — официальные
-имена переменных Docker-образа MinIO (см. [Docker Hub](https://hub.docker.com/r/minio/minio)).
+> **Примечание:** Официальные образы MinIO удалены из Docker Hub. Используется
+> Silo (`docker.io/pgsty/silo`) — community-форк, совместимый с S3 API,
+> `MINIO_*` переменными и форматами данных MinIO. Данные MinIO совместимы с Silo;
+> миграция не требуется.
 
-**Тег образа:** MinIO использует timestamp-теги (`RELEASE.YYYY-MM-DD...`) —
-это официальный формат rolling-release, не меняем на semantic version.
+**Переменные окружения:** `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` — официальные
+имена переменных Docker-образа MinIO/Silo (Silo полностью поддерживает `MINIO_*`).
+
+**Тег образа:** Silo использует timestamp-теги (`RELEASE.YYYY-MM-DD...`) —
+официальный формат rolling-release.
 
 **Именование томов:** Docker-тома используют дефисы: `minio-data`, `nats-data`,
-`vault-data` — современный стандарт Docker Compose.
+`vault-data` — современный стандарт Docker Compose. Том `minio-data` сохраняется
+для совместимости с существующими данными.
 
 ### Vault — dev-режим
 

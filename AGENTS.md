@@ -62,7 +62,7 @@ Conventional Commits со ссылкой на issue.
 - Оркестрация: **Temporal** (Go SDK).
 - БД: **PostgreSQL 18 + pgvector**.
 - Шина событий: **NATS JetStream**.
-- Объектное хранилище: **MinIO (S3)**.
+- Объектное хранилище: **Silo (S3)** (форк MinIO).
 - Политики: **OPA (Rego)**.
 - Секреты: **Vault / OpenBao**.
 - Наблюдаемость: **OpenTelemetry + Jaeger**; опционально **Langfuse**, **Prometheus**, **Grafana** под профилем `observability`.
