@@ -81,6 +81,7 @@ temp/
 coverage/
 *.coverprofile
 *.out
+$*
 
 # Semantic indexer artifacts
 .semantic-indexer/

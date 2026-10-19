@@ -33,6 +33,40 @@ make ps-local
 - **Data Plane:** PostgreSQL 18 + pgvector (property graph), MinIO (S3), NATS JetStream, Knowledge Service
 - **Observability:** OTel Collector + Jaeger (всегда), Langfuse + Prometheus + Grafana (профиль observability)
 
+## Registry API
+
+После запуска PostgreSQL примените миграции командой `make migrate-up`. Для Registry-запросов обязательны заголовки `X-Workspace-ID` и `X-Author-ID` с ненулевыми UUID; для смены статуса дополнительно требуется `X-Approver-ID`, отличный от автора.
+
+Пример создания роли (спецификация проверяется по JSON-Schema):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/registry/roles \
+  -H "Content-Type: application/json" \
+  -H "X-Workspace-ID: <workspace-uuid>" \
+  -H "X-Author-ID: <author-uuid>" \
+  -d '{
+    "apiVersion": "ai-sdlc-factory/v1",
+    "kind": "Role",
+    "metadata": {"name": "backend-developer", "category": "engineering"},
+    "spec": {
+      "description": "Implements backend features.",
+      "system_prompt_ref": "packages/ontology/prompts/backend-developer.yaml",
+      "inputs": [{"name": "requirements", "type": "document"}],
+      "outputs": [{"name": "implementation", "type": "code"}],
+      "tools": {"allow": ["fs.read"]},
+      "model": {"capability": "code-strong"},
+      "limits": {"max_steps": 60, "max_cost_usd": 3.0},
+      "autonomy": "balanced"
+    }
+  }'
+```
+
+Для публикации используйте `PATCH /api/v1/registry/roles/{id}/status` с телом `{"status":"approved"}` и заголовком `X-Approver-ID`. Опубликованные спецификации неизменяемы; создайте новую версию через `POST /api/v1/registry/roles/{id}/clone` или восстановите предыдущую через `/revert`.
+
+Для локальной проверки после применения миграции и запуска API задайте `WORKSPACE_ID`, `AUTHOR_ID` и отличный от автора `APPROVER_ID`, затем запустите `pwsh -File tests/smoke/registry-smoke.ps1`.
+
+SLP v0 загружается командой `cd apps/api && go run ./cmd/seed`; задайте `SEED_WORKSPACE_ID` и `SEED_AUTHOR_ID` для повторяемой локальной загрузки. Если они отсутствуют, seed создаёт UUIDv7 и предупреждает, что значения подходят только для локальной разработки.
+
 ## Стек
 
 - **Бэкенд:** Go 1.26+ (chi/echo, Temporal SDK, NATS, OTel)

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Process Specification",
+  "description": "Declarative specification for an SDLC process workflow in the ai-sdlc-factory platform",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["description", "stages"],
+  "properties": {
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "order", "gate"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": {
+            "type": "string"
+          },
+          "gate": {
+            "type": "string",
+            "minLength": 1
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "default_team": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}
