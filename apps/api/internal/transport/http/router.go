@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/config"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/iam"
@@ -35,6 +36,7 @@ func NewRouter(
 	// ── Common middleware ──────────────────────────────────────────
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	r.Use(otelhttp.NewMiddleware("api-server"))
 	r.Use(MetricsMiddleware)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/iam"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/handler"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/repository"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/telemetry"
 	httptransport "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/transport/http"
 )
 
@@ -40,6 +42,25 @@ func main() {
 		level = slog.LevelError
 	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+
+	// Tracing must be initialized before the HTTP server starts so that all
+	// requests are recorded by the global tracer provider.
+	shutdownTracer, err := telemetry.InitTracer(context.Background(), "api-server")
+	if err != nil {
+		slog.Error("failed to initialize tracing", "error", err)
+		os.Exit(1)
+	}
+	var shutdownOnce sync.Once
+	shutdownTracing := func() {
+		shutdownOnce.Do(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := shutdownTracer(ctx); err != nil {
+				slog.Error("failed to shutdown tracer", "error", err)
+			}
+		})
+	}
+	defer shutdownTracing()
 
 	conn, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
@@ -103,6 +124,8 @@ func main() {
 		slog.Error("server forced to shutdown", "error", err)
 		os.Exit(1)
 	}
+
+	shutdownTracing()
 
 	slog.Info("server exited")
 }

@@ -205,6 +205,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       ALLOW_LEGACY_AUTH: ${ALLOW_LEGACY_AUTH:-false}
       DEPLOYMENT_PROFILE: ${DEPLOYMENT_PROFILE:-prod}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-otel-collector:4317}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE:-true}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/healthz"]
       interval: 30s
@@ -214,6 +216,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
 
   worker:
     build:
