@@ -21,7 +21,10 @@ API_SERVICE = api
 WORKER_SERVICE = worker
 WEB_SERVICE = web
 
-.PHONY: up-local up-full down-local down-full ps-local ps-full logs-local logs-full rebuild-local rebuild-full clean volumes migrate-up migrate-down health dev-api dev-worker dev-web
+.PHONY: up-local up-full down-local down-full ps-local ps-full logs-local logs-full rebuild-local rebuild-full clean volumes migrate-up migrate-down health dev-api dev-worker dev-web temporal-create-namespace temporal-smoke-test
+
+TEMPORAL_NAMESPACE ?= ai-sdlc-factory
+TEMPORAL_COMPOSE = docker compose $(COMPOSE_FILES) --env-file $(ENV_FILE)
 
 # ── Local Dev ──────────────────────────────────────────────
 
@@ -30,6 +33,16 @@ up-local:
 
 up-full:
 	$(COMPOSE) up -d --wait
+
+temporal-create-namespace:
+	@if $(TEMPORAL_COMPOSE) exec -T temporal tctl --address temporal:7233 namespace list | grep -Fq "$(TEMPORAL_NAMESPACE)"; then \
+	  echo "Temporal namespace '$(TEMPORAL_NAMESPACE)' already exists"; \
+	else \
+	  $(TEMPORAL_COMPOSE) exec -T temporal tctl --address temporal:7233 --namespace "$(TEMPORAL_NAMESPACE)" namespace register --retention 24h; \
+	fi
+
+temporal-smoke-test:
+	bash tests/temporal/smoke_test.sh
 
 down-local:
 	$(COMPOSE) down

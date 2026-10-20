@@ -13,6 +13,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_sdlc_factory}"]
       interval: 10s
@@ -119,36 +120,6 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  temporal:
-    image: temporalio/auto-setup:latest
-    container_name: ai-sdlc-factory-temporal
-    environment:
-      DB: postgres12
-      DB_PORT: 5432
-      POSTGRES_HOST: postgres
-      POSTGRES_USER: ${POSTGRES_USER:-ai_sdlc_factory}
-      POSTGRES_PWD: ${POSTGRES_PASSWORD:-ai_sdlc_dev_password}
-      POSTGRES_DBNAME: temporal
-      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
-    ports:
-      - "7233:7233"
-    volumes:
-      - ./temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  temporal-ui:
-    image: temporalio/ui:latest
-    container_name: ai-sdlc-factory-temporal-ui
-    ports:
-      - "8080:8080"
-    environment:
-      - TEMPORAL_GRPC_TARGET=temporal:7233
-      - TEMPORAL_ADDRESS=temporal:7233
-    depends_on:
-      - temporal
-
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.110.0
     container_name: ai-sdlc-factory-otel-collector
@@ -231,7 +202,6 @@ services:
       AI_DB_NAME: ${POSTGRES_DB:-ai_sdlc_factory}
       AI_DB_USER: ${POSTGRES_USER:-ai_sdlc_factory}
       AI_DB_PASSWORD: ${POSTGRES_PASSWORD:-ai_sdlc_dev_password}
-      AI_TEMPORAL_HOST: temporal:7233
       AI_NATS_URL: nats://nats:4222
     depends_on:
       postgres:
@@ -242,9 +212,6 @@ services:
         condition: service_healthy
       opa:
         condition: service_healthy
-      temporal:
-        condition: service_started
-
   semantic:
     build:
       context: ../..
