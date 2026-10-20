@@ -161,7 +161,7 @@ services:
       - "${OTEL_METRICS_PORT:-8888}:8888"
       - "${OTEL_HEALTH_PORT:-13133}:13133"
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:13133/"]
+      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otel/config.yaml"]
       interval: 10s
       timeout: 5s
       retries: 10
