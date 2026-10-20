@@ -20,14 +20,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26.x'
           cache: true
+          cache-dependency-path: apps/api/go.sum
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9.3.0
         with:
-          version: v1.60
-          working-directory: backend
+          version: v2.15.0
+          working-directory: apps/api
 
   test:
     name: Test
@@ -40,18 +41,19 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26.x'
           cache: true
+          cache-dependency-path: apps/api/go.sum
 
       - name: Run tests
+        working-directory: apps/api
         run: |
-          cd backend
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
-          file: ./backend/coverage.txt
+          file: ./apps/api/coverage.txt
           fail_ci_if_error: false
 
   build:
@@ -65,12 +67,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26.x'
           cache: true
+          cache-dependency-path: apps/api/go.sum
 
       - name: Build
+        working-directory: apps/api
         run: |
-          cd backend
           go build -v ./...
 
   frontend-lint:
@@ -80,24 +83,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check for frontend package
+        id: frontend
+        run: |
+          if [ -f apps/web/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No apps/web frontend package found; skipping frontend checks."
+          fi
+
+      - name: Set up pnpm
+        if: steps.frontend.outputs.present == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+
       - name: Set up Node.js
+        if: steps.frontend.outputs.present == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
+          cache-dependency-path: apps/web/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: |
-          cd apps/web
-          pnpm install --frozen-lockfile
+        if: steps.frontend.outputs.present == 'true'
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
 
       - name: Run linter
-        run: |
-          cd apps/web
-          pnpm run lint
+        if: steps.frontend.outputs.present == 'true'
+        working-directory: apps/web
+        run: pnpm run lint
 
       - name: Build
-        run: |
-          cd apps/web
-          pnpm run build
-
+        if: steps.frontend.outputs.present == 'true'
+        working-directory: apps/web
+        run: pnpm run build

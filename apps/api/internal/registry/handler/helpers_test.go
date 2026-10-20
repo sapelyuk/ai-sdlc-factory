@@ -294,9 +294,10 @@ func TestCreateHandlersRejectInvalidRequestsAndMissingTenant(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
-			if test.context == "tenant" {
+			switch test.context {
+			case "tenant":
 				request = tenantRequest(http.MethodPost, "/", test.body, workspaceID, authorID)
-			} else if test.context == "author-missing" {
+			case "author-missing":
 				request = request.WithContext(identity.WithTenant(request.Context(), workspaceID, uuid.Nil))
 			}
 			response := invoke(test.call, request)

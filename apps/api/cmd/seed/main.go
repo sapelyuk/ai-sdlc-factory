@@ -234,7 +234,7 @@ func ensureWorkspace(ctx context.Context, pool *pgxpool.Pool, workspaceID, autho
 	if err != nil {
 		return fmt.Errorf("begin workspace seed transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, true)`, workspaceID.String()); err != nil {
 		return fmt.Errorf("set workspace seed context: %w", err)
 	}

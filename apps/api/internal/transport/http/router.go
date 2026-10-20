@@ -10,7 +10,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/config"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/iam"
 	registryhandler "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/handler"
 )
 
@@ -19,13 +23,21 @@ type Router struct {
 	r *chi.Mux
 }
 
-// NewRouter creates a new router with middleware and registers routes.
-func NewRouter(h *registryhandler.RegistryHandler, readinessCheck func(context.Context) error) *Router {
+// NewRouter creates a new router with JWT auth, RBAC, and all routes.
+func NewRouter(
+	h *registryhandler.RegistryHandler,
+	readinessCheck func(context.Context) error,
+	cfg *config.Config,
+	jwtService *iam.JWTService,
+	loginHandler *LoginHandler,
+) *Router {
 	r := chi.NewMux()
 
+	// ── Common middleware ──────────────────────────────────────────
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	r.Use(otelhttp.NewMiddleware("api-server"))
+	r.Use(MetricsMiddleware)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(cors.Handler(cors.Options{
@@ -37,6 +49,7 @@ func NewRouter(h *registryhandler.RegistryHandler, readinessCheck func(context.C
 		MaxAge:           300,
 	}))
 
+	// ── Health endpoints (no auth) ─────────────────────────────────
 	r.Get("/healthz", healthHandler)
 	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		if readinessCheck != nil {
@@ -49,37 +62,54 @@ func NewRouter(h *registryhandler.RegistryHandler, readinessCheck func(context.C
 		readyHandler(w, r)
 	})
 
-	r.Route("/api/v1/registry", func(r chi.Router) {
-		r.Use(TenantContextMiddleware)
-		r.Route("/roles", func(r chi.Router) {
-			r.Post("/", h.CreateRole)
-			r.Get("/", h.ListRoles)
+	// ── Metrics (Prometheus, no auth) ──────────────────────────────
+	r.Get("/metrics", promhttp.Handler().ServeHTTP)
+
+	// ── Auth (login endpoint, no auth) ─────────────────────────────
+	r.Post("/api/v1/auth/login", loginHandler.Login)
+
+	// ── Protected routes (JWT auth + RBAC) ─────────────────────────
+	r.Group(func(r chi.Router) {
+		r.Use(JWTAuthMiddleware(jwtService, cfg.AllowLegacyAuth))
+		r.Use(TenantContextMiddleware) // legacy fallback: adds workspace/author to context
+
+		// RBAC helper: wraps a handler with a role requirement.
+		wrapRBAC := func(requiredRole string, handler http.HandlerFunc) http.HandlerFunc {
+			mw := RBACMiddleware(requiredRole)
+			return func(w http.ResponseWriter, r *http.Request) {
+				mw(handler).ServeHTTP(w, r)
+			}
+		}
+
+		r.Route("/api/v1/registry/roles", func(r chi.Router) {
+			r.Post("/", wrapRBAC("admin", h.CreateRole))
+			r.Get("/", wrapRBAC("viewer", h.ListRoles))
 			r.Get("/{id}", h.GetRoleByID)
 			r.Get("/{name}/{version}", h.GetRoleByNameAndVersion)
-			r.Patch("/{id}", h.UpdateRoleSpec)
-			r.Patch("/{id}/status", h.UpdateRoleStatus)
-			r.Post("/{id}/clone", h.CloneRole)
-			r.Post("/{id}/revert", h.RevertRole)
+			r.Patch("/{id}", wrapRBAC("admin", h.UpdateRoleSpec))
+			r.Patch("/{id}/status", wrapRBAC("admin", h.UpdateRoleStatus))
+			r.Post("/{id}/clone", wrapRBAC("admin", h.CloneRole))
+			r.Post("/{id}/revert", wrapRBAC("admin", h.RevertRole))
 		})
-		r.Route("/teams", func(r chi.Router) {
-			r.Post("/", h.CreateTeam)
-			r.Get("/", h.ListTeams)
+		r.Route("/api/v1/registry/teams", func(r chi.Router) {
+			r.Post("/", wrapRBAC("admin", h.CreateTeam))
+			r.Get("/", wrapRBAC("viewer", h.ListTeams))
 			r.Get("/{id}", h.GetTeamByID)
 			r.Get("/{name}/{version}", h.GetTeamByNameAndVersion)
-			r.Patch("/{id}", h.UpdateTeamSpec)
-			r.Patch("/{id}/status", h.UpdateTeamStatus)
-			r.Post("/{id}/clone", h.CloneTeam)
-			r.Post("/{id}/revert", h.RevertTeam)
+			r.Patch("/{id}", wrapRBAC("admin", h.UpdateTeamSpec))
+			r.Patch("/{id}/status", wrapRBAC("admin", h.UpdateTeamStatus))
+			r.Post("/{id}/clone", wrapRBAC("admin", h.CloneTeam))
+			r.Post("/{id}/revert", wrapRBAC("admin", h.RevertTeam))
 		})
-		r.Route("/processes", func(r chi.Router) {
-			r.Post("/", h.CreateProcess)
-			r.Get("/", h.ListProcesses)
+		r.Route("/api/v1/registry/processes", func(r chi.Router) {
+			r.Post("/", wrapRBAC("admin", h.CreateProcess))
+			r.Get("/", wrapRBAC("viewer", h.ListProcesses))
 			r.Get("/{id}", h.GetProcessByID)
 			r.Get("/{name}/{version}", h.GetProcessByNameAndVersion)
-			r.Patch("/{id}", h.UpdateProcessSpec)
-			r.Patch("/{id}/status", h.UpdateProcessStatus)
-			r.Post("/{id}/clone", h.CloneProcess)
-			r.Post("/{id}/revert", h.RevertProcess)
+			r.Patch("/{id}", wrapRBAC("admin", h.UpdateProcessSpec))
+			r.Patch("/{id}/status", wrapRBAC("admin", h.UpdateProcessStatus))
+			r.Post("/{id}/clone", wrapRBAC("admin", h.CloneProcess))
+			r.Post("/{id}/revert", wrapRBAC("admin", h.RevertProcess))
 		})
 	})
 
@@ -93,10 +123,10 @@ func (r *Router) Handler() http.Handler {
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
 func readyHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ready"}`))
+	_, _ = w.Write([]byte(`{"status":"ready"}`))
 }
