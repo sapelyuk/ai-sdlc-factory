@@ -202,8 +202,9 @@ services:
       PORT: "8000"
       LOG_LEVEL: info
       SCHEMA_DIR: /app/packages/contracts/schemas
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       ALLOW_LEGACY_AUTH: ${ALLOW_LEGACY_AUTH:-false}
+      DEPLOYMENT_PROFILE: ${DEPLOYMENT_PROFILE:-prod}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/healthz"]
       interval: 30s

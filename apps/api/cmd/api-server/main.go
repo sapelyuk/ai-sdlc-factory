@@ -25,6 +25,10 @@ func main() {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+	if err := cfg.ValidateAPIAuth(); err != nil {
+		slog.Error("invalid API authentication configuration", "error", err)
+		os.Exit(1)
+	}
 
 	level := slog.LevelInfo
 	switch cfg.LogLevel {
