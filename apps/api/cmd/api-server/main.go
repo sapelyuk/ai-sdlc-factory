@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/config"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/iam"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/handler"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/repository"
 	httptransport "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/transport/http"
@@ -62,7 +63,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	r := httptransport.NewRouter(registryHandler, conn.Ping)
+	// IAM setup.
+	userRepo := iam.NewPostgresUserRepository(conn)
+	jwtService := iam.NewJWTService(cfg.JWTSecret, cfg.JWTDuration)
+	loginHandler := httptransport.NewLoginHandler(userRepo, jwtService)
+
+	r := httptransport.NewRouter(registryHandler, conn.Ping, cfg, jwtService, loginHandler)
 
 	srv := &http.Server{
 		Addr:         ":" + strconv.Itoa(cfg.Port),
