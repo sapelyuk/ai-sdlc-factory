@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if ! docker info >/dev/null 2>&1; then
+  echo "SKIP: Docker is unavailable"
+  exit 0
+fi
+
 compose=(
   docker compose
   -f deploy/compose/docker-compose.yml

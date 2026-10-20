@@ -34,12 +34,17 @@ up-local:
 up-full:
 	$(COMPOSE) up -d --wait
 
+ifeq ($(OS),Windows_NT)
+temporal-create-namespace:
+	@$(TEMPORAL_COMPOSE) exec -T temporal tctl --address temporal:7233 --namespace "$(TEMPORAL_NAMESPACE)" namespace register --retention 24h || $(TEMPORAL_COMPOSE) exec -T temporal tctl --address temporal:7233 --namespace "$(TEMPORAL_NAMESPACE)" namespace describe >NUL
+else
 temporal-create-namespace:
 	@if $(TEMPORAL_COMPOSE) exec -T temporal tctl --address temporal:7233 namespace list | grep -Fq "$(TEMPORAL_NAMESPACE)"; then \
 	  echo "Temporal namespace '$(TEMPORAL_NAMESPACE)' already exists"; \
 	else \
 	  $(TEMPORAL_COMPOSE) exec -T temporal tctl --address temporal:7233 --namespace "$(TEMPORAL_NAMESPACE)" namespace register --retention 24h; \
 	fi
+endif
 
 temporal-smoke-test:
 	bash tests/temporal/smoke_test.sh

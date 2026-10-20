@@ -2,6 +2,18 @@ limit.maxIDLength:
   - value: 255
     overrides: []
 
+frontend.enableClientVersionCheck:
+  - value: false
+    overrides: []
+
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: false
+    overrides: []
+
+system.logLevel:
+  - value: "warn"
+    overrides: []
+
 limit.taskListSize:
   - value: 10000
     overrides: []

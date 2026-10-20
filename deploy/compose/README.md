@@ -65,8 +65,10 @@ docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d postgres -c "CRE
 
 Dynamic config монтируется из
 `deploy/compose/temporal/dynamicconfig/development-sql.yaml`. Версии образов
-зафиксированы в `docker-compose.local-dev.yml`; в профиле `local-full`
-Temporal не запускается.
+зафиксированы в `docker-compose.local-dev.yml`: используется
+`temporalio/auto-setup:1.26.3`, поскольку запланированный тег `1.26.0`
+отсутствует в Docker Hub; `1.26.3` — доступный стабильный patch-релиз той же
+minor-ветки. В профиле `local-full` Temporal не запускается.
 
 После `make up-local` создайте namespace `ai-sdlc-factory`:
 
