@@ -118,7 +118,7 @@ func TestJWTService_TokenTimestamps(t *testing.T) {
 	require.NotNil(t, claims.IssuedAt)
 	require.NotNil(t, claims.NotBefore)
 	require.WithinDuration(t, before.Add(2*time.Hour), claims.ExpiresAt.Time, time.Minute)
-	require.False(t, claims.IssuedAt.Time.Before(before))
+	require.False(t, claims.IssuedAt.Before(before))
 }
 
 func TestRoleLevel(t *testing.T) {

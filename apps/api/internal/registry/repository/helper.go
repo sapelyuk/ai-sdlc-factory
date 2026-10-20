@@ -26,7 +26,7 @@ func inTenantTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx, uuid.UU
 	if err != nil {
 		return fmt.Errorf("begin registry transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, true)`, workspaceID.String()); err != nil {
 		return fmt.Errorf("set tenant context: %w", err)
@@ -63,14 +63,6 @@ func statusTransition(current, next domain.Status, authorID, approverID uuid.UUI
 		return domain.ErrApproverIsAuthor
 	}
 	return nil
-}
-
-func nextMinorVersion(version string) (string, error) {
-	current, err := semver.NewVersion(version)
-	if err != nil {
-		return "", fmt.Errorf("parse stored semantic version %q: %w", version, err)
-	}
-	return current.IncMinor().String(), nil
 }
 
 func latestVersion(ctx context.Context, tx pgx.Tx, table string, workspaceID uuid.UUID, name string) (string, error) {

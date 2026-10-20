@@ -258,7 +258,7 @@ func TestPostgresRegistryCRUDCloneRevertAndRLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, true)`, uuid.NewString()); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func createWorkspace(t *testing.T, ctx context.Context, pool *pgxpool.Pool, work
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, true)`, workspaceID.String()); err != nil {
 		t.Fatal(err)
 	}

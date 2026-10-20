@@ -123,10 +123,10 @@ func (r *Router) Handler() http.Handler {
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
 func readyHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ready"}`))
+	_, _ = w.Write([]byte(`{"status":"ready"}`))
 }

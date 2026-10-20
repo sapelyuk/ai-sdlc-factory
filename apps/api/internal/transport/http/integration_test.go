@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -304,7 +303,7 @@ func loginAsViewer(t *testing.T, router *Router) string {
 		t.Fatalf("viewer login status = %d, body = %s", resp.Code, resp.Body.String())
 	}
 	var lr iam.LoginResponse
-	json.Unmarshal(resp.Body.Bytes(), &lr)
+	_ = json.Unmarshal(resp.Body.Bytes(), &lr)
 	return lr.Token
 }
 
@@ -320,7 +319,7 @@ func loginAsAdmin(t *testing.T, router *Router) string {
 		t.Fatalf("admin login status = %d, body = %s", resp.Code, resp.Body.String())
 	}
 	var lr iam.LoginResponse
-	json.Unmarshal(resp.Body.Bytes(), &lr)
+	_ = json.Unmarshal(resp.Body.Bytes(), &lr)
 	return lr.Token
 }
 
@@ -401,18 +400,18 @@ func TestIntegration_ApproverFromJWT(t *testing.T) {
 	repoRoot := filepath.Join(filepath.Dir(sourceFile), "..", "..", "..", "..", "..")
 	migrationsDir := filepath.Join(repoRoot, "migrations", "postgres")
 	sql0008, _ := os.ReadFile(filepath.Join(migrationsDir, "0008_init_registry.up.sql"))
-	pool.Exec(ctx, string(sql0008))
+	_, _ = pool.Exec(ctx, string(sql0008))
 
 	// Create workspace.
-	pool.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, false)`, wsID)
-	pool.Exec(ctx,
+	_, _ = pool.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, false)`, wsID)
+	_, _ = pool.Exec(ctx,
 		`INSERT INTO workspaces (id, name, owner_id) VALUES ($1, 'test-ws', $2)`,
 		wsID, uuid.New().String())
 
 	// Create admin user.
 	adminID := uuid.New().String()
 	hash, _ := bcrypt.GenerateFromPassword([]byte("adminpass"), bcrypt.DefaultCost)
-	pool.Exec(ctx,
+	_, _ = pool.Exec(ctx,
 		`INSERT INTO users (id, workspace_id, email, password_hash, role) VALUES ($1, $2, $3, $4, $5)`,
 		adminID, wsID, "admin@test.com", string(hash), "admin")
 
@@ -428,12 +427,12 @@ func TestIntegration_ApproverFromJWT(t *testing.T) {
 		Limits:          domain.LimitsSpec{MaxSteps: 10, MaxCostUSD: 1},
 		Autonomy:        domain.AutonomyBalanced,
 	})
-	pool.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, false)`, wsID)
-	pool.Exec(ctx,
+	_, _ = pool.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, false)`, wsID)
+	_, _ = pool.Exec(ctx,
 		`INSERT INTO roles (id, workspace_id, name, version, category, spec, status, author_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		role.ID, wsID, role.Name, "1.0.0", "engineering",
-		fmt.Sprintf(`{"description":"Test role.","system_prompt_ref":"packages/ontology/prompts/test.yaml","inputs":[{"name":"req","type":"document"}],"outputs":[{"name":"res","type":"document"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":10,"max_cost_usd":1},"autonomy":"balanced"}`),
+		`{"description":"Test role.","system_prompt_ref":"packages/ontology/prompts/test.yaml","inputs":[{"name":"req","type":"document"}],"outputs":[{"name":"res","type":"document"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":10,"max_cost_usd":1},"autonomy":"balanced"}`,
 		"draft", otherAuthor)
 
 	jwtService := iam.NewJWTService("test-secret", 24*time.Hour)

@@ -78,7 +78,7 @@ func (h *LoginHandler) Login(w http.ResponseWriter, r *http.Request) {
 func writeValidationError(w http.ResponseWriter, details map[string]string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnprocessableEntity)
-	json.NewEncoder(w).Encode(map[string]any{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"error":   "validation failed",
 		"details": details,
 	})
