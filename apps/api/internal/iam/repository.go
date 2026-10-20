@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,9 +17,15 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id string) (*User, error)
 }
 
+// dbPool is the subset of pgxpool.Pool used by the repository.
+type dbPool interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // postgresUserRepository is a PostgreSQL-backed user repository.
 type postgresUserRepository struct {
-	pool *pgxpool.Pool
+	pool dbPool
 }
 
 // NewPostgresUserRepository creates a PostgreSQL user repository.

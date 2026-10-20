@@ -4,7 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestJWTService_GenerateAndValidate(t *testing.T) {
@@ -67,6 +69,56 @@ func TestJWTService_WrongSecret(t *testing.T) {
 	if err != ErrTokenMalformed {
 		t.Fatalf("ValidateToken() with wrong secret error = %v, want ErrTokenMalformed", err)
 	}
+}
+
+func TestJWTService_EmptyToken(t *testing.T) {
+	svc := NewJWTService("test-secret-key", 24*time.Hour)
+
+	_, err := svc.ValidateToken("")
+	require.ErrorIs(t, err, ErrTokenMalformed)
+}
+
+func TestJWTService_RejectsNonHMACSigningMethod(t *testing.T) {
+	svc := NewJWTService("test-secret-key", 24*time.Hour)
+	token := jwt.NewWithClaims(jwt.SigningMethodNone, JWTClaims{
+		UserID:      uuid.NewString(),
+		WorkspaceID: uuid.NewString(),
+		Role:        "admin",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	})
+	signed, err := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
+	require.NoError(t, err)
+
+	_, err = svc.ValidateToken(signed)
+	require.ErrorIs(t, err, ErrTokenMalformed)
+}
+
+func TestJWTService_RejectsBearerPrefix(t *testing.T) {
+	// The service expects a raw token; stripping "Bearer " is the middleware's job.
+	svc := NewJWTService("test-secret-key", 24*time.Hour)
+	token, err := svc.GenerateToken(uuid.NewString(), uuid.NewString(), "viewer")
+	require.NoError(t, err)
+
+	_, err = svc.ValidateToken("Bearer " + token)
+	require.ErrorIs(t, err, ErrTokenMalformed)
+}
+
+func TestJWTService_TokenTimestamps(t *testing.T) {
+	svc := NewJWTService("test-secret-key", 2*time.Hour)
+	before := time.Now().Add(-time.Minute)
+
+	token, err := svc.GenerateToken(uuid.NewString(), uuid.NewString(), "operator")
+	require.NoError(t, err)
+
+	claims, err := svc.ValidateToken(token)
+	require.NoError(t, err)
+	require.NotNil(t, claims.ExpiresAt)
+	require.NotNil(t, claims.IssuedAt)
+	require.NotNil(t, claims.NotBefore)
+	require.WithinDuration(t, before.Add(2*time.Hour), claims.ExpiresAt.Time, time.Minute)
+	require.False(t, claims.IssuedAt.Time.Before(before))
 }
 
 func TestRoleLevel(t *testing.T) {
