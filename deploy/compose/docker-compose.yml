@@ -295,8 +295,7 @@ services:
 
   web:
     build:
-      context: ../..
-      dockerfile: apps/web/Dockerfile
+      context: ../../apps/web
     container_name: ai-sdlc-factory-web
     ports:
       - "${WEB_PORT:-3000}:3000"
@@ -305,7 +304,7 @@ services:
     environment:
       - VITE_API_URL=/api
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000/"]
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:3000/"]
       interval: 10s
       timeout: 5s
       retries: 10

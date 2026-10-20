@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/store/auth'
+
 export async function login(
   email: string,
   password: string,
@@ -24,6 +26,9 @@ export async function fetchRoles(token: string): Promise<unknown[]> {
   })
 
   if (!response.ok) {
+    if (response.status === 401) {
+      useAuthStore.getState().clearAuth()
+    }
     throw new Error(`HTTP ${response.status}`)
   }
 

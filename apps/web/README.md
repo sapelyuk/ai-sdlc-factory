@@ -11,6 +11,9 @@
 - **React Router DOM** (routing)
 - **Vitest** (unit tests)
 
+The JWT is kept in the in-memory auth store and is cleared on page reload. It is
+not persisted to `localStorage`.
+
 ## Быстрый старт
 
 ```bash
