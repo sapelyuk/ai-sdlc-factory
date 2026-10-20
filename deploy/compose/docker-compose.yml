@@ -295,13 +295,21 @@ services:
 
   web:
     build:
-      context: ../..
-      dockerfile: deploy/compose/Dockerfile.web
+      context: ../../apps/web
     container_name: ai-sdlc-factory-web
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     depends_on:
       - api
+    environment:
+      - VITE_API_URL=/api
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
 
 volumes:
   postgres-data:
