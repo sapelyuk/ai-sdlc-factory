@@ -8,9 +8,17 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/identity"
 )
 
-// TenantContextMiddleware validates tenant and author headers for Registry requests.
+// TenantContextMiddleware validates tenant headers.
+// If the context already has workspace/author (e.g. from JWT), it passes through.
 func TenantContextMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If JWT already set workspace/author in context, skip header validation.
+		if _, err := identity.WorkspaceID(r.Context()); err == nil {
+			if _, err := identity.AuthorID(r.Context()); err == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
 		workspaceID, err := uuid.Parse(r.Header.Get("X-Workspace-ID"))
 		if err != nil || workspaceID == uuid.Nil {
 			jsonError(w, http.StatusBadRequest, "X-Workspace-ID must be a valid UUID")
