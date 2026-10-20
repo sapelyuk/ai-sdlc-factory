@@ -1,0 +1,876 @@
+openapi: 3.1.0
+info:
+  title: ai-sdlc-factory Platform API
+  version: 1.0.0
+  description: |
+    Unified Platform API with JWT authentication, RBAC, and Registry endpoints.
+    Roles: owner, admin, operator, viewer (hierarchical).
+servers:
+  - url: http://localhost:8000
+    description: Local development
+security:
+  - bearerAuth: []
+paths:
+  # ── Auth ──────────────────────────────────────────────────────────
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Authenticate user and return JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              success:
+                value:
+                  email: admin@example.com
+                  password: admin
+      responses:
+        "200":
+          description: JWT token and user info.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid email or password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ── Health ────────────────────────────────────────────────────────
+  /healthz:
+    get:
+      operationId: healthz
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Service is alive.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /readyz:
+    get:
+      operationId: readyz
+      summary: Readiness probe
+      security: []
+      responses:
+        "200":
+          description: Service is ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        "503":
+          description: Database unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Metrics ───────────────────────────────────────────────────────
+  /metrics:
+    get:
+      operationId: metrics
+      summary: Prometheus metrics endpoint
+      security: []
+      responses:
+        "200":
+          description: Prometheus metrics.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  # ── Registry: Roles ───────────────────────────────────────────────
+  /api/v1/registry/roles:
+    get:
+      operationId: listRoles
+      summary: List roles (viewer+)
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/Status"
+      responses:
+        "200":
+          description: Roles in the active workspace.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createRole
+      summary: Create a new role (admin+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoleRequest"
+      responses:
+        "201":
+          description: Created draft role at version 1.0.0.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/registry/roles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      operationId: getRole
+      responses:
+        "200":
+          description: Role version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateRoleSpec
+      summary: Update role spec (admin+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleSpecUpdate"
+      responses:
+        "200":
+          description: Updated role.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/roles/{name}/{version}:
+    parameters:
+      - $ref: "#/components/parameters/Name"
+      - $ref: "#/components/parameters/Version"
+    get:
+      operationId: getRoleByNameAndVersion
+      responses:
+        "200":
+          description: Role version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/roles/{id}/status:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    patch:
+      operationId: updateRoleStatus
+      summary: Update role status (admin+); approver from JWT sub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StatusUpdate"
+      responses:
+        "200":
+          description: Updated role status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/registry/roles/{id}/clone:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: cloneRole
+      summary: Clone role to next minor version (admin+)
+      responses:
+        "201":
+          description: New draft role.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/roles/{id}/revert:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: revertRole
+      summary: Revert role to previous version (admin+)
+      responses:
+        "201":
+          description: New draft role.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Registry: Teams ───────────────────────────────────────────────
+  /api/v1/registry/teams:
+    get:
+      operationId: listTeams
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/Status"
+      responses:
+        "200":
+          description: Teams in the active workspace.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createTeam
+      summary: Create a new team (admin+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeamRequest"
+      responses:
+        "201":
+          description: Created draft team.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/registry/teams/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      operationId: getTeam
+      responses:
+        "200":
+          description: Team version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateTeamSpec
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamSpecUpdate"
+      responses:
+        "200":
+          description: Updated team.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/teams/{name}/{version}:
+    parameters:
+      - $ref: "#/components/parameters/Name"
+      - $ref: "#/components/parameters/Version"
+    get:
+      operationId: getTeamByNameAndVersion
+      responses:
+        "200":
+          description: Team version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/teams/{id}/status:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    patch:
+      operationId: updateTeamStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StatusUpdate"
+      responses:
+        "200":
+          description: Updated team status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/registry/teams/{id}/clone:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: cloneTeam
+      responses:
+        "201":
+          description: New draft team.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/teams/{id}/revert:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: revertTeam
+      responses:
+        "201":
+          description: New draft team.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Registry: Processes ───────────────────────────────────────────
+  /api/v1/registry/processes:
+    get:
+      operationId: listProcesses
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/Status"
+      responses:
+        "200":
+          description: Processes in the active workspace.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Process"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createProcess
+      summary: Create a new process (admin+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProcessRequest"
+      responses:
+        "201":
+          description: Created draft process.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Process"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/registry/processes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      operationId: getProcess
+      responses:
+        "200":
+          description: Process version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Process"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateProcessSpec
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessSpecUpdate"
+      responses:
+        "200":
+          description: Updated process.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Process"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/processes/{name}/{version}:
+    parameters:
+      - $ref: "#/components/parameters/Name"
+      - $ref: "#/components/parameters/Version"
+    get:
+      operationId: getProcessByNameAndVersion
+      responses:
+        "200":
+          description: Process version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Process"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/processes/{id}/status:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    patch:
+      operationId: updateProcessStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StatusUpdate"
+      responses:
+        "200":
+          description: Updated process status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Process"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/registry/processes/{id}/clone:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: cloneProcess
+      responses:
+        "201":
+          description: New draft process.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Process"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/processes/{id}/revert:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: revertProcess
+      responses:
+        "201":
+          description: New draft process.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Process"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Name:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+    Version:
+      name: version
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+  responses:
+    BadRequest:
+      description: Invalid request body or parameters.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid JWT token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Insufficient role or approver equals author.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found in the active workspace.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Invalid status transition.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationError"
+  schemas:
+    Status:
+      type: string
+      enum: [draft, approved, deprecated]
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    ValidationError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        details:
+          type: object
+          additionalProperties:
+            type: string
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: JWT bearer token.
+        user:
+          type: object
+          required: [id, email, role]
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+            role:
+              type: string
+              enum: [owner, admin, operator, viewer]
+    StatusUpdate:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/Status"
+    CreateRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [metadata, spec]
+      properties:
+        apiVersion:
+          type: string
+          enum: [ai-sdlc-factory/v1]
+        kind:
+          type: string
+          enum: [Role]
+        metadata:
+          type: object
+          additionalProperties: false
+          required: [name, category]
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 128
+            version:
+              type: string
+              enum: ["1.0.0"]
+            category:
+              type: string
+              enum: [product, design, engineering, qa, devops, research, security]
+        spec:
+          $ref: ../schemas/role.schema.json
+    CreateTeamRequest:
+      type: object
+      additionalProperties: false
+      required: [metadata, spec]
+      properties:
+        apiVersion:
+          type: string
+          enum: [ai-sdlc-factory/v1]
+        kind:
+          type: string
+          enum: [Team]
+        metadata:
+          type: object
+          additionalProperties: false
+          required: [name]
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 128
+            version:
+              type: string
+              enum: ["1.0.0"]
+        spec:
+          $ref: ../schemas/team.schema.json
+    CreateProcessRequest:
+      type: object
+      additionalProperties: false
+      required: [metadata, spec]
+      properties:
+        apiVersion:
+          type: string
+          enum: [ai-sdlc-factory/v1]
+        kind:
+          type: string
+          enum: [Process]
+        metadata:
+          type: object
+          additionalProperties: false
+          required: [name]
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 128
+            version:
+              type: string
+              enum: ["1.0.0"]
+        spec:
+          $ref: ../schemas/process.schema.json
+    RoleSpecUpdate:
+      type: object
+      additionalProperties: false
+      required: [spec]
+      properties:
+        spec:
+          $ref: ../schemas/role.schema.json
+    TeamSpecUpdate:
+      type: object
+      additionalProperties: false
+      required: [spec]
+      properties:
+        spec:
+          $ref: ../schemas/team.schema.json
+    ProcessSpecUpdate:
+      type: object
+      additionalProperties: false
+      required: [spec]
+      properties:
+        spec:
+          $ref: ../schemas/process.schema.json
+    Role:
+      type: object
+      required: [id, workspace_id, name, version, category, spec, status, author_id, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        version:
+          type: string
+        category:
+          type: string
+        spec:
+          $ref: ../schemas/role.schema.json
+        status:
+          $ref: "#/components/schemas/Status"
+        author_id:
+          type: string
+          format: uuid
+        approver_id:
+          type: [string, "null"]
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Team:
+      type: object
+      required: [id, workspace_id, name, version, spec, status, author_id, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        version:
+          type: string
+        spec:
+          $ref: ../schemas/team.schema.json
+        status:
+          $ref: "#/components/schemas/Status"
+        author_id:
+          type: string
+          format: uuid
+        approver_id:
+          type: [string, "null"]
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Process:
+      type: object
+      required: [id, workspace_id, name, version, spec, status, author_id, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        version:
+          type: string
+        spec:
+          $ref: ../schemas/process.schema.json
+        status:
+          $ref: "#/components/schemas/Status"
+        author_id:
+          type: string
+          format: uuid
+        approver_id:
+          type: [string, "null"]
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -210,4 +211,18 @@ func registryErrorStatus(err error) (int, string) {
 		}
 		return http.StatusInternalServerError, "internal registry error"
 	}
+}
+
+// resolveApproverID resolves the approver ID from JWT context or X-Approver-ID header (legacy).
+// When JWT is present, the authenticated user (identity.AuthorID) is the approver.
+// In legacy mode, it falls back to the X-Approver-ID header.
+func resolveApproverID(ctx context.Context, r *http.Request) (uuid.UUID, error) {
+	// JWT mode: identity.AuthorID is the JWT sub (the authenticated user).
+	// If the context was set by JWT middleware, use it as approver.
+	if identity.UserRole(ctx) != "" {
+		// JWT authenticated request — the current user is the approver.
+		return identity.AuthorID(ctx)
+	}
+	// Legacy mode: use X-Approver-ID header.
+	return uuid.Parse(r.Header.Get("X-Approver-ID"))
 }

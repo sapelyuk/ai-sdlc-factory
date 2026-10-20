@@ -141,9 +141,9 @@ func (h *RegistryHandler) UpdateRoleStatus(w http.ResponseWriter, r *http.Reques
 		writeBodyError(w, err)
 		return
 	}
-	approverID, err := uuid.Parse(r.Header.Get("X-Approver-ID"))
+	approverID, err := resolveApproverID(r.Context(), r)
 	if err != nil || approverID == uuid.Nil {
-		writeError(w, http.StatusBadRequest, "X-Approver-ID must be a valid UUID")
+		writeError(w, http.StatusBadRequest, "approver ID is required (JWT sub or X-Approver-ID)")
 		return
 	}
 	if err := h.roles.UpdateStatus(r.Context(), id, request.Status, approverID); err != nil {
