@@ -44,6 +44,31 @@ services:
           memory: 64M
 
   temporal:
+    image: temporalio/auto-setup:1.26.3
+    container_name: ai-sdlc-factory-temporal
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ai_sdlc_factory}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-ai_sdlc_dev_password}
+      DBNAME: ${POSTGRES_DB:-ai_sdlc_factory}
+      VISIBILITY_DBNAME: temporal_visibility
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamicconfig/development-sql.yaml
+    ports:
+      - "${TEMPORAL_PORT:-7233}:7233"
+    volumes:
+      - ./temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -52,6 +77,23 @@ services:
           memory: 512M
 
   temporal-ui:
+    image: temporalio/ui:2.31.0
+    container_name: ai-sdlc-factory-temporal-ui
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "${TEMPORAL_UI_PORT:-8080}:8080"
+    depends_on:
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -90,6 +132,11 @@ services:
           memory: 256M
 
   worker:
+    environment:
+      AI_TEMPORAL_HOST: temporal:7233
+    depends_on:
+      temporal:
+        condition: service_healthy
     deploy:
       resources:
         limits:

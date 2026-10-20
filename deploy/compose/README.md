@@ -27,7 +27,7 @@ make ps-local
 |---|---|---|
 | Web UI | http://localhost:3000 | http://localhost:3000 |
 | Platform API | http://localhost:8000 | http://localhost:8000 |
-| Temporal UI | http://localhost:8080 | http://localhost:8080 |
+| Temporal UI | http://localhost:8080 | — |
 | Silo Console | http://localhost:9001 | http://localhost:9001 |
 | Jaeger UI | http://localhost:16686 | http://localhost:16686 |
 | Langfuse | — | http://localhost:3030 |
@@ -44,6 +44,44 @@ make ps-local
 | NATS | 4222 (клиент), 8222 (мониторинг) | Шина событий (JetStream) | всегда |
 | Vault | 8200 | Управление секретами (dev-режим) | всегда |
 | OPA | 8181 | Policy engine (Rego) | всегда |
+| Temporal Server | 7233 | Durable execution для local-dev | local-dev |
+| Temporal UI | 8080 | Просмотр workflow | local-dev |
+
+### Temporal (оркестрация)
+
+Temporal использует два datastore (persistence + visibility), которые
+**должны** находиться в разных БД PostgreSQL. Попытка использовать одну БД
+приводит к конфликту миграций и падению сервера. Поэтому в `ai-sdlc-factory`
+создаются: `ai_sdlc_factory` (persistence) и `temporal_visibility` (visibility).
+
+`temporal_visibility` создаётся init-скриптом
+`deploy/compose/postgres/init/01-create-temporal-visibility-db.sql` при первом
+запуске на пустом PostgreSQL volume. Для уже существующего volume init-скрипты
+не запускаются; если `temporal_visibility` отсутствует, создайте её вручную:
+
+```bash
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d postgres -c "CREATE DATABASE temporal_visibility;"'
+```
+
+Dynamic config монтируется из
+`deploy/compose/temporal/dynamicconfig/development-sql.yaml`. Версии образов
+зафиксированы в `docker-compose.local-dev.yml`: используется
+`temporalio/auto-setup:1.26.3`, поскольку запланированный тег `1.26.0`
+отсутствует в Docker Hub; `1.26.3` — доступный стабильный patch-релиз той же
+minor-ветки. В профиле `local-full` Temporal не запускается.
+
+После `make up-local` создайте namespace `ai-sdlc-factory`:
+
+```bash
+make temporal-create-namespace
+make temporal-smoke-test
+```
+
+Smoke-тест проверяет namespace и UI, а также перезапускает Temporal Server и
+проверяет восстановление запущенного workflow.
+
+Namespace можно проверить напрямую, а UI доступен по адресу
+http://localhost:8080.
 
 ### Проверка здоровья
 
