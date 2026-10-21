@@ -1,6 +1,15 @@
 # Profiles
 PROFILE ?= local-dev
 
+# Default env file per profile. Must be assigned before the ifneq block below,
+# otherwise ENV_FILE is still empty when --env-file is evaluated and the flag
+# is never added to COMPOSE_FILES.
+ifeq ($(PROFILE),local-dev)
+  ENV_FILE ?= deploy/compose/.env.local-dev
+else ifeq ($(PROFILE),local-full)
+  ENV_FILE ?= deploy/compose/.env.local-full
+endif
+
 # Compose files
 COMPOSE_FILES = -f deploy/compose/docker-compose.yml
 ifneq ($(strip $(ENV_FILE)),)
@@ -8,10 +17,8 @@ ifneq ($(strip $(ENV_FILE)),)
 endif
 ifeq ($(PROFILE),local-dev)
   COMPOSE_FILES += -f deploy/compose/docker-compose.local-dev.yml
-  ENV_FILE ?= deploy/compose/.env.local-dev
 else ifeq ($(PROFILE),local-full)
   COMPOSE_FILES += -f deploy/compose/docker-compose.local-full.yml
-  ENV_FILE ?= deploy/compose/.env.local-full
 endif
 
 COMPOSE = docker compose $(COMPOSE_FILES)
@@ -24,7 +31,7 @@ WEB_SERVICE = web
 .PHONY: up-local up-full down-local down-full ps-local ps-full logs-local logs-full rebuild-local rebuild-full clean volumes migrate-up migrate-down health dev-api dev-worker dev-web temporal-create-namespace temporal-smoke-test
 
 TEMPORAL_NAMESPACE ?= ai-sdlc-factory
-TEMPORAL_COMPOSE = docker compose $(COMPOSE_FILES) --env-file $(ENV_FILE)
+TEMPORAL_COMPOSE = docker compose $(COMPOSE_FILES)
 
 # ── Local Dev ──────────────────────────────────────────────
 
