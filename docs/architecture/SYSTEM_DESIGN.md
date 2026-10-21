@@ -1,6 +1,6 @@
 # Архитектура платформы AI-SDLC: ai-sdlc-factory
 
-**Версия 1.3 · 20.10.2026**
+**Версия 1.4 · 21.10.2026**
 
 ## 0. Как читать документ
 
@@ -95,6 +95,19 @@ KBSRC --> Platform
 **Data Plane:** PostgreSQL 18 + pgvector, Silo (S3), NATS JetStream, Knowledge Service
 
 **Observability:** OTel Collector + Jaeger (always), Langfuse + Prometheus + Grafana (observability profile)
+
+### 4.3 Web UI
+
+**Роль:** единственный пользовательский интерфейс Control Plane; контейнер `ai-sdlc-factory-web`, раздаётся Nginx под `http://localhost:3000` (NFR-8).
+
+**Ответственность:**
+- Аутентификация и управление сессией (JWT, см. §12.2).
+- Просмотр каталога ролей, команд и процессов (Registry) — FR-TEAM.
+- Журнал аудита и стоимость прогонов (FR-OPS) — в перспективе.
+- Конструктор команд (FR-TEAM) — в перспективе.
+- Консоль прогонов и дашборды наблюдаемости (FR-OPS, NFR-4) — в перспективе.
+
+**Границы:** UI не обращается к БД, Temporal и хранилищам напрямую — только через Platform API (`/api/v1/...`). Технические решения — §12.2.
 
 ## 5. Семантический слой
 
@@ -236,10 +249,41 @@ OTel Collector + Jaeger (always). Langfuse + Prometheus + Grafana (profile obser
 
 ## 12. Технологический стек
 
-- **Бэкенд:** Go 1.23+, chi/echo, OpenAPI 3.1, Temporal Go SDK, NATS JetStream, OTel
-- **Фронтенд:** TypeScript + React 18+, Vite, Tailwind + shadcn/ui, TanStack Query
-- **Данные:** PostgreSQL 18 + pgvector, Silo (S3), NATS JetStream
-- **Инфраструктура:** Docker Compose -> Kubernetes (Helm)
+### 12.1. Бэкенд
+
+- **Язык:** Go 1.26+ (ADR-001).
+- **Фреймворки:** chi/echo, OpenAPI 3.1.
+- **Оркестрация:** Temporal Go SDK (ADR-002), NATS JetStream.
+- **Наблюдаемость:** OpenTelemetry (NFR-4).
+
+### 12.2. Фронтенд (apps/web)
+
+- **Ядро:** Vite 6, React 18, TypeScript (strict, noUnusedLocals, noUnusedParameters).
+- **Стилизация:** Tailwind CSS v4 (CSS-first конфигурация, `@theme inline`), shadcn/ui (компоненты на Radix UI: Button, Input, Table, Card, Dialog, Dropdown, Tabs, Tooltip, Toast).
+- **Состояние и данные:** TanStack Query (серверное состояние, retry: 1, staleTime: 5 мин), Zustand v5 (глобальное состояние, auth store).
+- **Роутинг:** React Router DOM v7.18+, классический API (`BrowserRouter`, `Routes`, `Route`, `Navigate`).
+- **Тесты:** Vitest + Testing Library (jsdom), ESLint + typescript-eslint (`--max-warnings 0`).
+- **Сборка и раздача:** multi-stage Dockerfile (Node.js 20 Alpine — builder → Nginx Alpine — продакшн, порт 3000, SPA fallback, `/api/` proxy → `api:8000`, security-заголовки).
+
+**Архитектурные решения:**
+
+- **JWT-аутентификация:** токен хранится **в памяти** (Zustand store), не в `localStorage` (защита от XSS). При перезагрузке страницы сессия сбрасывается. `ProtectedRoute` редиректит на `/login`.
+- **API-клиент:** `src/lib/api.ts` — функции `login` и `fetchRoles` с явным `Authorization: Bearer <token>`; при `401` — `clearAuth()`.
+- **SSE (Server-Sent Events):** `src/lib/sse.ts` — обёртка над `EventSource` с `AbortController` для будущего стриминга логов агентов и обновлений. Пока заглушка.
+- **Страницы:** `/login` (аутентификация), `/` (Dashboard), `/registry/roles` (реальный API), `/registry/teams` и `/registry/processes` (stub).
+
+**Связанные требования:** NFR-8 (развёртывание через Compose → K8s), ADR-015 (единое имя `ai-sdlc-factory`).
+
+### 12.3. Данные
+
+- **СУБД:** PostgreSQL 18 + pgvector (property graph, ADR-003, ADR-019).
+- **Объектное хранилище:** Silo (S3-совместимый форк MinIO, ADR-020).
+- **Шина событий:** NATS JetStream.
+
+### 12.4. Инфраструктура
+
+- **Контейнеризация:** Docker Compose (профили `local-dev`, `local-full`, ADR-018).
+- **Оркестрация:** Kubernetes (Helm) — в перспективе.
 
 ## 13. ADR
 
@@ -319,6 +363,7 @@ ai-sdlc-factory/
 
 | Версия | Дата | Изменения |
 |---|---|---|
+| 1.4 | 21.10.2026 | Добавлены §4.3 (Web UI), §12 структурирован на §12.1–§12.4, добавлен §12.2 (Фронтенд) (#64) |
 | 1.3 | 20.10.2026 | Добавлены §8.3, §8.4 (Handoff-пакет), §10.1, §10.2 (Anti-Prompt Injection) |
 | 1.2 | 16.10.2026 | Первичная архитектура |
 
