@@ -5,11 +5,17 @@
 ## Стек
 
 - **Vite 6** + **React 18** + **TypeScript** (strict)
-- **Tailwind CSS** + **shadcn/ui** (Button, Input, Table, Card)
+- **Tailwind CSS 4** + **shadcn/ui** (Button, Input, Table, Card)
 - **TanStack Query** (data fetching)
 - **Zustand** (state management, auth)
 - **React Router DOM** (routing)
 - **Vitest** (unit tests)
+
+## Стилизация
+
+Tailwind CSS 4 использует CSS-first конфигурацию: токены темы объявлены через
+`@theme inline` в `src/index.css`, PostCSS подключает `@tailwindcss/postcss`.
+Tailwind 4 требует Safari 16.4+, Chrome 111+ или Firefox 128+.
 
 The JWT is kept in the in-memory auth store and is cleared on page reload. It is
 not persisted to `localStorage`.
