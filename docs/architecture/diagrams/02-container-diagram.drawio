@@ -1,0 +1,121 @@
+<mxfile host="app.diagrams.net" modified="2026-10-16T00:00:00.000Z" agent="ai-sdlc-factory" version="26.0.0" type="device">
+  <diagram name="Containers" id="containers-1">
+    <mxGraphModel dx="2000" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="&lt;b&gt;ai-sdlc-factory — Container Diagram (C4 Level 2)&lt;/b&gt;&lt;br&gt;v1.2 | 16.10.2026 | Control Plane / Execution Plane / Data Plane" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=14;spacing=8;fillColor=none;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="700" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cp" value="&lt;b&gt;Control Plane (Go)&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=34;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=13;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="1880" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="ui" value="&lt;b&gt;Web UI&lt;/b&gt;&lt;br&gt;TypeScript, React&lt;br&gt;&lt;br&gt;Конструктор команд,&lt;br&gt;консоль прогонов,&lt;br&gt;семантический браузер" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="cp">
+          <mxGeometry x="30" y="50" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="api" value="&lt;b&gt;Platform API&lt;/b&gt;&lt;br&gt;Go, chi/echo, OpenAPI 3.1&lt;br&gt;&lt;br&gt;Единая точка входа,&lt;br&gt;auth, валидация" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="cp">
+          <mxGeometry x="270" y="50" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="reg" value="&lt;b&gt;Registry&lt;/b&gt;&lt;br&gt;Go, PostgreSQL&lt;br&gt;&lt;br&gt;Каталог ролей,&lt;br&gt;команд, процессов,&lt;br&gt;JSON-Schema" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="cp">
+          <mxGeometry x="510" y="50" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="pol" value="&lt;b&gt;Policy &amp;amp; Approval&lt;/b&gt;&lt;br&gt;OPA / Cedar&lt;br&gt;&lt;br&gt;Policy-as-code,&lt;br&gt;очереди approvals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="cp">
+          <mxGeometry x="750" y="50" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="iam" value="&lt;b&gt;Auth, RBAC, Secrets&lt;/b&gt;&lt;br&gt;Go + Vault&lt;br&gt;&lt;br&gt;Роли: owner / admin /&lt;br&gt;operator / viewer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="cp">
+          <mxGeometry x="990" y="50" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="sem" value="&lt;b&gt;Semantic Service&lt;/b&gt;&lt;br&gt;Go + PostgreSQL property graph&lt;br&gt;&lt;br&gt;SLP + SLPr + AM,&lt;br&gt;traversal, validation, export" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="cp">
+          <mxGeometry x="1230" y="50" width="220" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="ep" value="&lt;b&gt;Execution Plane (Go)&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=34;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=13;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="440" width="1880" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="orc" value="&lt;b&gt;Orchestrator&lt;/b&gt;&lt;br&gt;Temporal (Go SDK)&lt;br&gt;&lt;br&gt;Run → StageRun →&lt;br&gt;TaskRun → AgentStep" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="ep">
+          <mxGeometry x="30" y="50" width="210" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="rt" value="&lt;b&gt;Agent Runtime&lt;/b&gt;&lt;br&gt;Go поверх Temporal activities&lt;br&gt;&lt;br&gt;Цикл агента, контекст,&lt;br&gt;семантический срез" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="ep">
+          <mxGeometry x="270" y="50" width="210" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="gw" value="&lt;b&gt;LLM Gateway&lt;/b&gt;&lt;br&gt;Go; опц. LiteLLM backend&lt;br&gt;&lt;br&gt;Профили, fallback,&lt;br&gt;учёт, tool calling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="ep">
+          <mxGeometry x="510" y="50" width="210" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="tg" value="&lt;b&gt;Tool Gateway (MCP)&lt;/b&gt;&lt;br&gt;Go, MCP-серверы&lt;br&gt;&lt;br&gt;Реестр инструментов,&lt;br&gt;права, аудит" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="ep">
+          <mxGeometry x="750" y="50" width="210" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="sbx" value="&lt;b&gt;Sandbox Manager&lt;/b&gt;&lt;br&gt;Go + Docker/gVisor&lt;br&gt;&lt;br&gt;Эфемерные среды,&lt;br&gt;лимиты, изоляция" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="ep">
+          <mxGeometry x="990" y="50" width="210" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="diag" value="&lt;b&gt;Diagram Service&lt;/b&gt;&lt;br&gt;Go + structurizr-cli,&lt;br&gt;mermaid-cli, plantuml-server&lt;br&gt;&lt;br&gt;Рендер DSL, публикация, self-correction" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="ep">
+          <mxGeometry x="1230" y="50" width="220" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="sidx" value="&lt;b&gt;Semantic Indexer&lt;/b&gt;&lt;br&gt;Go + tree-sitter&lt;br&gt;&lt;br&gt;AST-индексация,&lt;br&gt;drift detection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="ep">
+          <mxGeometry x="1480" y="50" width="220" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="dp" value="&lt;b&gt;Data Plane&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=34;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=13;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="760" width="1880" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="pg" value="&lt;b&gt;PostgreSQL 18&lt;/b&gt;&lt;br&gt;+ pgvector&lt;br&gt;&lt;br&gt;Семантический граф,&lt;br&gt;KB, артефакты, llm_calls" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="dp">
+          <mxGeometry x="30" y="60" width="180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="nats" value="&lt;b&gt;NATS JetStream&lt;/b&gt;&lt;br&gt;&lt;br&gt;Шина событий,&lt;br&gt;KV, Object Store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="dp">
+          <mxGeometry x="250" y="60" width="180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="silo" value="&lt;b&gt;Silo (S3)&lt;/b&gt;&lt;br&gt;&lt;br&gt;Артефакты,&lt;br&gt;диаграммы,&lt;br&gt;логи, снапшоты" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="dp">
+          <mxGeometry x="470" y="60" width="180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="kb" value="&lt;b&gt;Knowledge Service&lt;/b&gt;&lt;br&gt;Go, PG + pgvector&lt;br&gt;&lt;br&gt;Ингест, гибридный поиск,&lt;br&gt;версии, ACL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="dp">
+          <mxGeometry x="690" y="60" width="200" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="otel" value="&lt;b&gt;OTel Collector&lt;/b&gt;&lt;br&gt;+ Jaeger (всегда)&lt;br&gt;&lt;br&gt;Трейсы Run → Step,&lt;br&gt;маршрутизация" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="dp">
+          <mxGeometry x="930" y="60" width="180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="lf" value="&lt;b&gt;Langfuse&lt;/b&gt;&lt;br&gt;&lt;i&gt;[профиль observability]&lt;/i&gt;&lt;br&gt;&lt;br&gt;LLM-трейсинг, evals,&lt;br&gt;дашборды качества" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;spacing=4;dashed=1;" vertex="1" parent="dp">
+          <mxGeometry x="1150" y="60" width="200" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="prom" value="&lt;b&gt;Prometheus + Grafana&lt;/b&gt;&lt;br&gt;&lt;i&gt;[профиль observability]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Метрики, дашборды" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;spacing=4;dashed=1;" vertex="1" parent="dp">
+          <mxGeometry x="1390" y="60" width="200" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="x-ui-api" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="ui" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-api-orc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="api" target="orc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-orc-rt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="orc" target="rt">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-rt-gw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="rt" target="gw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-rt-sbx" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="rt" target="sbx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-rt-sem" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="rt" target="sem">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-diag-kb" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="diag" target="kb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-sidx-sem" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="sidx" target="sem">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-sem-pg" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="sem" target="pg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-kb-pg" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="kb" target="pg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-rt-nats" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;dashed=1;" edge="1" parent="1" source="rt" target="nats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-rt-otel" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;dashed=1;" edge="1" parent="1" source="rt" target="otel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x-otel-lf" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;dashed=1;" edge="1" parent="1" source="otel" target="lf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

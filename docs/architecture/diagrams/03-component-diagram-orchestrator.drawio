@@ -1,0 +1,145 @@
+<mxfile host="app.diagrams.net" modified="2026-10-16T00:00:00.000Z" agent="ai-sdlc-factory" version="26.0.0" type="device">
+  <diagram name="Component - Agent Runtime" id="component-1">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="&lt;b&gt;ai-sdlc-factory — Component Diagram: Orchestrator &amp;amp; Agent Runtime (C4 Level 3)&lt;/b&gt;&lt;br&gt;v1.2 | 16.10.2026 | SDLC Workflow + Agent Step" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=14;spacing=8;fillColor=none;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="700" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Orchestrator Container -->
+        <mxCell id="orc-box" value="&lt;b&gt;Orchestrator (Temporal Go SDK)&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=34;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=13;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="700" height="680" as="geometry" />
+        </mxCell>
+
+        <mxCell id="wf" value="&lt;b&gt;sdlc_workflow&lt;/b&gt;&lt;br&gt;&lt;i&gt;Temporal Workflow&lt;/i&gt;&lt;br&gt;&lt;br&gt;Идея → Исследование →&lt;br&gt;Требования → Дизайн →&lt;br&gt;Архитектура → Планирование →&lt;br&gt;Разработка → QA → Build →&lt;br&gt;Release → Deploy → Monitoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=6;" vertex="1" parent="orc-box">
+          <mxGeometry x="30" y="60" width="300" height="160" as="geometry" />
+        </mxCell>
+
+        <mxCell id="stage" value="&lt;b&gt;StageRun&lt;/b&gt;&lt;br&gt;&lt;i&gt;Child Workflow&lt;/i&gt;&lt;br&gt;&lt;br&gt;Одна стадия SDLC,&lt;br&gt;гейты, критерии выхода" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="orc-box">
+          <mxGeometry x="370" y="60" width="280" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="task" value="&lt;b&gt;TaskRun&lt;/b&gt;&lt;br&gt;&lt;i&gt;Child Workflow&lt;/i&gt;&lt;br&gt;&lt;br&gt;Задача одного агента,&lt;br&gt;handoff-пакет, бюджет" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="orc-box">
+          <mxGeometry x="370" y="190" width="280" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="review" value="&lt;b&gt;review_gate_workflow&lt;/b&gt;&lt;br&gt;&lt;i&gt;Child Workflow&lt;/i&gt;&lt;br&gt;&lt;br&gt;Кросс-ревью,&lt;br&gt;max_rounds=3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="orc-box">
+          <mxGeometry x="30" y="260" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="drift" value="&lt;b&gt;drift_check_workflow&lt;/b&gt;&lt;br&gt;&lt;i&gt;Child Workflow&lt;/i&gt;&lt;br&gt;&lt;br&gt;Сверка AM ↔ AST,&lt;br&gt;отчёт и блокировка" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="orc-box">
+          <mxGeometry x="30" y="390" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="turn" value="&lt;b&gt;agent_turn_activity&lt;/b&gt;&lt;br&gt;&lt;i&gt;Temporal Activity&lt;/i&gt;&lt;br&gt;&lt;br&gt;Один шаг агента:&lt;br&gt;plan → tool_call → observe" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="orc-box">
+          <mxGeometry x="370" y="330" width="280" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- Agent Runtime Container -->
+        <mxCell id="rt-box" value="&lt;b&gt;Agent Runtime (Go)&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=34;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=13;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="820" y="120" width="700" height="680" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ctx" value="&lt;b&gt;Context Builder&lt;/b&gt;&lt;br&gt;&lt;br&gt;Сборка контекста:&lt;br&gt;промпт + задача + handoff&lt;br&gt;+ семантический срез&lt;br&gt;+ знания + сводка" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="rt-box">
+          <mxGeometry x="30" y="60" width="300" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="llm" value="&lt;b&gt;LLM Caller&lt;/b&gt;&lt;br&gt;&lt;br&gt;Вызов LLM Gateway,&lt;br&gt;обработка tool_calls,&lt;br&gt;retry, fallback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="rt-box">
+          <mxGeometry x="370" y="60" width="300" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tools" value="&lt;b&gt;Tool Executor&lt;/b&gt;&lt;br&gt;&lt;br&gt;Вызов Tool Gateway,&lt;br&gt;проверка политики,&lt;br&gt;credential brokering" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="rt-box">
+          <mxGeometry x="30" y="230" width="300" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="budget" value="&lt;b&gt;Budget Guard&lt;/b&gt;&lt;br&gt;&lt;br&gt;Лимиты шага,&lt;br&gt;детектор повторов,&lt;br&gt;эскалация" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="rt-box">
+          <mxGeometry x="370" y="230" width="300" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="handoff" value="&lt;b&gt;Handoff Builder&lt;/b&gt;&lt;br&gt;&lt;br&gt;Формирование&lt;br&gt;handoff-пакета: goal,&lt;br&gt;context_refs, criteria" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="rt-box">
+          <mxGeometry x="30" y="400" width="300" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="memory" value="&lt;b&gt;Memory&lt;/b&gt;&lt;br&gt;&lt;br&gt;Рабочая (задача),&lt;br&gt;эпизодическая (прогон),&lt;br&gt;долгосрочная (KB + SL)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="rt-box">
+          <mxGeometry x="370" y="400" width="300" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- External Dependencies -->
+        <mxCell id="ext-sem" value="&lt;b&gt;Semantic Service&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="840" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-kb" value="&lt;b&gt;Knowledge Service&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="250" y="840" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-gw" value="&lt;b&gt;LLM Gateway&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="460" y="840" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-tg" value="&lt;b&gt;Tool Gateway&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="670" y="840" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-sbx" value="&lt;b&gt;Sandbox Manager&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="880" y="840" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-diag" value="&lt;b&gt;Diagram Service&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="840" width="180" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Edges: internal Orchestrator -->
+        <mxCell id="y-wf-stage" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="wf" target="stage">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-stage-task" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="stage" target="task">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-task-turn" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="task" target="turn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Edges: cross-container -->
+        <mxCell id="y-turn-ctx" value="Запуск" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="turn" target="ctx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-ctx-llm" value="Промпт" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="ctx" target="llm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-llm-tools" value="tool_call" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="llm" target="tools">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-tools-budget" value="Проверка" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="tools" target="budget">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-budget-handoff" value="Ок" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="budget" target="handoff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-handoff-memory" value="Сохранение" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="handoff" target="memory">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Edges: external -->
+        <mxCell id="y-ctx-sem" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;dashed=1;" edge="1" parent="1" source="ctx" target="ext-sem">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-ctx-kb" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;dashed=1;" edge="1" parent="1" source="ctx" target="ext-kb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-llm-gw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;dashed=1;" edge="1" parent="1" source="llm" target="ext-gw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-tools-tg" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;dashed=1;" edge="1" parent="1" source="tools" target="ext-tg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-tools-sbx" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;dashed=1;" edge="1" parent="1" source="tools" target="ext-sbx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="y-diag" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=block;dashed=1;" edge="1" parent="1" source="turn" target="ext-diag">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

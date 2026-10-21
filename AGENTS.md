@@ -57,7 +57,7 @@ Conventional Commits со ссылкой на issue.
 
 ## Стек
 
-- Бэкенд: **Go** 1.23+.
+- Бэкенд: **Go** 1.26+.
 - Фронтенд: **TypeScript + React**.
 - Оркестрация: **Temporal** (Go SDK).
 - БД: **PostgreSQL 18 + pgvector**.
