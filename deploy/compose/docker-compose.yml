@@ -215,10 +215,22 @@ services:
   semantic:
     build:
       context: ../..
-      dockerfile: deploy/compose/Dockerfile.semantic
+      dockerfile: apps/semantic/Dockerfile
     container_name: ai-sdlc-factory-semantic
+    ports:
+      - "8010:8010"
     environment:
-      AI_DB_HOST: postgres
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ai_sdlc_factory}:${POSTGRES_PASSWORD:-ai_sdlc_dev_password}@postgres:5432/${POSTGRES_DB:-ai_sdlc_factory}?sslmode=disable
+      PORT: "8010"
+      SLP_PATH: /app/packages/ontology/slp/slp-core.yaml
+      SCHEMA_DIR: /app/packages/contracts/schemas
+      SEED_WORKSPACE_ID: ${SEED_WORKSPACE_ID:-}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8010/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy

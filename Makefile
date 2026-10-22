@@ -151,3 +151,11 @@ dev-worker:
 
 dev-web:
 	cd apps/web && pnpm dev
+
+# ── Semantic Service ─────────────────────────────────────────
+
+# Seed SLP v0 ontology into the database.
+# Requires SEED_WORKSPACE_ID to be set.
+seed-slp:
+	$(COMPOSE) exec -T semantic sh -c 'SEED_WORKSPACE_ID=$${SEED_WORKSPACE_ID:-$$(echo $$SEED_WORKSPACE_ID) } /app/seed-slp'
+
