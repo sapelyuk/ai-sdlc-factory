@@ -18,22 +18,22 @@ var (
 
 // SemEdge represents an edge in the semantic property graph.
 type SemEdge struct {
-	ID          uuid.UUID `json:"id"`
-	WorkspaceID uuid.UUID `json:"workspace_id"`
-	SrcID       uuid.UUID `json:"src_id"`
-	DstID       uuid.UUID `json:"dst_id"`
-	Kind        string    `json:"kind"`
-	Props       any       `json:"props"`
-	ValidFrom   time.Time `json:"valid_from"`
+	ID          uuid.UUID  `json:"id"`
+	WorkspaceID uuid.UUID  `json:"workspace_id"`
+	SrcID       uuid.UUID  `json:"src_id"`
+	DstID       uuid.UUID  `json:"dst_id"`
+	Kind        string     `json:"kind"`
+	Props       any        `json:"props"`
+	ValidFrom   time.Time  `json:"valid_from"`
 	ValidTo     *time.Time `json:"valid_to,omitempty"`
 }
 
 // CreateEdgeInput is the input for creating a new edge.
 type CreateEdgeInput struct {
-	SrcID  string `json:"src_id"`
-	DstID  string `json:"dst_id"`
-	Kind   string `json:"kind"`
-	Props  any    `json:"props,omitempty"`
+	SrcID string `json:"src_id"`
+	DstID string `json:"dst_id"`
+	Kind  string `json:"kind"`
+	Props any    `json:"props,omitempty"`
 }
 
 // Validate checks the input for required fields.

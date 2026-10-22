@@ -9,8 +9,8 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	DatabaseURL string
-	Port        int
+	DatabaseURL     string
+	Port            int
 	SeedWorkspaceID string
 }
 
