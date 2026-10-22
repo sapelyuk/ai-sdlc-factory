@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -98,13 +99,51 @@ func TestCreateNodeInput_DefaultStatus(t *testing.T) {
 }
 
 func TestUpdateNodeInput_Validate(t *testing.T) {
-	input := UpdateNodeInput{Kind: "NewKind", Label: "NewLabel"}
-	assert.NoError(t, input.Validate())
-
-	longKind := make([]byte, 129)
-	for i := range longKind {
-		longKind[i] = 'x'
+	tests := []struct {
+		name    string
+		input   UpdateNodeInput
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:  "kind and label within limits",
+			input: UpdateNodeInput{Kind: "NewKind", Label: "NewLabel"},
+		},
+		{
+			name:  "empty input is valid",
+			input: UpdateNodeInput{},
+		},
+		{
+			name:  "kind at limit",
+			input: UpdateNodeInput{Kind: strings.Repeat("k", 128)},
+		},
+		{
+			name:    "kind over limit",
+			input:   UpdateNodeInput{Kind: strings.Repeat("k", 129)},
+			wantErr: true,
+			errMsg:  "kind must be at most 128 characters",
+		},
+		{
+			name:  "label at limit",
+			input: UpdateNodeInput{Label: strings.Repeat("l", 512)},
+		},
+		{
+			name:    "label over limit",
+			input:   UpdateNodeInput{Label: strings.Repeat("l", 513)},
+			wantErr: true,
+			errMsg:  "label must be at most 512 characters",
+		},
 	}
-	input.Kind = string(longKind)
-	assert.Error(t, input.Validate())
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.input.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
