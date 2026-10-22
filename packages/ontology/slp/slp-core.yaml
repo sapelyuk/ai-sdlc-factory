@@ -218,3 +218,36 @@ processes:
           order: 14
           gate: conformance_ok
           agents: [devops-engineer]
+# ── SLP v0 Classes ───────────────────────────────────────────
+# Платформенные классы онтологии SLP (Semantically-Layered Platform).
+# Каждый класс — узел уровня layer: SLP в property graph (sem_nodes).
+# Refer to ONTOLOGY_SPEC.md §3.1 for the full list.
+classes:
+  - name: Role
+    description: "Шаблон агента: назначение, инструкции, инструменты, модель"
+  - name: Team
+    description: "Агенты + топология + процесс + знания"
+  - name: Agent
+    description: "Экземпляр роли с моделью, настройками и бюджетом"
+  - name: Process
+    description: "Декларативный workflow SDLC"
+  - name: Stage
+    description: "Стадия процесса"
+  - name: Gate
+    description: "Контрольная точка: автопроверка, агентное ревью или approve человека"
+  - name: ArtifactType
+    description: "Тип артефакта (документ, код, диаграмма, отчёт)"
+  - name: Tool
+    description: "MCP-инструмент, доступный агенту"
+  - name: ModelProfile
+    description: "Профиль возможностей LLM (code-strong, reasoning-strong, ...)"
+  - name: Capability
+    description: "Возможность роли (reasoning, coding, design, ...)"
+  - name: KnowledgeBase
+    description: "База знаний проекта или платформы"
+  - name: Scope
+    description: "Скоуп знаний (product, architecture, engineering, testing, ...)"
+  - name: Policy
+    description: "Политика безопасности или автономности (OPA/Rego)"
+  - name: AutonomyLevel
+    description: "Уровень автономности агента (R0-R3)"
