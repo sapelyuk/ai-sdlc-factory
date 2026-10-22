@@ -16,15 +16,15 @@ import (
 //   - Valid credentials but insufficient permissions → 403 Forbidden.
 func TenantContextMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check for missing or zero headers first → 401 Unauthorized (Issue #71).
+		// Check for missing headers first → 401 Unauthorized (Issue #71).
 		workspaceHeader := r.Header.Get("X-Workspace-ID")
-		if workspaceHeader == "" || workspaceHeader == uuid.Nil.String() {
+		if workspaceHeader == "" {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="semantic"`)
 			writeError(w, http.StatusUnauthorized, "missing X-Workspace-ID header")
 			return
 		}
 		authorHeader := r.Header.Get("X-Author-ID")
-		if authorHeader == "" || authorHeader == uuid.Nil.String() {
+		if authorHeader == "" {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="semantic"`)
 			writeError(w, http.StatusUnauthorized, "missing X-Author-ID header")
 			return
@@ -35,9 +35,22 @@ func TenantContextMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusBadRequest, "X-Workspace-ID must be a valid UUID")
 			return
 		}
+		// A zero UUID is treated as a missing header → 401. The check runs after
+		// parsing so that alternative encodings of uuid.Nil (32 hex chars,
+		// urn:uuid:..., {uuid}) are covered too.
+		if workspaceID == uuid.Nil {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="semantic"`)
+			writeError(w, http.StatusUnauthorized, "missing X-Workspace-ID header")
+			return
+		}
 		authorID, err := uuid.Parse(authorHeader)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "X-Author-ID must be a valid UUID")
+			return
+		}
+		if authorID == uuid.Nil {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="semantic"`)
+			writeError(w, http.StatusUnauthorized, "missing X-Author-ID header")
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(identity.WithTenant(r.Context(), workspaceID, authorID)))

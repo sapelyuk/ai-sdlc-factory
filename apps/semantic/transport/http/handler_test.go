@@ -706,6 +706,10 @@ func TestTenantContextMiddleware_MissingHeaders_Returns401(t *testing.T) {
 		{name: "missing author header", workspace: uuid.New().String(), wantMsg: "X-Author-ID"},
 		{name: "nil workspace uuid", workspace: uuid.Nil.String(), author: uuid.New().String(), wantMsg: "X-Workspace-ID"},
 		{name: "nil author uuid", workspace: uuid.New().String(), author: uuid.Nil.String(), wantMsg: "X-Author-ID"},
+		{name: "nil workspace uuid 32-hex", workspace: "00000000000000000000000000000000", author: uuid.New().String(), wantMsg: "X-Workspace-ID"},
+		{name: "nil workspace uuid urn", workspace: "urn:uuid:" + uuid.Nil.String(), author: uuid.New().String(), wantMsg: "X-Workspace-ID"},
+		{name: "nil author uuid 32-hex", workspace: uuid.New().String(), author: "00000000000000000000000000000000", wantMsg: "X-Author-ID"},
+		{name: "nil author uuid urn", workspace: uuid.New().String(), author: "urn:uuid:" + uuid.Nil.String(), wantMsg: "X-Author-ID"},
 	}
 
 	for _, tt := range tests {
@@ -721,6 +725,7 @@ func TestTenantContextMiddleware_MissingHeaders_Returns401(t *testing.T) {
 			rec := serve(handler, req)
 
 			require.Equal(t, http.StatusUnauthorized, rec.Code)
+			assert.Equal(t, `Bearer realm="semantic"`, rec.Header().Get("WWW-Authenticate"))
 			errResp := decodeJSON[map[string]string](t, rec)
 			assert.Contains(t, errResp["error"], tt.wantMsg)
 		})

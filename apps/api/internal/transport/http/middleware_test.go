@@ -20,6 +20,10 @@ func TestTenantContextMiddleware_MissingHeaders_Returns401(t *testing.T) {
 		{name: "missing author", workspaceID: uuid.NewString()},
 		{name: "zero workspace", workspaceID: uuid.Nil.String(), authorID: uuid.NewString()},
 		{name: "zero author", workspaceID: uuid.NewString(), authorID: uuid.Nil.String()},
+		{name: "zero workspace 32-hex", workspaceID: "00000000000000000000000000000000", authorID: uuid.NewString()},
+		{name: "zero workspace urn", workspaceID: "urn:uuid:" + uuid.Nil.String(), authorID: uuid.NewString()},
+		{name: "zero author 32-hex", workspaceID: uuid.NewString(), authorID: "00000000000000000000000000000000"},
+		{name: "zero author urn", workspaceID: uuid.NewString(), authorID: "urn:uuid:" + uuid.Nil.String()},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -33,9 +37,8 @@ func TestTenantContextMiddleware_MissingHeaders_Returns401(t *testing.T) {
 			if response.Code != http.StatusUnauthorized {
 				t.Fatalf("status = %d, want %d; body = %s", response.Code, http.StatusUnauthorized, response.Body.String())
 			}
-			wwa := response.Header().Get("WWW-Authenticate")
-			if wwa == "" {
-				t.Log("WWW-Authenticate header missing (tenant middleware does not set it; JWT middleware does)")
+			if got, want := response.Header().Get("WWW-Authenticate"), `Bearer realm="api"`; got != want {
+				t.Fatalf("WWW-Authenticate = %q, want %q", got, want)
 			}
 		})
 	}
