@@ -55,7 +55,7 @@
         <mxCell id="dp" value="&lt;b&gt;Data Plane&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=34;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=13;rounded=1;" vertex="1" parent="1">
           <mxGeometry x="40" y="760" width="1880" height="260" as="geometry" />
         </mxCell>
-        <mxCell id="pg" value="&lt;b&gt;PostgreSQL 18&lt;/b&gt;&lt;br&gt;+ pgvector&lt;br&gt;&lt;br&gt;Семантический граф,&lt;br&gt;KB, артефакты, llm_calls" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="dp">
+        <mxCell id="pg" value="&lt;b&gt;PostgreSQL 18&lt;/b&gt;&lt;br&gt;+ pgvector&lt;br&gt;&lt;br&gt;Семантический граф,&lt;br&gt;KB, артефакты,&lt;br&gt;llm_logical_calls + llm_attempts" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="dp">
           <mxGeometry x="30" y="60" width="180" height="140" as="geometry" />
         </mxCell>
         <mxCell id="nats" value="&lt;b&gt;NATS JetStream&lt;/b&gt;&lt;br&gt;&lt;br&gt;Шина событий,&lt;br&gt;KV, Object Store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;verticalAlign=middle;spacing=4;" vertex="1" parent="dp">

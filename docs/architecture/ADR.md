@@ -1,6 +1,6 @@
 # Реестр архитектурных решений (ADR) — ai-sdlc-factory
 
-**Версия 1.4 · 19.10.2026**
+**Версия 1.5 · 22.10.2026**
 
 Формат: MADR. Статусы: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
 
@@ -244,10 +244,48 @@
 
 ---
 
+## ADR-021. LLM Gateway: routing, fallback per (provider, model), cost attribution
+
+**Статус:** accepted.
+
+**Контекст.**
+
+LLM Gateway должен маршрутизировать запросы по capability-профилям (`code-strong`, `reasoning-strong` и т.д.), обеспечивать fallback при сбоях и учитывать стоимость для NFR-9. Наивный дизайн приводит к трём проблемам:
+
+1. **Floating alias** (`claude-sonnet-4-latest`) может быть перепиннут провайдером, тихо меняя контракт профиля. Агент, ожидавший одно поведение, получит другое без предупреждения.
+2. **`404` на одной модели** не означает недоступность всего провайдера. Парковать весь провайдер на `404` — превращать детерминированную ошибку (config defect) в flapping-сигнал.
+3. **Ретраи и mid-stream failover** внутри одного логического вызова не должны трижды увеличивать `cost_usd` — иначе NFR-9 завышает расход на величину ретраев.
+
+**Решение.**
+
+1. **Профили пиннят версию.** В `model_profiles` хранится `model_id` с конкретной версией (`claude-sonnet-4-20250101`), не alias (`-latest`). Смена модели — R2-действие (PR в `model_profiles`).
+2. **Fallback per `(provider, model)`.** Health-трекинг ведётся по паре `(provider, model_id)`. Классификация ошибок:
+   - `404` (model not found) → config defect, no cooldown, alert.
+   - `401` / `403` → auth defect, no cooldown, alert.
+   - `400` → bad request, no cooldown, log.
+   - `429` / `5xx` / `timeout` → availability, cooldown с exponential backoff (60s → 4h max, jitter). После cooldown — пробный запрос.
+3. **Стоимость на двух уровнях.**
+   - `llm_logical_calls` — одна строка на логический запрос (атрибуция по `run_id`/`task_id`).
+   - `llm_attempts` — N строк на HTTP-попытки (реальный расход).
+   - В `llm_logical_calls` хранятся `final_cost_usd` (успешная попытка = что произвело результат) и `total_cost_usd` (сумма всех попыток = реальный расход).
+
+**Последствия.**
+
+- NFR-9 (стоимость) считается корректно: атрибуция по логическому ID не задваивается ретраями.
+- Смена модели через alias не может тихо изменить поведение профиля.
+- `404` не вызывает каскадный cooldown всего провайдера.
+- Схема БД сложнее: две таблицы вместо одной (`llm_calls` → `llm_logical_calls` + `llm_attempts`). Историческая миграция `0007_init_audit_and_cost` не переписывается; разделение вводится новой миграцией.
+- Streaming — в v2; при mid-stream failover будем захватывать partial usage по `usage.completion_tokens` провайдера, не по счётчику клиента.
+
+**Ссылки:** FR-OPS-2, NFR-9, ADR-004, ADR-008, ADR-013, `SYSTEM_DESIGN.md` §8.5, §11.4, Issue #73.
+
+---
+
 ## Изменения документа
 
 | Версия | Дата | Изменения |
 |---|---|---|
+| 1.5 | 22.10.2026 | Добавлен ADR-021 (LLM Gateway: routing, fallback, cost attribution) (#73) |
 | 1.4 | 19.10.2026 | Добавлен ADR-020 (MinIO → Silo) |
 | 1.3 | 17.10.2026 | Добавлен ADR-019 |
 | 1.2 | 16.10.2026 | Добавлены ADR-018 |
