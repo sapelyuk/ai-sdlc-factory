@@ -9,18 +9,47 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/identity"
 )
 
-func TestTenantContextMiddlewareRequiresValidNonzeroUUIDs(t *testing.T) {
+// Missing tenant headers return 401 Unauthorized (Issue #71).
+func TestTenantContextMiddleware_MissingHeaders_Returns401(t *testing.T) {
 	tests := []struct {
 		name        string
 		workspaceID string
 		authorID    string
 	}{
 		{name: "missing workspace"},
-		{name: "invalid workspace", workspaceID: "not-a-uuid", authorID: uuid.NewString()},
-		{name: "zero workspace", workspaceID: uuid.Nil.String(), authorID: uuid.NewString()},
 		{name: "missing author", workspaceID: uuid.NewString()},
-		{name: "invalid author", workspaceID: uuid.NewString(), authorID: "not-a-uuid"},
+		{name: "zero workspace", workspaceID: uuid.Nil.String(), authorID: uuid.NewString()},
 		{name: "zero author", workspaceID: uuid.NewString(), authorID: uuid.Nil.String()},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request.Header.Set("X-Workspace-ID", test.workspaceID)
+			request.Header.Set("X-Author-ID", test.authorID)
+			response := httptest.NewRecorder()
+			TenantContextMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Fatal("next handler called with missing tenant headers")
+			})).ServeHTTP(response, request)
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d; body = %s", response.Code, http.StatusUnauthorized, response.Body.String())
+			}
+			wwa := response.Header().Get("WWW-Authenticate")
+			if wwa == "" {
+				t.Log("WWW-Authenticate header missing (tenant middleware does not set it; JWT middleware does)")
+			}
+		})
+	}
+}
+
+// Invalid UUID format returns 400 Bad Request (Issue #71).
+func TestTenantContextMiddleware_InvalidUUID_Returns400(t *testing.T) {
+	tests := []struct {
+		name        string
+		workspaceID string
+		authorID    string
+	}{
+		{name: "invalid workspace", workspaceID: "not-a-uuid", authorID: uuid.NewString()},
+		{name: "invalid author", workspaceID: uuid.NewString(), authorID: "not-a-uuid"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

@@ -45,12 +45,14 @@ func JWTAuthMiddleware(jwtService *iam.JWTService, allowLegacy bool) func(http.H
 					TenantContextMiddleware(next).ServeHTTP(w, r)
 					return
 				}
+				w.Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 				jsonError(w, http.StatusUnauthorized, "missing Authorization header")
 				return
 			}
 
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 				jsonError(w, http.StatusUnauthorized, "invalid Authorization header format")
 				return
 			}
@@ -58,6 +60,7 @@ func JWTAuthMiddleware(jwtService *iam.JWTService, allowLegacy bool) func(http.H
 			claims, err := jwtService.ValidateToken(parts[1])
 			if err != nil {
 				slog.Debug("JWT validation failed", "error", err)
+				w.Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 				jsonError(w, http.StatusUnauthorized, "invalid or expired token")
 				return
 			}
