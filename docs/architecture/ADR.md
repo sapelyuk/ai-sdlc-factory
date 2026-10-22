@@ -1,6 +1,6 @@
 # Реестр архитектурных решений (ADR) — ai-sdlc-factory
 
-**Версия 1.5 · 22.10.2026**
+**Версия 1.6 · 22.10.2026**
 
 Формат: MADR. Статусы: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
 
@@ -281,10 +281,43 @@ LLM Gateway должен маршрутизировать запросы по ca
 
 ---
 
+## ADR-022. Выбор `mark3labs/mcp-go` для Tool Gateway (MCP-прокси)
+
+**Статус:** accepted.
+
+**Контекст.**
+Tool Gateway должен предоставлять агентам единый MCP-эндпоинт, федератировать несколько upstream MCP-серверов, применять OPA-политики (R0–R3), вести аудит вызовов и выполнять credential brokering через Vault. Реализация «с нуля» на Go потребовала бы месяцев работы и постоянной поддержки меняющейся MCP-спецификации. Рассматривались альтернативы:
+
+- **AgentGateway** (Rust, Apache 2.0) — мощный data plane, но избыточен: LLM-routing и CEL-RBAC не нужны для MCP-слоя; вносит Rust в Go-монорепо.
+- **IBM ContextForge** (Python, Apache 2.0) — полная enterprise-функциональность (OAuth, RBAC, admin UI), но ~150K строк кода; портирование на Go нецелесообразно, запуск отдельного Python-сервиса усложняет эксплуатацию.
+- **Официальный `modelcontextprotocol/go-sdk`** — Tier 1, но API ещё evolves; отсутствует готовый механизм `ProxyTool` для проксирования upstream-серверов.
+- **`github.com/mark3labs/mcp-go`** — community SDK, MIT, ~9.2k звёзд, активная разработка; поддерживает stdio, SSE, Streamable HTTP; **содержит `ProxyTool`** и используется в референсном `mcpproxy-go` для проксирования MCP-серверов. На момент принятия решения стабильная версия — `v1.1.1`.
+
+**Решение.**
+Использовать **`github.com/mark3labs/mcp-go`** как библиотеку для MCP-сервера и MCP-клиента в `apps/tool-gateway`. Собственный Go-слой навешивает:
+
+- загрузку инструментов из `packages/contracts/mcp-schemas/*.json`;
+- OPA-проверку перед каждым вызовом (уровни R0–R3 согласно ADR-013);
+- аудит с хэш-цепочкой;
+- credential brokering через Vault/OpenBao (агент не видит токены);
+- проксирование вызовов в upstream MCP-серверы через `ProxyTool`.
+
+Версия библиотеки фиксируется в `go.mod` (на момент написания — `v1.1.1` или более поздняя стабильная).
+
+**Последствия.**
+- **Плюсы:** Go-нативный стек, MIT-лицензия (совместима с AGPLv3), готовые транспорты (stdio/SSE/Streamable HTTP), `ProxyTool` для федерации, активное сообщество, лёгкая интеграция с OPA и Vault.
+- **Минусы:** зависимость от community-проекта; при необходимости миграции на официальный `modelcontextprotocol/go-sdk` потребуется адаптер (протокольная граница небольшая, оценка ~1 день).
+- **Ограничения:** Tool Gateway не реализует собственный LLM-routing (это делает LLM Gateway по ADR-021); AgentGateway и ContextForge не используются.
+
+**Ссылки:** ADR-005 (MCP как протокол инструментов), ADR-008 (LLM Gateway на Go), ADR-013 (уровни R0–R3), ADR-021 (LLM Gateway routing/fallback/cost), NFR-5 (безопасность), NFR-6 (расширяемость), FR-TEAM.
+
+---
+
 ## Изменения документа
 
 | Версия | Дата | Изменения |
 |---|---|---|
+| 1.6 | 22.10.2026 | Добавлен ADR-022 (выбор `mark3labs/mcp-go` для Tool Gateway) (#83) |
 | 1.5 | 22.10.2026 | Добавлен ADR-021 (LLM Gateway: routing, fallback, cost attribution) (#73) |
 | 1.4 | 19.10.2026 | Добавлен ADR-020 (MinIO → Silo) |
 | 1.3 | 17.10.2026 | Добавлен ADR-019 |
