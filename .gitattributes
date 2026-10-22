@@ -1,0 +1,6 @@
+# Normalize line endings so the Makefile helper scripts stay runnable.
+# Without this, a Windows checkout with core.autocrlf=true rewrites the
+# shell scripts to CRLF, and the CR in the shebang line breaks them
+# ("bad interpreter: /usr/bin/env bash^M").
+*.sh  text eol=lf
+*.ps1 text eol=lf

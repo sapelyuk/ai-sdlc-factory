@@ -122,24 +122,31 @@ check-tracing:
 MIGRATIONS_DIR ?= migrations/postgres
 DB_SERVICE ?= postgres
 
+# The migrate recipes delegate to per-OS scripts so that they work in both
+# POSIX shells and Windows cmd.exe/PowerShell. GNU make hands recipes to
+# cmd.exe on Windows, where POSIX `for f in ...; do ... done` loops and
+# single-quoted `sh -c '...'` bodies are not valid syntax. The scripts
+# receive the Compose configuration through the environment.
+export COMPOSE_FILES
+export MIGRATIONS_DIR
+export DB_SERVICE
+
+ifeq ($(OS),Windows_NT)
+migrate-up:
+	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate.ps1 up
+migrate-down:
+	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate.ps1 down
+else
 # Apply all .up.sql in ascending order. SQL is piped via stdin because the
 # migration files live on the host, not inside the postgres container.
 # Credentials are read from the standard POSTGRES_USER/POSTGRES_DB environment
 # variables that Compose sets inside the postgres container.
 migrate-up:
-	@for f in $$(ls $(MIGRATIONS_DIR)/*.up.sql 2>/dev/null | sort); do \
-		echo "==> Applying $$f"; \
-		$(COMPOSE) exec -T $(DB_SERVICE) sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$f" || exit 1; \
-	done
-	@echo "==> All migrations applied"
-
+	@bash scripts/migrate.sh up
 # Roll back all .down.sql in descending order (reverse of migrate-up).
 migrate-down:
-	@for f in $$(ls $(MIGRATIONS_DIR)/*.down.sql 2>/dev/null | sort -r); do \
-		echo "==> Rolling back $$f"; \
-		$(COMPOSE) exec -T $(DB_SERVICE) sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < "$$f" || exit 1; \
-	done
-	@echo "==> All migrations rolled back"
+	@bash scripts/migrate.sh down
+endif
 
 # ── Development ────────────────────────────────────────────
 
@@ -156,11 +163,16 @@ dev-web:
 
 # Workspace used by the SLP v0 seed. Override to seed another workspace.
 SEED_WORKSPACE_ID ?= 00000000-0000-0000-0000-000000000001
+export SEED_WORKSPACE_ID
 
 # Seed SLP v0 ontology into the database.
 # Creates the seed workspace if it is missing, then loads the SLP classes.
+ifeq ($(OS),Windows_NT)
 seed-slp:
-	@$(COMPOSE) exec -T $(DB_SERVICE) sh -c 'psql -v ON_ERROR_STOP=1 -v workspace_id="$(SEED_WORKSPACE_ID)" -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < deploy/compose/postgres/seed/default-workspace.sql
-	$(COMPOSE) exec -T -e SEED_WORKSPACE_ID=$(SEED_WORKSPACE_ID) semantic /app/seed-slp
+	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts/seed-slp.ps1
+else
+seed-slp:
+	@bash scripts/seed-slp.sh
+endif
 
 

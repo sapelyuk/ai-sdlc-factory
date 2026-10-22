@@ -217,6 +217,52 @@ make migrate-up
 make migrate-down
 ```
 
+Цели кросс-платформенны и работают одинаково на Linux/macOS и на Windows
+(cmd.exe и PowerShell). Для POSIX-оболочек используется `scripts/migrate.sh`,
+для Windows — `scripts/migrate.ps1`; выбор делает `make` по `ifeq ($(OS),Windows_NT)`.
+Требуются только GNU make и Docker Compose — `psql` на хосте не нужен, он
+выполняется внутри контейника `postgres`.
+
+Миграции **не** идемпотентны: повторный `make migrate-up` на уже обновлённой
+базе завершится ошибкой `relation "..." already exists`. Для чистой переустановки
+выполните `make migrate-down`, затем `make migrate-up`.
+
+> `make migrate-down` удаляет только таблицы, созданные миграциями. Служебные
+> таблицы Temporal в той же базе (`namespaces`, `shards`, `history_node`, ...)
+> остаются нетронутыми.
+
+### Сид SLP v0
+
+```bash
+# Создать seed-workspace и загрузить 14 классов SLP v0
+make seed-slp
+```
+
+Цель тоже кросс-платформенна (`scripts/seed-slp.sh` / `scripts/seed-slp.ps1`) и
+состоит из двух шагов:
+
+1. `deploy/compose/postgres/seed/default-workspace.sql` создаёт workspace, если
+   его ещё нет (`ON CONFLICT DO NOTHING`, поэтому сид можно запускать повторно).
+2. Контейнер `semantic` выполняет `/app/seed-slp`, который загружает классы SLP v0.
+
+Идентификатор workspace берётся из переменной `SEED_WORKSPACE_ID`. Значение по
+умолчанию `00000000-0000-0000-0000-000000000001` подставляется автоматически из
+`Makefile`, отдельно задавать его не нужно. Чтобы засить другой workspace,
+переопределите переменную:
+
+```bash
+# Linux / macOS
+make seed-slp SEED_WORKSPACE_ID=11111111-1111-1111-1111-111111111111
+```
+
+```powershell
+# Windows (PowerShell)
+make seed-slp SEED_WORKSPACE_ID=11111111-1111-1111-1111-111111111111
+```
+
+Перед `make seed-slp` должны быть запущены сервисы `postgres` и `semantic`
+(`make up-local`).
+
 ### Тестирование миграций
 
 ```bash
@@ -238,5 +284,7 @@ go test -v ./...
 | 5 | `0005_init_semantic_graph` | sem_nodes, sem_edges, sem_embeddings |
 | 6 | `0006_init_architecture_and_adr` | diagrams, architecture_models, adrs |
 | 7 | `0007_init_audit_and_cost` | audit_log, llm_calls |
+| 8 | `0008_init_registry` | roles, teams, processes (semver) |
+| 9 | `0009_init_users` | users, JWT auth, RBAC |
 
 Каждая миграция имеет парный файл `.up.sql` / `.down.sql` для применения и отката.
