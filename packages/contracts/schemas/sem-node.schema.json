@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-sdlc-factory.dev/schemas/sem-node.schema.json",
+  "title": "SemNode",
+  "description": "Semantic graph node for SLP/SLPr/AM layers.",
+  "type": "object",
+  "required": ["layer", "kind", "label"],
+  "properties": {
+    "layer": {
+      "type": "string",
+      "enum": ["SLP", "SLPr", "AM"],
+      "description": "Semantic layer: SLP (platform), SLPr (product), AM (architecture)."
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Node kind/class name within the layer."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Human-readable label."
+    },
+    "props": {
+      "type": "object",
+      "description": "Arbitrary JSON properties.",
+      "additionalProperties": true
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "active", "deprecated", "deleted"],
+      "description": "Node lifecycle status. Defaults to draft."
+    }
+  },
+  "additionalProperties": false
+}
