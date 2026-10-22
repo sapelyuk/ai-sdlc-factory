@@ -83,6 +83,12 @@ coverage/
 *.out
 $*
 
+# Coverage artifacts
+apps/semantic/coverage
+apps/semantic/coverage.*
+apps/api/coverage
+apps/api/coverage.*
+
 # Semantic indexer artifacts
 .semantic-indexer/
 
