@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-sdlc-factory.dev/schemas/sem-edge.schema.json",
+  "title": "SemEdge",
+  "description": "Semantic graph edge connecting two nodes.",
+  "type": "object",
+  "required": ["src_id", "dst_id", "kind"],
+  "properties": {
+    "src_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Source node UUID."
+    },
+    "dst_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Destination node UUID."
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Edge kind/relation type."
+    },
+    "props": {
+      "type": "object",
+      "description": "Arbitrary JSON properties.",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

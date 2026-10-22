@@ -105,6 +105,9 @@ CREATE TABLE sem_embeddings (
 
 Row Level Security по `workspace_id`.
 
+> **Примечание:** В терминах Issue и UI статус «approved» соответствует значению `active` в БД (CHECK в миграции `0005_init_semantic_graph`). Маппинг: `approved` ↔ `active`. Узел в статусе `active` неизменяем: `PATCH /v1/nodes/{id}` возвращает 403.
+
+
 > **Примечание:** `sem_edges` и `sem_embeddings` содержат денормализованный `workspace_id` (ссылка на `workspaces`) для оптимизации RLS-политик. Это позволяет применять RLS напрямую по `workspace_id` без подзапроса через `sem_nodes`, что критично для производительности (подробнее: ADR-019).
 
 > **Примечание:** Колонка `model_name` в `sem_embeddings` и `kb_embeddings` хранит название модели, сгенерировавшей эмбеддинг. Это необходимо для воспроизводимости (NFR-7) и возможности смены модели без пересчёта всех векторов (ADR-004).
@@ -136,6 +139,7 @@ Row Level Security по `workspace_id`.
 
 | Версия | Дата | Изменения |
 |---|---|---|
+| 1.3 | 22.10.2026 | §6.1: зафиксирован маппинг статуса `approved` ↔ `active` (БД) |
 | 1.2 | 17.10.2026 | Денормализованный `workspace_id` в `sem_edges`/`sem_embeddings` для RLS; добавлена колонка `model_name` в `sem_embeddings` и `kb_embeddings`; обновлена схема §6.1 |
 | 1.1 | 16.10.2026 | Добавлены ADR-016, ADR-017 |
 | 1.0 | 16.10.2026 | Первичная спецификация |
