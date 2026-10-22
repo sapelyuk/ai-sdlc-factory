@@ -81,7 +81,6 @@ func (r *NodeRepository) List(ctx context.Context, layer string) ([]*domain.SemN
 		if layer != "" {
 			query += fmt.Sprintf(" AND layer = $%d", argIdx)
 			args = append(args, layer)
-			argIdx++
 		}
 		query += ` ORDER BY kind`
 		rows, err := tx.Query(ctx, query, args...)
@@ -144,7 +143,6 @@ func (r *NodeRepository) Update(ctx context.Context, id uuid.UUID, input domain.
 		if input.Props != nil {
 			setClauses = append(setClauses, fmt.Sprintf("props = $%d", argIdx))
 			setArgs = append(setArgs, input.Props)
-			argIdx++
 		}
 		setClauses = append(setClauses, "updated_at = now()")
 

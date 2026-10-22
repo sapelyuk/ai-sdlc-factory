@@ -589,6 +589,20 @@ func TestCreateEdgeHandler_InvalidJSON_Returns400(t *testing.T) {
 	assert.Contains(t, errResp["error"], "invalid JSON request body")
 }
 
+// Invalid edges are a client error: validation failures must map to 422, not 500.
+func TestCreateEdgeHandler_MissingSrcID_Returns422(t *testing.T) {
+	svc, repo := newTestEdgeService()
+	router := newTestRouter(nil, svc, nil)
+
+	body := `{"dst_id":"` + uuid.New().String() + `","kind":"uses"}`
+	rec := serve(router, newTenantRequest(http.MethodPost, "/v1/edges", body, uuid.New()))
+
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	errResp := decodeJSON[map[string]string](t, rec)
+	assert.Contains(t, errResp["error"], "src_id is required")
+	assert.Empty(t, repo.edges, "invalid edge must not be persisted")
+}
+
 func TestCreateEdgeHandler_RepositoryFailure_Returns500(t *testing.T) {
 	svc, repo := newTestEdgeService()
 	repo.createErr = errors.New("foreign key violation")

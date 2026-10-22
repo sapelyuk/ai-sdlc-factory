@@ -3,7 +3,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -84,13 +83,4 @@ func (s *NodeService) GetByID(ctx context.Context, id string) (*domain.SemNode, 
 		return nil, fmt.Errorf("%w: id must be a valid UUID", domain.ErrInvalidInput)
 	}
 	return s.repo.GetByID(ctx, parsedID)
-}
-
-// MarshalJSON is a helper to marshal node props.
-func marshalProps(props any) (string, error) {
-	data, err := json.Marshal(props)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
 }

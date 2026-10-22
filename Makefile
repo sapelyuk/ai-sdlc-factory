@@ -154,8 +154,13 @@ dev-web:
 
 # ── Semantic Service ─────────────────────────────────────────
 
+# Workspace used by the SLP v0 seed. Override to seed another workspace.
+SEED_WORKSPACE_ID ?= 00000000-0000-0000-0000-000000000001
+
 # Seed SLP v0 ontology into the database.
-# Requires SEED_WORKSPACE_ID to be set.
+# Creates the seed workspace if it is missing, then loads the SLP classes.
 seed-slp:
-	$(COMPOSE) exec -T semantic sh -c 'SEED_WORKSPACE_ID=$${SEED_WORKSPACE_ID:-$$(echo $$SEED_WORKSPACE_ID) } /app/seed-slp'
+	@$(COMPOSE) exec -T $(DB_SERVICE) sh -c 'psql -v ON_ERROR_STOP=1 -v workspace_id="$(SEED_WORKSPACE_ID)" -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < deploy/compose/postgres/seed/default-workspace.sql
+	$(COMPOSE) exec -T -e SEED_WORKSPACE_ID=$(SEED_WORKSPACE_ID) semantic /app/seed-slp
+
 

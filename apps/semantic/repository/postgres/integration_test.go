@@ -309,9 +309,14 @@ func TestNodeRepository_CrossWorkspaceJSONB(t *testing.T) {
 	}
 
 	// Verify JSONB round-trip.
-	propsJSON, _ := json.Marshal(got.Props)
+	propsJSON, err := json.Marshal(got.Props)
+	if err != nil {
+		t.Fatalf("marshal node props: %v", err)
+	}
 	var parsed map[string]any
-	json.Unmarshal(propsJSON, &parsed)
+	if err := json.Unmarshal(propsJSON, &parsed); err != nil {
+		t.Fatalf("unmarshal node props: %v", err)
+	}
 	nested, ok := parsed["nested"].(map[string]any)
 	if !ok {
 		t.Fatalf("nested JSONB not preserved: %s", string(propsJSON))

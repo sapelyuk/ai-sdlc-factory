@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/semantic/domain"
@@ -27,7 +28,7 @@ func NewEdgeService(r EdgeRepository) *EdgeService {
 // Create validates and inserts a new edge.
 func (s *EdgeService) Create(ctx context.Context, input domain.CreateEdgeInput) error {
 	if err := input.Validate(); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", domain.ErrInvalidInput, err)
 	}
 	return s.repo.Create(ctx, input)
 }
