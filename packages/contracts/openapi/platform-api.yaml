@@ -166,6 +166,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -201,6 +203,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/registry/roles/{id}/status:
@@ -222,6 +226,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -241,6 +247,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -258,6 +266,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -319,6 +329,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -353,6 +365,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/registry/teams/{id}/status:
@@ -373,6 +387,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -391,6 +407,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -407,6 +425,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -468,6 +488,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Process"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -502,6 +524,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Process"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/registry/processes/{id}/status:
@@ -522,6 +546,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Process"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -540,6 +566,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Process"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -556,6 +584,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Process"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":

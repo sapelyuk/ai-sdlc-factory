@@ -689,9 +689,8 @@ func TestTenantContextMiddleware_ValidHeaders_PropagatesIdentity(t *testing.T) {
 	assert.Equal(t, authorID, gotAuthor)
 }
 
-// Missing tenant headers are treated as a malformed request (400), which matches
-// the platform-wide convention in apps/api/internal/transport/http/middleware.go.
-func TestTenantContextMiddleware_RejectsInvalidHeaders(t *testing.T) {
+// Missing tenant headers return 401 Unauthorized (Issue #71).
+func TestTenantContextMiddleware_MissingHeaders_Returns401(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("next handler must not be called")
 	})
@@ -705,10 +704,49 @@ func TestTenantContextMiddleware_RejectsInvalidHeaders(t *testing.T) {
 	}{
 		{name: "missing workspace header", author: uuid.New().String(), wantMsg: "X-Workspace-ID"},
 		{name: "missing author header", workspace: uuid.New().String(), wantMsg: "X-Author-ID"},
-		{name: "malformed workspace header", workspace: "not-a-uuid", author: uuid.New().String(), wantMsg: "X-Workspace-ID"},
-		{name: "malformed author header", workspace: uuid.New().String(), author: "not-a-uuid", wantMsg: "X-Author-ID"},
 		{name: "nil workspace uuid", workspace: uuid.Nil.String(), author: uuid.New().String(), wantMsg: "X-Workspace-ID"},
 		{name: "nil author uuid", workspace: uuid.New().String(), author: uuid.Nil.String(), wantMsg: "X-Author-ID"},
+		{name: "nil workspace uuid 32-hex", workspace: "00000000000000000000000000000000", author: uuid.New().String(), wantMsg: "X-Workspace-ID"},
+		{name: "nil workspace uuid urn", workspace: "urn:uuid:" + uuid.Nil.String(), author: uuid.New().String(), wantMsg: "X-Workspace-ID"},
+		{name: "nil author uuid 32-hex", workspace: uuid.New().String(), author: "00000000000000000000000000000000", wantMsg: "X-Author-ID"},
+		{name: "nil author uuid urn", workspace: uuid.New().String(), author: "urn:uuid:" + uuid.Nil.String(), wantMsg: "X-Author-ID"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/v1/nodes", nil)
+			if tt.workspace != "" {
+				req.Header.Set("X-Workspace-ID", tt.workspace)
+			}
+			if tt.author != "" {
+				req.Header.Set("X-Author-ID", tt.author)
+			}
+
+			rec := serve(handler, req)
+
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+			assert.Equal(t, `Bearer realm="semantic"`, rec.Header().Get("WWW-Authenticate"))
+			errResp := decodeJSON[map[string]string](t, rec)
+			assert.Contains(t, errResp["error"], tt.wantMsg)
+		})
+	}
+}
+
+// Invalid UUID format returns 400 Bad Request (Issue #71).
+func TestTenantContextMiddleware_InvalidUUID_Returns400(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("next handler must not be called")
+	})
+	handler := TenantContextMiddleware(next)
+
+	tests := []struct {
+		name      string
+		workspace string
+		author    string
+		wantMsg   string
+	}{
+		{name: "malformed workspace header", workspace: "not-a-uuid", author: uuid.New().String(), wantMsg: "X-Workspace-ID"},
+		{name: "malformed author header", workspace: uuid.New().String(), author: "not-a-uuid", wantMsg: "X-Author-ID"},
 	}
 
 	for _, tt := range tests {
@@ -746,7 +784,7 @@ func TestNewRouter_HealthEndpoints(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.JSONEq(t, `{"status":"ready"}`, rec.Body.String())
 
-	// Semantic routes are protected by the tenant middleware.
+	// Semantic routes are protected by the tenant middleware → 401 Unauthorized.
 	rec = serve(handler, httptest.NewRequest(http.MethodGet, "/v1/nodes", nil))
-	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }

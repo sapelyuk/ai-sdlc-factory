@@ -1,6 +1,6 @@
 # Архитектура платформы AI-SDLC: ai-sdlc-factory
 
-**Версия 1.5 · 22.10.2026**
+**Версия 1.6 · 22.10.2026**
 
 ## 0. Как читать документ
 
@@ -248,6 +248,25 @@ Health-трекинг ведётся по паре `(provider, model_id)`, не 
 
 *Пример:* Агент-исследователь (`product-researcher`) имеет доступ к вебу (п.2), но не имеет прав на запись в Git (п.3). Его результат — структурированный отчёт (JSON), который передается агенту-разработчику. Агент-разработчик имеет доступ к коду (п.1) и Git (п.3), но не имеет доступа к вебу (п.2) в рамках этой же задачи. Это предотвращает выполнение вредоносных инструкций, полученных из внешнего контента.
 
+### 10.3 Коды ответа аутентификации
+
+Тела ошибок ниже — фактические сообщения middleware (`apps/api/internal/transport/http`, `apps/semantic/transport/http`), формат тела `{"error":"<сообщение>"}`.
+
+| Ситуация | HTTP-код | Заголовки / тело |
+|---|---|---|
+| Отсутствует `Authorization` (JWT-middleware) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"`, тело `{"error":"missing Authorization header"}` |
+| Неверный формат `Authorization` (не `Bearer <token>`) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"`, тело `{"error":"invalid Authorization header format"}` |
+| Невалидный или просроченный токен | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"`, тело `{"error":"invalid or expired token"}` |
+| Отсутствует или равен `uuid.Nil` `X-Workspace-ID` (tenant-middleware, legacy-режим) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"` (semantic: `realm="semantic"`), тело `{"error":"missing X-Workspace-ID header"}` |
+| Отсутствует или равен `uuid.Nil` `X-Author-ID` (tenant-middleware, legacy-режим) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"` (semantic: `realm="semantic"`), тело `{"error":"missing X-Author-ID header"}` |
+| Невалидный формат UUID в `X-Workspace-ID` | `400 Bad Request` | тело `{"error":"X-Workspace-ID must be a valid UUID"}` |
+| Невалидный формат UUID в `X-Author-ID` | `400 Bad Request` | тело `{"error":"X-Author-ID must be a valid UUID"}` |
+| Валидные креды, но `approver = author` | `403 Forbidden` | тело `{"error":"approver cannot be the author"}` |
+| Валидные креды, но роль ниже требуемой (RBAC) | `403 Forbidden` | тело `{"error":"insufficient role: requires <role>"}` |
+| Успешная аутентификация и авторизация | `2xx` | — |
+
+**Примечание:** `uuid.Nil` определяется после парсинга UUID, поэтому нулевой идентификатор в любой допустимой форме записи (`00000000-0000-0000-0000-000000000000`, 32 hex-символа, `urn:uuid:…`, `{…}`) трактуется как отсутствующий заголовок → `401`. `GET /healthz`, `GET /readyz` и `GET /metrics` не требуют аутентификации. `POST /api/v1/auth/login` также доступен без токена.
+
 ### 10.4 Уровни риска
 
 - R0 (чтение) — авто
@@ -397,6 +416,7 @@ ai-sdlc-factory/
 
 | Версия | Дата | Изменения |
 |---|---|---|
+| 1.6 | 22.10.2026 | Добавлен §10.3 (Коды ответа аутентификации); тела ошибок приведены в соответствие с фактическими сообщениями middleware — Issue #71 |
 | 1.5 | 22.10.2026 | Добавлены §8.5 (LLM Gateway и профили моделей) и §11.4 (Стоимость); §11.3 и §11.5 приведены в порядок нумерации (#73) |
 | 1.4 | 21.10.2026 | Добавлены §4.3 (Web UI), §12 структурирован на §12.1–§12.4, добавлен §12.2 (Фронтенд) (#64) |
 | 1.3 | 20.10.2026 | Добавлены §8.3, §8.4 (Handoff-пакет), §10.1, §10.2 (Anti-Prompt Injection) |
