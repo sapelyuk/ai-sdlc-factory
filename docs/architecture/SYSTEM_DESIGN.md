@@ -1,6 +1,6 @@
 # Архитектура платформы AI-SDLC: ai-sdlc-factory
 
-**Версия 1.4 · 21.10.2026**
+**Версия 1.5 · 22.10.2026**
 
 ## 0. Как читать документ
 
@@ -200,6 +200,28 @@ Orchestrator -> Agent Runtime -> Semantic Service (подграф) -> Knowledge 
 - `open_questions`: вопросы, требующие решения.
 - `expected_output_schema`: JSON-схема ожидаемого результата.
 
+### 8.5 LLM Gateway и профили моделей
+
+**Профили возможностей пиннят версию модели.**
+
+Профиль (`code-strong`, `reasoning-strong`, `code-fast`, `cheap-bulk`, `local-private`) — это capability-контракт. В `model_profiles` хранится **конкретная пиненная версия** модели (`claude-sonnet-4-20250101`), не alias (`-latest`). Это защищает от тихого изменения контракта профиля при перепинке alias провайдером. Смена модели — R2-действие (см. ADR-021).
+
+**Fallback per `(provider, model)`.**
+
+Health-трекинг ведётся по паре `(provider, model_id)`, не по провайдеру. Классификация ошибок:
+
+- `404` / `401` / `403` / `400` → не availability-события. Логируются, не вызывают cooldown.
+- `429` / `5xx` / `timeout` → availability. Cooldown с exponential backoff (60s → 4h, jitter). После cooldown — пробный запрос; при успехе — сброс, при повторе — расширение cooldown.
+
+Это предотвращает flapping при config-ошибке в одной модели (весь провайдер остаётся доступным для других моделей).
+
+**Учёт стоимости на двух уровнях.**
+
+- `llm_logical_calls` — одна строка на логический запрос, привязанная к `run_id`/`task_id`/`agent_id`. Хранит `final_cost_usd` (успешная попытка) и `total_cost_usd` (сумма всех попыток).
+- `llm_attempts` — N строк на HTTP-попытки, с классификацией статуса и `cost_usd` per attempt.
+
+Это корректно считает NFR-9 (стоимость) при ретраях и mid-stream failover. См. ADR-021.
+
 ## 9. Базы знаний
 
 ### 9.2 Индексация
@@ -235,6 +257,22 @@ Orchestrator -> Agent Runtime -> Semantic Service (подграф) -> Knowledge 
 
 ## 11. Интеграции, наблюдаемость, развёртывание
 
+### 11.3 Наблюдаемость
+
+OTel Collector + Jaeger (always). Langfuse + Prometheus + Grafana (profile observability).
+
+### 11.4 Стоимость
+
+Бюджеты: шаг, задача, прогон, день, месяц. Оценка до запуска. 80% — предупреждение; жёсткий — остановка.
+
+**Атрибуция по двум уровням (ADR-021):**
+
+- `llm_logical_calls.final_cost_usd` — стоимость, произведшая результат (то, что видит агент).
+- `llm_logical_calls.total_cost_usd` — реальный расход (включая ретраи и failover).
+- `llm_attempts` — детализация per HTTP call для диагностики.
+
+При агрегации бюджетов используется `total_cost_usd` (реальные деньги). При отображении «стоимость задачи» — `final_cost_usd` (результат).
+
 ### 11.5 Профили развёртывания
 
 | Профиль | Назначение | RAM | Состав |
@@ -242,10 +280,6 @@ Orchestrator -> Agent Runtime -> Semantic Service (подграф) -> Knowledge 
 | local-dev | Разработка на 16 ГБ | ~10 ГБ | Ядро + OTel + Jaeger |
 | local-full | Разработка на 32+ ГБ | ~30 ГБ | Ядро + OTel + Jaeger + Langfuse + Prometheus + Grafana |
 | prod | Kubernetes | — | Полный стек + управляемые БД |
-
-### 11.3 Наблюдаемость
-
-OTel Collector + Jaeger (always). Langfuse + Prometheus + Grafana (profile observability).
 
 ## 12. Технологический стек
 
@@ -287,7 +321,7 @@ OTel Collector + Jaeger (always). Langfuse + Prometheus + Grafana (profile obser
 
 ## 13. ADR
 
-Полный реестр — `docs/architecture/ADR.md` (ADR-001...ADR-018).
+Полный реестр — `docs/architecture/ADR.md` (ADR-001...ADR-021).
 
 ## 14. План поставки
 
@@ -363,6 +397,7 @@ ai-sdlc-factory/
 
 | Версия | Дата | Изменения |
 |---|---|---|
+| 1.5 | 22.10.2026 | Добавлены §8.5 (LLM Gateway и профили моделей) и §11.4 (Стоимость); §11.3 и §11.5 приведены в порядок нумерации (#73) |
 | 1.4 | 21.10.2026 | Добавлены §4.3 (Web UI), §12 структурирован на §12.1–§12.4, добавлен §12.2 (Фронтенд) (#64) |
 | 1.3 | 20.10.2026 | Добавлены §8.3, §8.4 (Handoff-пакет), §10.1, §10.2 (Anti-Prompt Injection) |
 | 1.2 | 16.10.2026 | Первичная архитектура |
