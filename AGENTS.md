@@ -19,6 +19,11 @@ Copilot и др.) при работе с репозиторием. Он опре
 6. Никогда не отклоняйся от ADR без нового ADR.
 7. Никогда не придумывай требования — спрашивай владельца.
 
+## Language policy
+
+**All content in this repository MUST be in English.** This is enforced by CI.
+All PR descriptions, commit messages, and issue descriptions MUST be in English.
+
 ## Именование веток
 
 `<тип>/<номер-issue>-<краткое-имя>`

@@ -58,6 +58,19 @@ chore(deps): bump temporal-sdk to v1.28 (#88)
 docs(adr): add ADR-019 for event-bus abstraction (#95)
 ```
 
+## Language policy
+
+**All content in this repository MUST be in English.** This includes:
+- Documentation (`.md` files)
+- Commit messages
+- Pull request titles and descriptions
+- Issue titles and descriptions
+- Code comments (where applicable)
+- YAML/JSON configuration comments
+
+Non-English content (including Cyrillic) is **not allowed**. A CI check enforces this policy.
+If you need to discuss a change in another language, do it in the PR comments (not in the codebase).
+
 ## Пулы (Pull Requests)
 
 - Открывайте PR как **draft** сразу после первого коммита.
@@ -65,7 +78,7 @@ docs(adr): add ADR-019 for event-bus abstraction (#95)
 - Держите PR небольшими: **≤ 400 строк diff** там, где возможно.
 - Все проверки CI должны проходить.
 - Шаблон PR нужно заполнить полностью.
-- Описание PR — на русском языке.
+- PR description MUST be in English.
 - Мерж без approve запрещён (кроме self-review для solo-проекта).
 
 **Запрет на удаление тестов:** В рамках PR запрещено удалять, пропускать (`t.Skip`/`xit`) или ослаблять существующие тесты, а также изменять пороги покрытия в CI ради обхода ошибок. Если тест устарел — это оформляется отдельным PR с меткой `type:refactor` и проходит ревью архитектора.
