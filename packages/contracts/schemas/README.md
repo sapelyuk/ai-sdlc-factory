@@ -1,21 +1,21 @@
-# JSON-Schema файлы для Registry
+# JSON-Schema files for Registry
 
-Этот каталог содержит JSON-Schema файлы (Draft 2020-12) для валидации спецификаций Registry.
+This directory contains JSON-Schema files (Draft 2020-12) for validating Registry specifications.
 
-## Файлы
+## Files
 
-| Файл | Описание |
+| File | Description |
 |---|---|
-| `role.schema.json` | Спецификация Role (шаблон агента) |
-| `team.schema.json` | Спецификация Team (набор агентов) |
-| `process.schema.json` | Спецификация Process (workflow SDLC) |
+| `role.schema.json` | Role specification (agent template) |
+| `team.schema.json` | Team specification (agent collection) |
+| `process.schema.json` | Process specification (SDLC workflow) |
 
-## Валидация
+## Validation
 
-Все схемы используют `additionalProperties: false` для строгой валидации.
-Обязательные поля указаны в массиве `required`.
+All schemas use `additionalProperties: false` for strict validation.
+Required fields are listed in the `required` array.
 
-Использование в Go:
+Usage in Go:
 ```go
 import "github.com/santhosh-tekuri/jsonschema/v5"
 

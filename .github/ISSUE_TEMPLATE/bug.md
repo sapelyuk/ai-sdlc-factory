@@ -1,35 +1,35 @@
 ---
 name: Bug
-about: Сообщение об ошибке
-title: "fix: <краткое описание бага>"
+about: Report a bug
+title: "fix: <short description>"
 labels: "type:bug"
 assignees: ""
 ---
 
-## Описание бага
+## Bug description
 
-<Опишите, что происходит не так.>
+<Describe what is going wrong.>
 
-## Окружение
+## Environment
 
-- Профиль: `local-dev` | `local-full` | `prod`
-- Версия платформы: <версия>
+- Profile: `local-dev` | `local-full` | `prod`
+- Platform version: <version>
 
-## Шаги воспроизведения
+## Steps to reproduce
 
 1. ...
 2. ...
 3. ...
 
-## Ожидаемое поведение
+## Expected behavior
 
-<Что должно было произойти>
+<What should have happened>
 
-## Фактическое поведение
+## Actual behavior
 
-<Что произошло на самом деле>
+<What actually happened>
 
-## Оценка
+## Assessment
 
 - Size: S | M | L
 - Priority: p0 | p1 | p2

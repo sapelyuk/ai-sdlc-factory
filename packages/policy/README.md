@@ -1,35 +1,35 @@
 # AI-SDLC Factory — Rego Policies
 
-OPA (Open Policy Agent) policies для управления доступом и рисками AI-SDLC platform.
+OPA (Open Policy Agent) policies for access control and risk management in the AI-SDLC platform.
 
-## Структура
+## Structure
 
-| Файл | Назначение |
+| File | Purpose |
 |---|---|
-| `autonomy.rego` | Уровни автономности R0–R3 (ADR-013), проверка разрешённости действий |
-| `risk_levels.rego` | Оценка риска на основе категории и контекста задачи |
+| `autonomy.rego` | Autonomy levels R0–R3 (ADR-013), action allowance checks |
+| `risk_levels.rego` | Risk assessment based on task category and context |
 
-## Использование
+## Usage
 
 ```bash
-# Проверка автономности
+# Check autonomy
 curl -X POST http://localhost:8181/v1/data/ai_sdlc_factory/autonomy/allow \
   -d '{"input":{"action":"deploy.prod","autonomy_level":"R3"}}'
 
-# Оценка риска
+# Check risk
 curl -X POST http://localhost:8181/v1/data/ai_sdlc_factory/risk_levels/risk_score \
   -d '{"input":{"category":"deployment","target":"production"}}'
 ```
 
-## Интеграция
+## Integration
 
-OPA запускается как сервис в Compose-стэке:
-- Порт: `8181`
-- Policies монтируются из `packages/policy/` в `/policies`
-- Decision logs выводятся в консоль (`decision_logs.console=true`)
+OPA runs as a service in the Compose stack:
+- Port: `8181`
+- Policies are mounted from `packages/policy/` into `/policies`
+- Decision logs are output to console (`decision_logs.console=true`)
 
-## Ссылки
+## References
 
-- ADR-013: Уровни автономности R0–R3
-- SYSTEM_DESIGN.md §10: Безопасность
+- ADR-013: Autonomy Levels R0–R3
+- SYSTEM_DESIGN.md §10: Security
 - OPA Docs: https://www.openpolicyagent.org/docs/

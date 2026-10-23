@@ -1,8 +1,8 @@
 # Web UI — ai-sdlc-factory
 
-Каркас Web UI платформы ai-sdlc-factory.
+Web UI scaffold for the ai-sdlc-factory platform.
 
-## Стек
+## Stack
 
 - **Vite 6** + **React 18** + **TypeScript** (strict)
 - **Tailwind CSS 4** + **shadcn/ui** (Button, Input, Table, Card)
@@ -11,96 +11,96 @@
 - **React Router DOM** (routing)
 - **Vitest** (unit tests)
 
-## Стилизация
+## Styling
 
-Tailwind CSS 4 использует CSS-first конфигурацию: токены темы объявлены через
-`@theme inline` в `src/index.css`, PostCSS подключает `@tailwindcss/postcss`.
-Tailwind 4 требует Safari 16.4+, Chrome 111+ или Firefox 128+.
+Tailwind CSS 4 uses CSS-first configuration: theme tokens are declared via
+`@theme inline` in `src/index.css`, PostCSS loads `@tailwindcss/postcss`.
+Tailwind 4 requires Safari 16.4+, Chrome 111+ or Firefox 128+.
 
 The JWT is kept in the in-memory auth store and is cleared on page reload. It is
 not persisted to `localStorage`.
 
-## Быстрый старт
+## Quick start
 
 ```bash
-# 1. Перейти в каталог
+# 1. Navigate to the directory
 cd apps/web
 
-# 2. Установить зависимости
+# 2. Install dependencies
 npm ci
 
-# 3. Запустить dev-сервер
+# 3. Start the dev server
 npm run dev
 # → http://localhost:5173
 
-# 4. Собрать production-бандл
+# 4. Build the production bundle
 npm run build
 
-# 5. Запустить тесты
+# 5. Run tests
 npm run test
 ```
 
-## Переменные окружения
+## Environment variables
 
-| Переменная | Значение по умолчанию | Описание |
+| Variable | Default | Description |
 |---|---|---|
-| `VITE_API_URL` | `/api` | Префикс API-эндпоинтов (для Docker — `/api`, для dev — прокси Vite) |
+| `VITE_API_URL` | `/api` | API endpoint prefix (for Docker: `/api`, for dev: Vite proxy) |
 
-## Структура
+## Structure
 
 ```
 apps/web/
 ├── src/
 │   ├── components/
-│   │   ├── ui/          # shadcn/ui компоненты
+│   │   ├── ui/          # shadcn/ui components
 │   │   ├── AuthProvider.tsx
 │   │   └── ProtectedRoute.tsx
 │   ├── hooks/
 │   │   └── use-toast.tsx
 │   ├── lib/
-│   │   ├── api.ts       # API-клиент (login, fetchRoles)
+│   │   ├── api.ts       # API client (login, fetchRoles)
 │   │   ├── auth-context.tsx  # Auth context
-│   │   ├── sse.ts       # SSE client (заглушка)
-│   │   └── utils.ts     # cn() утилита
+│   │   ├── sse.ts       # SSE client (stub)
+│   │   └── utils.ts     # cn() utility
 │   ├── pages/
-│   │   ├── Login.tsx    # Страница логина
+│   │   ├── Login.tsx    # Login page
 │   │   ├── Dashboard.tsx # Dashboard
-│   │   ├── RegistryRoles.tsx # Registry Roles (реальный API)
-│   │   └── StubPage.tsx  # Заглушка для Pages
+│   │   ├── RegistryRoles.tsx # Registry Roles (real API)
+│   │   └── StubPage.tsx  # Stub for Pages
 │   ├── store/
 │   │   └── auth.ts      # Zustand auth store
-│   ├── App.tsx          # Роутинг
-│   ├── main.tsx         # Точка входа
+│   ├── App.tsx          # Routing
+│   ├── main.tsx         # Entry point
 │   └── index.css        # Tailwind
-├── Dockerfile           # Production-сборка (nginx)
-├── vite.config.ts       # Vite-конфиг (proxy → API)
-├── vitest.config.ts     # Vitest-конфиг
+├── Dockerfile           # Production build (nginx)
+├── vite.config.ts       # Vite config (proxy → API)
+├── vitest.config.ts     # Vitest config
 └── package.json
 ```
 
 ## Docker
 
 ```bash
-# Собрать и запустить
+# Build and run
 docker build -t ai-sdlc-factory/web:local .
 docker run -p 3000:3000 ai-sdlc-factory/web:local
 ```
 
-В compose-инфраструктуре:
+In the compose infrastructure:
 ```bash
 make up-local
 # → http://localhost:3000
 ```
 
-## Тесты
+## Tests
 
 ```bash
-npm run test      # Запустить все тесты
-npm run test:watch # Watch-режим
+npm run test      # Run all tests
+npm run test:watch # Watch mode
 ```
 
-## Известные ограничения
+## Known limitations
 
-- Страницы Teams и Processes — заглушки (будут в следующих задачах).
-- E2E-тесты (Playwright) — опционально, могут быть отложены.
-- SSE-клиент — заглушка, не подключена к реальному API.
+- Teams and Processes pages are stubs (to be implemented in subsequent tasks).
+- E2E tests (Playwright) — optional, may be deferred.
+- SSE client is a stub, not connected to the real API.
