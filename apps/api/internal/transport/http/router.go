@@ -35,7 +35,6 @@ func NewRouter(
 
 	// ── Common middleware ──────────────────────────────────────────
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(otelhttp.NewMiddleware("api-server"))
 	r.Use(MetricsMiddleware)
 	r.Use(middleware.Recoverer)
