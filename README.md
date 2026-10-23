@@ -1,24 +1,24 @@
 # AI-SDLC Factory
 
-**Мультиагентная платформа для полного SDLC под контролем владельца.**
+**Multi-agent platform for full SDLC with owner control.**
 
-`ai-sdlc-factory` — это платформа, где команды ИИ-агентов реализуют полный цикл разработки ПО: от исследования и проектирования до тестирования, деплоя и мониторинга. Каждая роль и агент работает на своей модели, с настраиваемыми правами, бюджетами и уровнями автономности.
+`ai-sdlc-factory` is a platform where AI agent teams implement the full software development lifecycle: from research and design to testing, deployment, and monitoring. Each role and agent runs on its own model, with configurable permissions, budgets, and autonomy levels.
 
-## Быстрый старт
+## Quick Start
 
 ```bash
-# 1. Настроить окружение
+# 1. Set up the environment
 cp deploy/compose/.env.example deploy/compose/.env.local-dev
 
-# 2. Поднять платформу
-make up-local          # local-dev (~10 ГБ RAM)
-make up-full           # local-full (~30 ГБ RAM, с Langfuse)
+# 2. Start the platform
+make up-local          # local-dev (~10 GB RAM)
+make up-full           # local-full (~30 GB RAM, with Langfuse)
 
-# 3. Проверить
+# 3. Verify
 make ps-local
 ```
 
-| Сервис | URL |
+| Service | URL |
 |---|---|
 | Web UI | http://localhost:3000 |
 | Platform API | http://localhost:8000 |
@@ -26,18 +26,18 @@ make ps-local
 | Silo Console | http://localhost:9001 |
 | Jaeger UI | http://localhost:16686 |
 
-## Архитектура
+## Architecture
 
 - **Control Plane:** Web UI, Platform API, Registry, Policy & Approval, IAM, Semantic Service
 - **Execution Plane:** Orchestrator (Temporal), Agent Runtime, LLM Gateway, Tool Gateway (MCP), Sandbox Manager, Diagram Service
 - **Data Plane:** PostgreSQL 18 + pgvector (property graph), Silo (S3), NATS JetStream, Knowledge Service
-- **Observability:** OTel Collector + Jaeger (всегда), Langfuse + Prometheus + Grafana (профиль observability)
+- **Observability:** OTel Collector + Jaeger (always), Langfuse + Prometheus + Grafana (observability profile)
 
 ## Registry API
 
-После запуска PostgreSQL примените миграции командой `make migrate-up`. Для Registry-запросов обязательны заголовки `X-Workspace-ID` и `X-Author-ID` с ненулевыми UUID; для смены статуса дополнительно требуется `X-Approver-ID`, отличный от автора.
+After starting PostgreSQL, apply migrations with `make migrate-up`. Registry requests require `X-Workspace-ID` and `X-Author-ID` headers with non-zero UUIDs; changing status additionally requires `X-Approver-ID` different from the author.
 
-Пример создания роли (спецификация проверяется по JSON-Schema):
+Example role creation (spec validated against JSON Schema):
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/registry/roles \
@@ -61,30 +61,30 @@ curl -X POST http://localhost:8000/api/v1/registry/roles \
   }'
 ```
 
-Для публикации используйте `PATCH /api/v1/registry/roles/{id}/status` с телом `{"status":"approved"}` и заголовком `X-Approver-ID`. Опубликованные спецификации неизменяемы; создайте новую версию через `POST /api/v1/registry/roles/{id}/clone` или восстановите предыдущую через `/revert`.
+For publishing, use `PATCH /api/v1/registry/roles/{id}/status` with body `{"status":"approved"}` and header `X-Approver-ID`. Published specs are immutable; create a new version via `POST /api/v1/registry/roles/{id}/clone` or restore the previous one via `/revert`.
 
-Для локальной проверки после применения миграции и запуска API задайте `WORKSPACE_ID`, `AUTHOR_ID` и отличный от автора `APPROVER_ID`, затем запустите `pwsh -File tests/smoke/registry-smoke.ps1`.
+For local verification after applying migrations and starting the API, set `WORKSPACE_ID`, `AUTHOR_ID`, and an `APPROVER_ID` different from the author, then run `pwsh -File tests/smoke/registry-smoke.ps1`.
 
-SLP v0 загружается командой `cd apps/api && go run ./cmd/seed`; задайте `SEED_WORKSPACE_ID` и `SEED_AUTHOR_ID` для повторяемой локальной загрузки. Если они отсутствуют, seed создаёт UUIDv7 и предупреждает, что значения подходят только для локальной разработки.
+SLP v0 is loaded with `cd apps/api && go run ./cmd/seed`; set `SEED_WORKSPACE_ID` and `SEED_AUTHOR_ID` for reproducible local loading. If absent, the seed generates UUIDv7 and warns that values are suitable only for local development.
 
-## Стек
+## Stack
 
-- **Бэкенд:** Go 1.26+ (chi/echo, Temporal SDK, NATS, OTel)
-- **Фронтенд:** TypeScript + React 18+, Vite, Tailwind + shadcn/ui
-- **Данные:** PostgreSQL 18 + pgvector, Silo (S3), NATS JetStream
-- **Инфраструктура:** Docker Compose → Kubernetes (Helm)
+- **Backend:** Go 1.26+ (chi/echo, Temporal SDK, NATS, OTel)
+- **Frontend:** TypeScript + React 18+, Vite, Tailwind + shadcn/ui
+- **Data:** PostgreSQL 18 + pgvector, Silo (S3), NATS JetStream
+- **Infrastructure:** Docker Compose → Kubernetes (Helm)
 
-## Документация
+## Documentation
 
-| Документ | Описание |
+| Document | Description |
 |---|---|
-| [SYSTEM_DESIGN.md](docs/architecture/SYSTEM_DESIGN.md) | Полная архитектура платформы |
-| [ADR.md](docs/architecture/ADR.md) | 19 архитектурных решений |
-| [ONTOLOGY_SPEC.md](docs/architecture/ONTOLOGY_SPEC.md) | Семантический слой (SLP/SLPr/AM) |
-| [SDLC_STATE_MACHINE.md](docs/architecture/SDLC_STATE_MACHINE.md) | Состояния задач и гейты |
-| [MCP_TOOLS.md](docs/architecture/MCP_TOOLS.md) | Инструменты агентов по ролям |
-| [AGENT_KICKOFF.md](docs/AGENT_KICKOFF.md) | Создание задач через GitHub Issues |
+| [SYSTEM_DESIGN.md](docs/architecture/SYSTEM_DESIGN.md) | Full platform architecture |
+| [ADR.md](docs/architecture/ADR.md) | 23 architecture decisions |
+| [ONTOLOGY_SPEC.md](docs/architecture/ONTOLOGY_SPEC.md) | Semantic layer (SLP/SLPr/AM) |
+| [SDLC_STATE_MACHINE.md](docs/architecture/SDLC_STATE_MACHINE.md) | Task states and gates |
+| [MCP_TOOLS.md](docs/architecture/MCP_TOOLS.md) | Agent tools by role |
+| [AGENT_KICKOFF.md](docs/AGENT_KICKOFF.md) | Task creation via GitHub Issues |
 
-## Лицензия
+## License
 
 AGPLv3
