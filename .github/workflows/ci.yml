@@ -142,7 +142,7 @@ jobs:
           echo "Checking for Cyrillic characters in tracked files..."
           
           # Search for Cyrillic in all text files, excluding node_modules and .git
-          MATCHES=$(grep -rI "[А-Яа-я]" \
+          MATCHES=$(grep -rI "[А-Яа-яёЁ]" \
             --include="*.md" \
             --include="*.yaml" \
             --include="*.yml" \
