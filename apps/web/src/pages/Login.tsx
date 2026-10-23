@@ -27,7 +27,7 @@ export function Login() {
       store.setAuth(result.token, result.user)
       navigate('/')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка входа')
+      setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setLoading(false)
     }
@@ -37,8 +37,8 @@ export function Login() {
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Вход в ai-sdlc-factory</CardTitle>
-          <CardDescription>Введите учётные данные для продолжения</CardDescription>
+          <CardTitle>Login to ai-sdlc-factory</CardTitle>
+          <CardDescription>Enter your credentials to continue</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -57,7 +57,7 @@ export function Login() {
             </div>
             <div className="space-y-2">
               <label htmlFor="password" className="text-sm font-medium">
-                Пароль
+                Password
               </label>
               <Input
                 id="password"
@@ -70,7 +70,7 @@ export function Login() {
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Вход...' : 'Войти'}
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
         </CardContent>

@@ -34,7 +34,7 @@ export default function App() {
             path="/registry/teams"
             element={
               <ProtectedRoute>
-                <StubPage title="Команды" />
+                <StubPage title="Teams" />
               </ProtectedRoute>
             }
           />
@@ -42,7 +42,7 @@ export default function App() {
             path="/registry/processes"
             element={
               <ProtectedRoute>
-                <StubPage title="Процессы" />
+                <StubPage title="Processes" />
               </ProtectedRoute>
             }
           />

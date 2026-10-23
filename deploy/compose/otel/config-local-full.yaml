@@ -26,8 +26,8 @@ exporters:
       insecure: true
   debug:
     verbosity: basic
-  # TODO (M6): добавить otlphttp/langfuse exporter, когда Langfuse будет
-  # развёрнут и настроен (ADR-018, SYSTEM_DESIGN.md §14.1)
+  # TODO (M6): add otlphttp/langfuse exporter when Langfuse is
+  # deployed and configured (ADR-018, SYSTEM_DESIGN.md §14.1)
   # otlphttp/langfuse:
   #   endpoint: http://langfuse-web:3000
   #   tls:

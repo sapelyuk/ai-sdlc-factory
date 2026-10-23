@@ -193,7 +193,7 @@ services:
   worker:
     build:
       context: ../..
-      dockerfile: deploy/compose/Dockerfile.worker
+      dockerfile: apps/worker/Dockerfile
     container_name: ai-sdlc-factory-worker
     environment:
       AI_DB_HOST: postgres
@@ -238,7 +238,7 @@ services:
   semantic-indexer:
     build:
       context: ../..
-      dockerfile: deploy/compose/Dockerfile.semantic-indexer
+      dockerfile: apps/semantic-indexer/Dockerfile
     container_name: ai-sdlc-factory-semantic-indexer
     environment:
       AI_DB_HOST: postgres
@@ -249,7 +249,7 @@ services:
   diagram:
     build:
       context: ../..
-      dockerfile: deploy/compose/Dockerfile.diagram
+      dockerfile: apps/diagram/Dockerfile
     container_name: ai-sdlc-factory-diagram
     environment:
       AI_DB_HOST: postgres
@@ -260,7 +260,7 @@ services:
   knowledge:
     build:
       context: ../..
-      dockerfile: deploy/compose/Dockerfile.knowledge
+      dockerfile: apps/knowledge/Dockerfile
     container_name: ai-sdlc-factory-knowledge
     environment:
       AI_DB_HOST: postgres
@@ -276,7 +276,7 @@ services:
   gateway-llm:
     build:
       context: ../..
-      dockerfile: deploy/compose/Dockerfile.gateway-llm
+      dockerfile: apps/gateway-llm/Dockerfile
     container_name: ai-sdlc-factory-gateway-llm
     environment:
       AI_ANTHROPIC_API_KEY: ${AI_ANTHROPIC_API_KEY:-}
@@ -287,7 +287,7 @@ services:
   tool-gateway:
     build:
       context: ../..
-      dockerfile: deploy/compose/Dockerfile.tool-gateway
+      dockerfile: apps/tool-gateway/Dockerfile
     container_name: ai-sdlc-factory-tool-gateway
     depends_on:
       api:
@@ -300,7 +300,7 @@ services:
   sandbox-manager:
     build:
       context: ../..
-      dockerfile: deploy/compose/Dockerfile.sandbox-manager
+      dockerfile: apps/sandbox-manager/Dockerfile
     container_name: ai-sdlc-factory-sandbox-manager
     depends_on:
       - api

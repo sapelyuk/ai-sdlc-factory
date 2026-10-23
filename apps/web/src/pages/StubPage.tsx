@@ -11,11 +11,11 @@ export function StubPage({ title }: StubPageProps) {
         <h1 className="text-2xl font-bold">{title}</h1>
         <Card>
           <CardHeader>
-            <CardTitle>В разработке</CardTitle>
+            <CardTitle>Under Development</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">
-              Страница «{title}» будет доступна в следующей итерации.
+              The &quot;{title}&quot; page will be available in the next iteration.
             </p>
           </CardContent>
         </Card>

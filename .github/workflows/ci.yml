@@ -139,25 +139,33 @@ jobs:
 
       - name: Check for Cyrillic characters
         run: |
-          echo "Checking for Cyrillic characters in tracked files..."
+          python3 - <<'PY'
+          import os
+          import sys
+          def is_cyrillic(char):
+              cp = ord(char)
+              return (0x0400 <= cp <= 0x04FF) or (0x0500 <= cp <= 0x052F)
           
-          # Search for Cyrillic in all text files, excluding node_modules and .git
-          MATCHES=$(grep -rI "[А-Яа-яёЁ]" \
-            --include="*.md" \
-            --include="*.yaml" \
-            --include="*.yml" \
-            --include="*.json" \
-            --include="*.go" \
-            --include="*.ts" \
-            --include="*.tsx" \
-            --exclude-dir=node_modules \
-            --exclude-dir=.git \
-            . || true)
-            
-          if [ -n "$MATCHES" ]; then
-            echo "::error::Cyrillic characters found. The repository is English-only."
-            echo "$MATCHES"
-            exit 1
-          fi
+          errors = []
+          extensions = ('.md', '.yaml', '.yml', '.json', '.go', '.ts', '.tsx', '.env', '.sh', '.ps1', '.rego', '.sql', '.drawio', '.css')
+          for root, dirs, files in os.walk('.'):
+              if '.git' in root or 'node_modules' in root:
+                  continue
+              for file in files:
+                  if file.endswith(extensions) or file.startswith('.env'):
+                      filepath = os.path.join(root, file)
+                      try:
+                          with open(filepath, 'r', encoding='utf-8') as f:
+                              for i, line in enumerate(f, 1):
+                                  if any(is_cyrillic(c) for c in line):
+                                      errors.append(f"{filepath}:{i}: {line.strip()}")
+                      except Exception:
+                          pass
           
-          echo "OK: no Cyrillic characters found."
+          if errors:
+              print("::error::Cyrillic characters found. Repository is English-only.")
+              for err in errors:
+                  print(err)
+              sys.exit(1)
+          print("OK: no Cyrillic characters found.")
+          PY

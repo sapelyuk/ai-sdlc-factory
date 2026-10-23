@@ -12,28 +12,28 @@ export function Dashboard() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">ai-sdlc-factory</h1>
           <Button variant="outline" onClick={logout}>
-            Выйти
+            Sign Out
           </Button>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Добро пожаловать</CardTitle>
+            <CardTitle>Welcome</CardTitle>
             <CardDescription>{user?.email} ({user?.role})</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-muted-foreground">
-              Это каркас Web UI платформы ai-sdlc-factory.
+              This is the Web UI scaffold for the ai-sdlc-factory platform.
             </p>
             <div className="flex gap-2 pt-2">
               <Link to="/registry/roles">
-                <Button>Роли</Button>
+                <Button>Roles</Button>
               </Link>
               <Link to="/registry/teams">
-                <Button variant="outline">Команды</Button>
+                <Button variant="outline">Teams</Button>
               </Link>
               <Link to="/registry/processes">
-                <Button variant="outline">Процессы</Button>
+                <Button variant="outline">Processes</Button>
               </Link>
             </div>
           </CardContent>

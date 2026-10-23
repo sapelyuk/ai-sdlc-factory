@@ -98,12 +98,12 @@ health:
 # ── Infrastructure Health ──────────────────────────────────
 
 check-infra:
-	@echo "Checking MinIO..."
-	@docker compose exec -T minio mc ready local || exit 1
+	@echo "Checking Silo..."
+	@$(COMPOSE) exec -T silo silo healthcheck ready || exit 1
 	@echo "Checking NATS..."
 	@curl -sf http://localhost:8222/healthz || exit 1
 	@echo "Checking Vault..."
-	@docker compose exec -T vault vault status || exit 1
+	@$(COMPOSE) exec -T vault vault status || exit 1
 	@echo "Checking OPA..."
 	@curl -sf http://localhost:8181/health || exit 1
 	@echo "All infra services healthy"
@@ -154,7 +154,7 @@ dev-api:
 	cd apps/api && go run cmd/api-server/main.go
 
 dev-worker:
-	cd apps/worker && go run cmd/orchestrator-worker/main.go
+	cd apps/worker && go run cmd/main.go
 
 dev-web:
 	cd apps/web && pnpm dev
