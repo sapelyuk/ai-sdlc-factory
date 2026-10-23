@@ -1,55 +1,55 @@
-# Как контрибьютить в ai-sdlc-factory
+# How to contribute to ai-sdlc-factory
 
-## Главное правило: никаких прямых коммитов в main
+## Golden rule: no direct commits to main
 
-Любое изменение проходит один и тот же путь:
+Any change follows the same path:
 
 ```
-issue → ветка → PR → main
+issue → branch → PR → main
 ```
 
-- Нет ветки без issue.
-- Нет прямых коммитов в `main`.
-- Нет force-push в `main`.
-- Защита ветки включена технически на уровне GitHub.
+- No branch without an issue.
+- No direct commits to `main`.
+- No force-push to `main`.
+- Branch protection is enforced at the GitHub level.
 
-Единственное исключение — стартовый bootstrap-коммит (PR #1).
+The only exception is the initial bootstrap commit (PR #1).
 
-## Именование веток
+## Branch naming
 
-`<тип>/<номер-issue>-<краткое-имя>`
+`<type>/<issue-number>-<short-name>`
 
-| Тип | Когда использовать |
+| Type | When to use |
 |---|---|
-| `feat/` | Новая функциональность |
-| `fix/` | Исправление бага |
-| `chore/` | Инфраструктура, инструменты, зависимости |
-| `docs/` | Только документация |
-| `refactor/` | Рефакторинг без изменения поведения |
-| `test/` | Только тесты |
-| `spike/` | Исследование с ограничением по времени |
+| `feat/` | New feature |
+| `fix/` | Bug fix |
+| `chore/` | Infrastructure, tools, dependencies |
+| `docs/` | Documentation only |
+| `refactor/` | Refactoring without behavior change |
+| `test/` | Tests only |
+| `spike/` | Time-boxed investigation |
 
-Примеры:
+Examples:
 - `feat/42-implement-agent-config`
 - `fix/107-fix-drift-detector`
 - `chore/1-initial-scaffold`
 - `docs/88-update-ontology-spec`
 
-## Сообщения коммитов
+## Commit messages
 
-Формат — Conventional Commits. Каждый коммит ссылается на issue.
+Format: Conventional Commits. Each commit references an issue.
 
 ```
-<тип>(<область>): <краткое описание> (#<issue>)
+<type>(<scope>): <short description> (#<issue>)
 
-<тело, опционально>
+<body, optional>
 
 Refs #<issue>
 ```
 
-Допустимые типы: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `build`, `perf`, `revert`.
+Allowed types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `build`, `perf`, `revert`.
 
-Примеры:
+Examples:
 
 ```
 feat(orchestrator): implement sdlc_workflow in Temporal (#42)
@@ -71,70 +71,70 @@ docs(adr): add ADR-019 for event-bus abstraction (#95)
 Non-English content (including Cyrillic) is **not allowed**. A CI check enforces this policy.
 If you need to discuss a change in another language, do it in the PR comments (not in the codebase).
 
-## Пулы (Pull Requests)
+## Pull Requests
 
-- Открывайте PR как **draft** сразу после первого коммита.
-- Ссылайтесь на issue: `Closes #N` в теле PR.
-- Держите PR небольшими: **≤ 400 строк diff** там, где возможно.
-- Все проверки CI должны проходить.
-- Шаблон PR нужно заполнить полностью.
+- Open PRs as **draft** immediately after the first commit.
+- Reference the issue: `Closes #N` in the PR body.
+- Keep PRs small: **≤ 400 lines of diff** where possible.
+- All CI checks must pass.
+- Fill in the PR template completely.
 - PR description MUST be in English.
-- Мерж без approve запрещён (кроме self-review для solo-проекта).
+- Merging without approval is forbidden (except self-review for solo projects).
 
-**Запрет на удаление тестов:** В рамках PR запрещено удалять, пропускать (`t.Skip`/`xit`) или ослаблять существующие тесты, а также изменять пороги покрытия в CI ради обхода ошибок. Если тест устарел — это оформляется отдельным PR с меткой `type:refactor` и проходит ревью архитектора.
+**Test deletion prohibition:** Within a PR, it is forbidden to delete, skip (`t.Skip`/`xit`), or weaken existing tests, or to change CI coverage thresholds to bypass errors. If a test is outdated — this is handled in a separate PR labeled `type:refactor` and reviewed by the architect.
 
-## Стратегия слияния
+## Merge strategy
 
-- **Squash merge** в `main`.
-- Удаление ветки после мержа — включено.
-- Сообщение смерженного коммита = заголовок PR.
+- **Squash merge** into `main`.
+- Branch deletion after merge — enabled.
+- Merged commit message = PR title.
 
-## Что делать, если CI упал
+## What to do if CI fails
 
-- Исправляйте новым коммитом, не через `--amend` и не через force-push.
-- Каждый новый коммит ссылается на тот же issue.
-- Перезапустите CI, запушив новый коммит.
+- Fix with a new commit, not via `--amend` or force-push.
+- Each new commit references the same issue.
+- Re-run CI by pushing the new commit.
 
-## Работа с ИИ-агентами
+## Working with AI agents
 
-ИИ-агенты подчиняются тем же правилам.
+AI agents follow the same rules.
 
-- Как планируются работы — `docs/AGENT_KICKOFF.md`.
-- Как агенту работать над кодом — `docs/architecture/SYSTEM_DESIGN.md` §16.1.
-- Правила именования и работы с ADR — тот же §16.1.
+- How to plan work — `docs/AGENT_KICKOFF.md`.
+- How agents work on code — `docs/architecture/SYSTEM_DESIGN.md` §16.1.
+- Naming rules and ADR workflow — same §16.1.
 
-## Защищённые ветки
+## Protected branches
 
-`main` защищён:
+`main` is protected:
 
-- Требуется PR до слияния.
-- Требуются пройденные проверки: `ci`.
-- Требуется разрешение всех обсуждений в PR.
-- Запрещён force-push.
-- Запрещено удаление ветки.
+- PR required before merge.
+- Required passing checks: `ci`.
+- All PR discussions must be resolved.
+- Force-push forbidden.
+- Branch deletion forbidden.
 
-## Где что искать
+## Where to find what
 
-| Вопрос | Файл |
+| Question | File |
 |---|---|
-| Как планировать работу | `docs/AGENT_KICKOFF.md` |
-| Архитектура | `docs/architecture/SYSTEM_DESIGN.md` |
-| Архитектурные решения | `docs/architecture/ADR.md` |
-| Семантический слой | `docs/architecture/ONTOLOGY_SPEC.md` |
-| Состояния задач и гейты | `docs/architecture/SDLC_STATE_MACHINE.md` |
-| MCP-инструменты агентов | `docs/architecture/MCP_TOOLS.md` |
-| Локальный запуск | `deploy/compose/README.md` |
+| How to plan work | `docs/AGENT_KICKOFF.md` |
+| Architecture | `docs/architecture/SYSTEM_DESIGN.md` |
+| Architecture decisions | `docs/architecture/ADR.md` |
+| Semantic layer | `docs/architecture/ONTOLOGY_SPEC.md` |
+| Task states and gates | `docs/architecture/SDLC_STATE_MACHINE.md` |
+| Agent MCP tools | `docs/architecture/MCP_TOOLS.md` |
+| Local startup | `deploy/compose/README.md` |
 
-## Именование и соглашения
+## Naming and conventions
 
-- Имя сервиса: **`ai-sdlc-factory`**.
+- Service name: **`ai-sdlc-factory`**.
 - `apiVersion` YAML: **`ai-sdlc-factory/v1`**.
-- Namespace онтологии: **`ai-sdlc-factory/product-domain@^1`**.
-- Корневой каталог монорепозитория: **`ai-sdlc-factory/`**.
-- Префикс контейнеров и Helm-релизов: **`ai-sdlc-factory-*`**.
-- Слова MUST / SHOULD / MAY — в значении RFC 2119.
-- Идентификаторы (G, P, FR-*, NFR-*, ADR-*) стабильны.
+- Ontology namespace: **`ai-sdlc-factory/product-domain@^1`**.
+- Monorepo root directory: **`ai-sdlc-factory/`**.
+- Container and Helm release prefix: **`ai-sdlc-factory-*`**.
+- MUST / SHOULD / MAY — per RFC 2119.
+- Identifiers (G, P, FR-*, NFR-*, ADR-*) are stable.
 
-## Лицензия
+## License
 
-Проект распространяется под AGPLv3. Отправляя PR, вы соглашаетесь с условиями этой лицензии.
+This project is licensed under AGPLv3. By submitting a PR, you agree to the terms of this license.
