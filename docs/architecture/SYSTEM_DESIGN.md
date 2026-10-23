@@ -1,90 +1,90 @@
-# Архитектура платформы AI-SDLC: ai-sdlc-factory
+# AI-SDLC Platform Architecture: ai-sdlc-factory
 
-**Версия 1.9 · 22.10.2026**
+**Version 1.9 · 22.10.2026**
 
-## 0. Как читать документ
+## 0. How to read this document
 
-Три слоя:
-1. **Что строим** — разделы 1-3.
-2. **Как строим** — разделы 4-11.
-3. **Как исполнять** — разделы 12-17.
+Three layers:
+1. **What we build** — sections 1-3.
+2. **How we build** — sections 4-11.
+3. **How to execute** — sections 12-17.
 
-## 1. Контекст, цели, принципы
+## 1. Context, goals, principles
 
-### 1.1 Проблема
+### 1.1 Problem
 
-Разработка ПО фрагментирована: Git, CI/CD, трекер, знания и коммуникация — в разных системах без единого контекста. Нет декларативного описания команды (роли, модели, правила) и end-to-end контроля над агентами (наблюдаемость, бюджеты, безопасность). Платформа `ai-sdlc-factory` закрывает этот gap, объединяя инструменты в единую оркестрируемую среду с семантическим слоем.
+Software development is fragmented: Git, CI/CD, tracker, knowledge, and communication live in different systems without a unified context. There is no declarative description of teams (roles, models, rules) and no end-to-end control over agents (observability, budgets, security). The `ai-sdlc-factory` platform fills this gap by unifying tools into a single orchestratable environment with a semantic layer.
 
-### 1.2 Цели
+### 1.2 Goals
 
-- **G1.** Сборка команды из ИИ-агентов без написания кода.
-- **G2.** Каждая роль на разных моделях разных провайдеров.
-- **G3.** Настраиваемые базы знаний.
-- **G4.** Полный SDLC от исследования до эксплуатации.
-- **G5.** Подключаемые Git, CI/CD, трекер, дизайн.
-- **G6.** Управляемая автономность с human-approve.
-- **G7.** Наблюдаемость и воспроизводимость.
-- **G8.** Безопасность и контроль затрат.
-- **G9.** Семантический слой как первоклассный элемент.
-- **G10.** Архитектор — полноценная роль.
+- **G1.** Build a team of AI agents without writing code.
+- **G2.** Each role on different models from different providers.
+- **G3.** Configurable knowledge bases.
+- **G4.** Full SDLC from research to operations.
+- **G5.** Pluggable Git, CI/CD, tracker, design.
+- **G6.** Managed autonomy with human-approve.
+- **G7.** Observability and reproducibility.
+- **G8.** Security and cost control.
+- **G9.** Semantic layer as a first-class citizen.
+- **G10.** Architect as a full-fledged role.
 
-### 1.3 Не-цели v1
+### 1.3 Non-goals v1
 
-Платформа **не** реализует в v1:
-- Собственный Git-хостинг, CI-раннер, трекер задач (только адаптеры через MCP).
-- Обучение или fine-tuning моделей — используются готовые.
-- Публичный маркетплейс ролей/команд — вне scope v1.
-- Полноценная мультитенантность с биллингом: вне scope v1 (один `workspace_id`).
+The platform does **not** implement in v1:
+- Own Git hosting, CI runner, task tracker (only adapters via MCP).
+- Model training or fine-tuning — pre-trained models are used.
+- Public marketplace of roles/teams — out of scope for v1.
+- Full multitenancy with billing: out of scope for v1 (single `workspace_id`).
 
-### 1.4 Принципы
+### 1.4 Principles
 
-- **P1.** Роль как декларация (YAML).
-- **P2.** Модельная агностичность через LLM Gateway.
-- **P3.** Артефакты вместо памяти (Git, трекер, семантика).
-- **P4.** Надёжное исполнение (durable execution).
-- **P5.** Безопасность по умолчанию.
-- **P6.** Настраиваемая автономность (policy-as-code).
-- **P7.** Наблюдаемость как функция.
-- **P8.** Инструменты через MCP.
-- **P9.** Верификация независима от автора.
-- **P10.** Семантика прежде текста.
-- **P11.** Диаграммы как код.
-- **P12.** Профили развёртывания (local-dev, local-full, prod).
+- **P1.** Role as declaration (YAML).
+- **P2.** Model agnosticism via LLM Gateway.
+- **P3.** Artifacts over memory (Git, tracker, semantics).
+- **P4.** Durable execution.
+- **P5.** Security by default.
+- **P6.** Configurable autonomy (policy-as-code).
+- **P7.** Observability as a feature.
+- **P8.** Tools via MCP.
+- **P9.** Verification independent of author.
+- **P10.** Semantics over text.
+- **P11.** Diagrams as code.
+- **P12.** Deployment profiles (local-dev, local-full, prod).
 
-## 2. Глоссарий
+## 2. Glossary
 
-| Термин | Значение |
+| Term | Meaning |
 |---|---|
-| Роль (Role) | Шаблон агента: назначение, инструкции, инструменты, модель |
-| Агент (Agent) | Экземпляр роли с моделью, настройками и бюджетом |
-| Команда (Team) | Агенты + топология + процесс + знания |
-| Процесс (Process) | Декларативный workflow SDLC |
-| Задача (Task) | Единица работы в трекере и оркестраторе |
-| Гейт (Gate) | Автопроверка / агентное ревью / approve человека |
-| SLP | Онтология платформы ai-sdlc-factory |
-| SLPr | Доменная модель продукта |
-| AM | Architecture Model (C4-модель) |
+| Role | Agent template: purpose, instructions, tools, model |
+| Agent | Role instance with a model, settings, and budget |
+| Team | Agents + topology + process + knowledge |
+| Process | Declarative SDLC workflow |
+| Task | Unit of work in the tracker and orchestrator |
+| Gate | Auto-check / agent review / human approve |
+| SLP | Ontology of the ai-sdlc-factory platform |
+| SLPr | Product domain model |
+| AM | Architecture Model (C4 model) |
 
-## 3. Требования
+## 3. Requirements
 
-### 3.1 Функциональные
+### 3.1 Functional
 
-- **FR-TEAM.** Каталог ролей, создание/клонирование/откат, конструктор команды.
-- **FR-KB.** Иерархия скоупов, источники (файлы, URL, Git), гибридный поиск.
-- **FR-SEM.** SLP как публичный контракт; SLPr для каждого проекта; API.
-- **FR-ARCH.** AM продукта; C4-диаграммы; версионируемые артефакты; ADR.
-- **FR-GIT.** OAuth/GitHub App, PR-flow, защищённые ветки.
-- **FR-CI.** Уровни тестирования, CI-интеграция, окружения, стратегии выката.
-- **FR-DES/RES/PM.** Дизайн (Figma), исследования, двусторонняя синхронизация с трекером.
-- **FR-OPS.** Консоль прогонов, учёт стоимости, журнал аудита.
+- **FR-TEAM.** Role catalog, create/clone/rollback, team builder.
+- **FR-KB.** Scope hierarchy, sources (files, URLs, Git), hybrid search.
+- **FR-SEM.** SLP as a public contract; SLPr per project; API.
+- **FR-ARCH.** Product AM; C4 diagrams; versioned artifacts; ADR.
+- **FR-GIT.** OAuth/GitHub App, PR-flow, protected branches.
+- **FR-CI.** Test levels, CI integration, environments, rollout strategies.
+- **FR-DES/RES/PM.** Design (Figma), research, bidirectional sync with tracker.
+- **FR-OPS.** Run console, cost tracking, audit log.
 
-### 3.2 Нефункциональные
+### 3.2 Non-functional
 
-NFR-1 изоляция; NFR-2 надёжность; NFR-3 масштабируемость; NFR-4 наблюдаемость (OTel); NFR-5 безопасность (Vault, RBAC); NFR-6 расширяемость; NFR-7 воспроизводимость; NFR-8 развёртывание (Compose -> K8s); NFR-9 стоимость; NFR-10 p95 подграфа < 150 мс.
+NFR-1 isolation; NFR-2 reliability; NFR-3 scalability; NFR-4 observability (OTel); NFR-5 security (Vault, RBAC); NFR-6 extensibility; NFR-7 reproducibility; NFR-8 deployment (Compose -> K8s); NFR-9 cost; NFR-10 p95 subgraph < 150 ms.
 
-## 4. Архитектурный обзор
+## 4. Architecture overview
 
-### 4.1 Контекст
+### 4.1 Context
 
 ```
 Owner --> Platform
@@ -98,7 +98,7 @@ Platform --> Research (web, API)
 KBSRC --> Platform
 ```
 
-### 4.2 Контейнеры
+### 4.2 Containers
 
 **Control Plane:** Web UI, Platform API, Registry, Policy & Approval, IAM, Semantic Service
 
@@ -110,39 +110,39 @@ KBSRC --> Platform
 
 ### 4.3 Web UI
 
-**Роль:** единственный пользовательский интерфейс Control Plane; контейнер `ai-sdlc-factory-web`, раздаётся Nginx под `http://localhost:3000` (NFR-8).
+**Role:** the only user-facing interface of the Control Plane; `ai-sdlc-factory-web` container served by Nginx at `http://localhost:3000` (NFR-8).
 
-**Ответственность:**
-- Аутентификация и управление сессией (JWT, см. §12.2).
-- Просмотр каталога ролей, команд и процессов (Registry) — FR-TEAM.
-- Журнал аудита и стоимость прогонов (FR-OPS) — в перспективе.
-- Конструктор команд (FR-TEAM) — в перспективе.
-- Консоль прогонов и дашборды наблюдаемости (FR-OPS, NFR-4) — в перспективе.
+**Responsibilities:**
+- Authentication and session management (JWT, see §12.2).
+- Browse role, team, and process catalogs (Registry) — FR-TEAM.
+- Audit log and run costs (FR-OPS) — future.
+- Team builder (FR-TEAM) — future.
+- Run console and observability dashboards (FR-OPS, NFR-4) — future.
 
-**Границы:** UI не обращается к БД, Temporal и хранилищам напрямую — только через Platform API (`/api/v1/...`). Технические решения — §12.2.
+**Boundaries:** UI does not access the database, Temporal, or storage directly — only through Platform API (`/api/v1/...`). Technical decisions — §12.2.
 
-## 5. Семантический слой
+## 5. Semantic layer
 
-### 5.1 Назначение
+### 5.1 Purpose
 
-Формальная машиночитаемая модель: онтология + экземпляры + правила + API.
+Formal machine-readable model: ontology + instances + rules + API.
 
-### 5.2 Три контура
+### 5.2 Three loops
 
-- **SLP** — классы: Role, Team, Agent, Process, Stage, Gate, ArtifactType, Tool, ModelProfile
-- **SLPr** — доменные сущности продукта + бизнес-правила
-- **AM** — C4-классы: System, Container, Component, DataStore, Interface, Dependency
+- **SLP** — classes: Role, Team, Agent, Process, Stage, Gate, ArtifactType, Tool, ModelProfile
+- **SLPr** — product domain entities + business rules
+- **AM** — C4 classes: System, Container, Component, DataStore, Interface, Dependency
 
-### 5.3 Хранение
+### 5.3 Storage
 
-Property graph в PostgreSQL:
+Property graph in PostgreSQL:
 - `sem_nodes(id UUIDv7, workspace_id, project_id NULL, layer, kind, label, props JSONB, version, status)`
 - `sem_edges(id UUIDv7, src_id, dst_id, kind, props JSONB, valid_from, valid_to)`
-- Индексы: GIN по props, btree по kind/project_id, pgvector в sem_embeddings
+- Indexes: GIN on props, btree on kind/project_id, pgvector in sem_embeddings
 
-## 6. Роль Архитектора и диаграммы
+## 6. Architect role and diagrams
 
-### 6.1 Спецификация роли
+### 6.1 Role specification
 
 ```yaml
 apiVersion: ai-sdlc-factory/v1
@@ -161,15 +161,15 @@ spec:
 
 ### 6.2 Self-correction loop
 
-Валидатор на Go-бекенде проверяет:
-1. синтаксис DSL (Mermaid/Structurizr/PlantUML)
-2. семантические ссылки — все узлы должны существовать в AM
-3. конфликты контрактов
-4. отсутствие запрещённых зависимостей
+The Go backend validator checks:
+1. DSL syntax (Mermaid/Structurizr/PlantUML)
+2. Semantic links — all nodes must exist in the AM
+3. Contract conflicts
+4. Absence of forbidden dependencies
 
-При ошибке — структурированный стектрейс агенту. Максимум 3 итерации.
+On error — a structured stacktrace to the agent. Maximum 3 iterations.
 
-## 7. Доменная модель
+## 7. Domain model
 
 ### 7.1 ER
 
@@ -187,234 +187,234 @@ ARTIFACT ||--o| DIAGRAM : may_be
 ARTIFACT ||--o| ADR : may_be
 ```
 
-## 8. Оркестрация
+## 8. Orchestration
 
-### 8.1 Иерархия исполнения
+### 8.1 Execution hierarchy
 
-Run (workflow) -> StageRun -> TaskRun -> AgentStep (activity). Каждый AgentStep идемпотентен.
+Run (workflow) -> StageRun -> TaskRun -> AgentStep (activity). Each AgentStep is idempotent.
 
-### 8.2 Цикл агента
+### 8.2 Agent loop
 
-Orchestrator -> Agent Runtime -> Semantic Service (подграф) -> Knowledge Service (поиск) -> LLM Gateway (запрос) -> Tool Gateway (вызов) -> Policy Engine (проверка) -> Result
+Orchestrator -> Agent Runtime -> Semantic Service (subgraph) -> Knowledge Service (search) -> LLM Gateway (request) -> Tool Gateway (call) -> Policy Engine (check) -> Result
 
-### 8.3 Передача между агентами
+### 8.3 Agent-to-agent handoff
 
-Агенты не обмениваются «сырой» перепиской. Все данные проходят через семантический слой (SLPr) и базы знаний (KB). Между агентами передаётся строго структурированный handoff-пакет.
+Agents do not exchange raw correspondence. All data passes through the semantic layer (SLPr) and knowledge bases (KB). Agents exchange only a strictly structured handoff package.
 
-### 8.4 Handoff-пакет
+### 8.4 Handoff package
 
-Между агентами передается не сырая переписка, а строго структурированный JSON-пакет (handoff). Получатель MUST валидировать пакет по JSON-схеме. Если пакет неполон или противоречив, он возвращается отправителю с перечнем ошибок. Это останавливает «эффект испорченного телефона».
+Agents exchange not raw correspondence, but a strictly structured JSON package (handoff). The receiver MUST validate the package against the JSON schema. If the package is incomplete or contradictory, it is returned to the sender with an error list. This stops the "broken telephone" effect.
 
-Обязательные поля handoff-пакета:
-- `goal`: четкая цель задачи.
-- `context_refs`: URI или ссылки на артефакты и сущности семантического слоя (не копии текста).
-- `acceptance_criteria`: критерии приемки (Given/When/Then).
-- `constraints`: ограничения (стек, правила, запреты).
-- `decisions_made`: принятые ранее решения (ADR), которые нельзя нарушать.
-- `open_questions`: вопросы, требующие решения.
-- `expected_output_schema`: JSON-схема ожидаемого результата.
+Required handoff package fields:
+- `goal`: clear task objective.
+- `context_refs`: URIs or links to artifacts and semantic layer entities (not text copies).
+- `acceptance_criteria`: acceptance criteria (Given/When/Then).
+- `constraints`: limitations (stack, rules, prohibitions).
+- `decisions_made`: prior decisions (ADR) that must not be violated.
+- `open_questions`: questions requiring resolution.
+- `expected_output_schema`: JSON schema for the expected result.
 
-### 8.5 LLM Gateway и профили моделей
+### 8.5 LLM Gateway and model profiles
 
-**Профили возможностей пиннят версию модели.**
+**Capability profiles pin the model version.**
 
-Профиль (`code-strong`, `reasoning-strong`, `code-fast`, `cheap-bulk`, `local-private`) — это capability-контракт. В `model_profiles` хранится **конкретная пиненная версия** модели (`claude-sonnet-4-20250101`), не alias (`-latest`). Это защищает от тихого изменения контракта профиля при перепинке alias провайдером. Смена модели — R2-действие (см. ADR-021).
+A profile (`code-strong`, `reasoning-strong`, `code-fast`, `cheap-bulk`, `local-private`) is a capability contract. `model_profiles` stores the **specific pinned version** of the model (`claude-sonnet-4-20250101`), not an alias (`-latest`). This protects against silent profile contract changes when the provider repins the alias. Model change is an R2 action (see ADR-021).
 
 **Fallback per `(provider, model)`.**
 
-Health-трекинг ведётся по паре `(provider, model_id)`, не по провайдеру. Классификация ошибок:
+Health tracking is per `(provider, model_id)` pair, not per provider. Error classification:
 
-- `404` / `401` / `403` / `400` → не availability-события. Логируются, не вызывают cooldown.
-- `429` / `5xx` / `timeout` → availability. Cooldown с exponential backoff (60s → 4h, jitter). После cooldown — пробный запрос; при успехе — сброс, при повторе — расширение cooldown.
+- `404` / `401` / `403` / `400` → not availability events. Logged, no cooldown triggered.
+- `429` / `5xx` / `timeout` → availability. Cooldown with exponential backoff (60s → 4h, jitter). After cooldown — a probe request; on success — reset, on repeat — extend cooldown.
 
-Это предотвращает flapping при config-ошибке в одной модели (весь провайдер остаётся доступным для других моделей).
+This prevents flapping on a config error in one model (the whole provider remains available for other models).
 
-**Учёт стоимости на двух уровнях.**
+**Cost accounting at two levels.**
 
-- `llm_logical_calls` — одна строка на логический запрос, привязанная к `run_id`/`task_id`/`agent_id`. Хранит `final_cost_usd` (успешная попытка) и `total_cost_usd` (сумма всех попыток).
-- `llm_attempts` — N строк на HTTP-попытки, с классификацией статуса и `cost_usd` per attempt.
+- `llm_logical_calls` — one row per logical request, tied to `run_id`/`task_id`/`agent_id`. Stores `final_cost_usd` (successful attempt) and `total_cost_usd` (sum of all attempts).
+- `llm_attempts` — N rows per HTTP attempt, with status classification and `cost_usd` per attempt.
 
-Это корректно считает NFR-9 (стоимость) при ретраях и mid-stream failover. См. ADR-021.
+This correctly accounts for NFR-9 (cost) on retries and mid-stream failover. See ADR-021.
 
-## 9. Базы знаний
+## 9. Knowledge bases
 
-### 9.1 Модель и скоупы
+### 9.1 Model and scopes
 
-Иерархия: `KnowledgeBase` (SLP) → `Source` → `Document` → `Chunk` (колонка `chunk_index` в `kb_documents`, миграция `0003`).
+Hierarchy: `KnowledgeBase` (SLP) → `Source` → `Document` → `Chunk` (`chunk_index` column in `kb_documents`, migration `0003`).
 
-Скоупы: `platform`, `team`, `project`, `role`, `task` (FR-KB «Иерархия скоупов»).
+Scopes: `platform`, `team`, `project`, `role`, `task` (FR-KB "Scope hierarchy").
 
-### 9.2 Индексация
+### 9.2 Indexing
 
-Источники -> Коннекторы -> Нормализация -> Разбиение -> Эмбеддинги (pgvector) + FTS
+Sources -> Connectors -> Normalization -> Chunking -> Embeddings (pgvector) + FTS
 
-### 9.3 Поиск
+### 9.3 Search
 
-Гибридный с RRF, фильтр по sem_refs.
+Hybrid with RRF, filtered by sem_refs.
 
-## 10. Безопасность
+## 10. Security
 
-### 10.1 Изоляция исполнения
+### 10.1 Execution isolation
 
-Каждый агент работает в изолированной песочнице (gVisor) без доступа к сети и секретам. Секреты подставляет Tool Gateway (credential brokering).
+Each agent runs in an isolated sandbox (gVisor) with no network or secrets access. Secrets are injected by the Tool Gateway (credential brokering).
 
-### 10.2 Недоверенный контент и prompt injection
+### 10.2 Untrusted content and prompt injection
 
-**Правило разделения возможностей (Separation of Capabilities):**
-Один агент в одном шаге не должен одновременно иметь доступ к трем вещам:
-1. Приватным данным (БД, секреты, исходный код).
-2. Недоверенному контенту (веб-страницы, тикеты, README чужих репозиториев).
-3. Исходящему каналу (запись в Git, отправка запросов в интернет, комментарии в трекере).
+**Separation of Capabilities rule:**
+One agent in one step must not simultaneously have access to three things:
+1. Private data (database, secrets, source code).
+2. Untrusted content (web pages, tickets, README files from other repos).
+3. Outbound channel (Git writes, internet requests, tracker comments).
 
-*Пример:* Агент-исследователь (`product-researcher`) имеет доступ к вебу (п.2), но не имеет прав на запись в Git (п.3). Его результат — структурированный отчёт (JSON), который передается агенту-разработчику. Агент-разработчик имеет доступ к коду (п.1) и Git (п.3), но не имеет доступа к вебу (п.2) в рамках этой же задачи. Это предотвращает выполнение вредоносных инструкций, полученных из внешнего контента.
+*Example:* A research agent (`product-researcher`) has web access (item 2), but no Git write permissions (item 3). Its output is a structured report (JSON) passed to a developer agent. The developer agent has code access (item 1) and Git access (item 3), but no web access (item 2) within the same task. This prevents execution of malicious instructions received from external content.
 
-### 10.3 Коды ответа аутентификации
+### 10.3 Authentication response codes
 
-Тела ошибок ниже — фактические сообщения middleware (`apps/api/internal/transport/http`, `apps/semantic/transport/http`), формат тела `{"error":"<сообщение>"}`.
+Error bodies below are actual middleware messages (`apps/api/internal/transport/http`, `apps/semantic/transport/http`), body format `{"error":"<message>"}`.
 
-| Ситуация | HTTP-код | Заголовки / тело |
+| Situation | HTTP code | Headers / body |
 |---|---|---|
-| Отсутствует `Authorization` (JWT-middleware) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"`, тело `{"error":"missing Authorization header"}` |
-| Неверный формат `Authorization` (не `Bearer <token>`) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"`, тело `{"error":"invalid Authorization header format"}` |
-| Невалидный или просроченный токен | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"`, тело `{"error":"invalid or expired token"}` |
-| Отсутствует или равен `uuid.Nil` `X-Workspace-ID` (tenant-middleware, legacy-режим) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"` (semantic: `realm="semantic"`), тело `{"error":"missing X-Workspace-ID header"}` |
-| Отсутствует или равен `uuid.Nil` `X-Author-ID` (tenant-middleware, legacy-режим) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"` (semantic: `realm="semantic"`), тело `{"error":"missing X-Author-ID header"}` |
-| Невалидный формат UUID в `X-Workspace-ID` | `400 Bad Request` | тело `{"error":"X-Workspace-ID must be a valid UUID"}` |
-| Невалидный формат UUID в `X-Author-ID` | `400 Bad Request` | тело `{"error":"X-Author-ID must be a valid UUID"}` |
-| Валидные креды, но `approver = author` | `403 Forbidden` | тело `{"error":"approver cannot be the author"}` |
-| Валидные креды, но роль ниже требуемой (RBAC) | `403 Forbidden` | тело `{"error":"insufficient role: requires <role>"}` |
-| Успешная аутентификация и авторизация | `2xx` | — |
+| Missing `Authorization` (JWT-middleware) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"`, body `{"error":"missing Authorization header"}` |
+| Invalid `Authorization` format (not `Bearer <token>`) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"`, body `{"error":"invalid Authorization header format"}` |
+| Invalid or expired token | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"`, body `{"error":"invalid or expired token"}` |
+| Missing or `uuid.Nil` `X-Workspace-ID` (tenant-middleware, legacy mode) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"` (semantic: `realm="semantic"`), body `{"error":"missing X-Workspace-ID header"}` |
+| Missing or `uuid.Nil` `X-Author-ID` (tenant-middleware, legacy mode) | `401 Unauthorized` | `WWW-Authenticate: Bearer realm="api"` (semantic: `realm="semantic"`), body `{"error":"missing X-Author-ID header"}` |
+| Invalid UUID format in `X-Workspace-ID` | `400 Bad Request` | body `{"error":"X-Workspace-ID must be a valid UUID"}` |
+| Invalid UUID format in `X-Author-ID` | `400 Bad Request` | body `{"error":"X-Author-ID must be a valid UUID"}` |
+| Valid creds but `approver = author` | `403 Forbidden` | body `{"error":"approver cannot be the author"}` |
+| Valid creds but role below required (RBAC) | `403 Forbidden` | body `{"error":"insufficient role: requires <role>"}` |
+| Successful authentication and authorization | `2xx` | — |
 
-**Примечание:** `uuid.Nil` определяется после парсинга UUID, поэтому нулевой идентификатор в любой допустимой форме записи (`00000000-0000-0000-0000-000000000000`, 32 hex-символа, `urn:uuid:…`, `{…}`) трактуется как отсутствующий заголовок → `401`. `GET /healthz`, `GET /readyz` и `GET /metrics` не требуют аутентификации. `POST /api/v1/auth/login` также доступен без токена.
+**Note:** `uuid.Nil` is determined after UUID parsing, so a zero identifier in any valid form (`00000000-0000-0000-0000-000000000000`, 32 hex chars, `urn:uuid:…`, `{…}`) is treated as a missing header → `401`. `GET /healthz`, `GET /readyz`, and `GET /metrics` do not require authentication. `POST /api/v1/auth/login` is also available without a token.
 
-### 10.4 Уровни риска
+### 10.4 Risk levels
 
-- R0 (чтение) — авто
-- R1 (локальная запись) — авто
-- R2 (значимое) — по профилю
-- R3 (необратимое) — всегда approve человека
+- R0 (read) — auto
+- R1 (local write) — auto
+- R2 (significant) — per profile
+- R3 (irreversible) — always human approve
 
-## 11. Интеграции, наблюдаемость, стоимость, развёртывание
+## 11. Integrations, Observability, Cost, Deployment
 
-### 11.1 Интеграции
+### 11.1 Integrations
 
-Внешние системы не дублируются внутри платформы — это источники и приёмники артефактов (§1.4 P3). Все обращения к ним идут через Tool Gateway поверх MCP (ADR-005, ADR-022): Tool Gateway загружает схемы инструментов, фильтрует их по `Role.tools.allow` / `Role.tools.deny`, проверяет политику, подставляет секреты, выполняет вызов и пишет его в аудит (`MCP_TOOLS.md` §5). Реализация: `mark3labs/mcp-go` (см. ADR-022). Реестр инструментов по ролям — `docs/architecture/MCP_TOOLS.md`.
+External systems are not duplicated inside the platform — they are sources and sinks of artifacts (§1.4 P3). All access to them goes through the Tool Gateway over MCP (ADR-005, ADR-022): the Tool Gateway loads tool schemas, filters them by `Role.tools.allow` / `Role.tools.deny`, checks policy, injects secrets, executes the call, and writes it to the audit log (`MCP_TOOLS.md` §5). Implementation: `mark3labs/mcp-go` (see ADR-022). Tool registry by role — `docs/architecture/MCP_TOOLS.md`.
 
-| Интеграция | Что даёт платформе | Требование | Инструменты (MCP) |
+| Integration | What it gives the platform | Requirement | Tools (MCP) |
 |---|---|---|---|
-| VCS (GitHub / GitLab / Gitea) | Ветки, коммиты, PR, диффы | FR-GIT | `git.clone`, `git.branch`, `git.commit`, `git.push`, `git.diff` |
-| CI/CD | Запуск проверок, статус, артефакты сборки | FR-CI | `ci.trigger`, `ci.status` |
-| Deploy | Выкат в staging/prod, откат | FR-CI | `deploy.staging` (R2), `deploy.prod` (R3), `deploy.rollback` (R2) — §11.2 |
-| Трекер (Linear / Jira / GitHub Issues) | Двусторонняя синхронизация задач и комментариев | FR-DES/RES/PM | `tracker.comment`, `pm.update_backlog`, `bug.open` |
-| Дизайн (Figma) | Макеты, правки фреймов, дизайн-токены | FR-DES/RES/PM | `figma.read` (R0), `figma.write` (R2), `design.export_tokens` |
-| Исследования (веб, API) | Внешние источники, сводки, черновики в KB | FR-DES/RES/PM | `web.search`, `web.fetch`, `research.summarize` |
-| Диаграммы | DSL → SVG/PNG, валидация, публикация в KB | FR-ARCH | `diag.render`, `diag.validate`, `diag.publish` (ADR-006) |
-| Безопасность | SAST, сканирование зависимостей и секретов | NFR-5 | `sast.run`, `dep.scan`, `secret.scan` |
+| VCS (GitHub / GitLab / Gitea) | Branches, commits, PRs, diffs | FR-GIT | `git.clone`, `git.branch`, `git.commit`, `git.push`, `git.diff` |
+| CI/CD | Run checks, status, build artifacts | FR-CI | `ci.trigger`, `ci.status` |
+| Deploy | Rollout to staging/prod, rollback | FR-CI | `deploy.staging` (R2), `deploy.prod` (R3), `deploy.rollback` (R2) — §11.2 |
+| Tracker (Linear / Jira / GitHub Issues) | Bidirectional task and comment sync | FR-DES/RES/PM | `tracker.comment`, `pm.update_backlog`, `bug.open` |
+| Design (Figma) | Mocks, frame edits, design tokens | FR-DES/RES/PM | `figma.read` (R0), `figma.write` (R2), `design.export_tokens` |
+| Research (web, API) | External sources, summaries, KB drafts | FR-DES/RES/PM | `web.search`, `web.fetch`, `research.summarize` |
+| Diagrams | DSL → SVG/PNG, validation, publish to KB | FR-ARCH | `diag.render`, `diag.validate`, `diag.publish` (ADR-006) |
+| Security | SAST, dependency and secret scanning | NFR-5 | `sast.run`, `dep.scan`, `secret.scan` |
 
-Правила интеграций:
+Integration rules:
 
-1. **Секреты не попадают в песочницу.** Доступ к внешним системам — только через credential brokering в Tool Gateway (§10.1, ADR-009). Права `secrets.read` и `deploy.prod` явно запрещены ролям-разработчикам и архитектору (`MCP_TOOLS.md` §3.5, §3.6).
-2. **Права — часть декларации роли.** Набор инструментов задаётся в `Role.spec.tools` (§6.1) и проверяется политикой OPA по уровням R0–R3 (§10.4, ADR-013).
-3. **Разделение возможностей.** Агент, читающий недоверенный контент (веб, чужие тикеты), не получает канал записи (Git, комментарии трекера) в той же задаче (§10.2).
-4. **Каждый вызов — в аудите.** Журнал аудита и стоимость прогонов — FR-OPS; учёт стоимости — §11.4.
-5. **VCS-контракт неотличим от человеческой работы.** Агент открывает PR, а не пушит в защищённую ветку: `git.push_protected` запрещён, merge защищён (FR-GIT, `CONTRIBUTING.md`).
+1. **Secrets do not enter the sandbox.** Access to external systems — only via credential brokering in the Tool Gateway (§10.1, ADR-009). `secrets.read` and `deploy.prod` permissions are explicitly denied to developer and architect roles (`MCP_TOOLS.md` §3.5, §3.6).
+2. **Permissions are part of the role declaration.** The tool set is defined in `Role.spec.tools` (§6.1) and checked by OPA policy at R0–R3 levels (§10.4, ADR-013).
+3. **Separation of capabilities.** An agent reading untrusted content (web, other tickets) does not get a write channel (Git, tracker comments) in the same task (§10.2).
+4. **Every call is in the audit log.** Audit log and run costs — FR-OPS; cost accounting — §11.4.
+5. **VCS contract is indistinguishable from human work.** The agent opens a PR, not a push to a protected branch: `git.push_protected` is forbidden, merge is protected (FR-GIT, `CONTRIBUTING.md`).
 
-### 11.2 Тестирование, сборка, деплой
+### 11.2 Testing, build, deploy
 
-**CI — эталон качества.** Проверки в `.github/workflows/ci.yml` (lint → test → build по модулям `apps/*`, плюс линт и сборка фронтенда) обязательны до ревью: гейт `ci_green` переводит `InDev → CodeReview` (`SDLC_STATE_MACHINE.md` §3.9, §4). Покрытие нового кода ≥ 80% — условие того же гейта (`SDLC_STATE_MACHINE.md` §3.9, `CONTRIBUTING.md`). Ослабление тестов, порогов покрытия или конфигурации CI ради зелёной сборки запрещено (AGENTS.md, R3).
+**CI is the quality standard.** Checks in `.github/workflows/ci.yml` (lint → test → build per `apps/*` modules, plus frontend lint and build) are required before review: the `ci_green` gate moves `InDev → CodeReview` (`SDLC_STATE_MACHINE.md` §3.9, §4). New code coverage ≥ 80% is a condition of the same gate (`SDLC_STATE_MACHINE.md` §3.9, `CONTRIBUTING.md`). Weakening tests, coverage thresholds, or CI config for a green build is forbidden (AGENTS.md, R3).
 
-**Песочница для быстрой обратной связи.** Команды сборки и тестов агент выполняет в изолированной gVisor-песочнице без сети и секретов (§10.1, ADR-009) через `sandbox.exec`; прогон и отчёты тестов — `test.run`, `test.report` (`MCP_TOOLS.md` §3.7).
+**Sandbox for fast feedback.** Build and test commands are executed by the agent in an isolated gVisor sandbox without network and secrets (§10.1, ADR-009) via `sandbox.exec`; test runs and reports — `test.run`, `test.report` (`MCP_TOOLS.md` §3.7).
 
-**Уровни тестирования.** Уровень и объём проверок задаёт `FR-CI` (§3.1); переход дальше — по гейту `qa_passed`: зелёные тесты всех уровней, выполненные пороги покрытия, закрытые critical/high дефекты (`SDLC_STATE_MACHINE.md` §3.12). Сборка даёт образ, RC и SBOM под гейтом `sbom_signed` (§4).
+**Test levels.** The level and scope of checks is defined by `FR-CI` (§3.1); progression — via the `qa_passed` gate: green tests at all levels, met coverage thresholds, closed critical/high defects (`SDLC_STATE_MACHINE.md` §3.12). Build produces an image, RC, and SBOM under the `sbom_signed` gate (§4).
 
-**Нестабильные тесты** обрабатываются по политике проекта; повторные падения эскалируются человеку вместе с прочими предохранителями (`SDLC_STATE_MACHINE.md` §6, §7). Имена настроек политики фиксируются в контракте проекта, когда он будет формализован в `packages/contracts` — в v1 они не введены.
+**Flaky tests** are handled per project policy; repeated failures are escalated to a human along with other circuit breakers (`SDLC_STATE_MACHINE.md` §6, §7). Policy setting names are recorded in the project contract when the project is formalized in `packages/contracts` — in v1 they are not yet defined.
 
-**Окружения и стратегии выката.** Состав окружений и стратегия определяются на уровне проекта (см. `FR-CI` §3.1: «уровни тестирования, CI-интеграция, окружения, стратегии выката»; выкат в staging/prod — Этап 5 §14.1). Конкретная стратегия (rolling, canary, blue/green) — выбор конфигурации проекта, а не платформы. Платформа гарантирует только гейты: `prod_approved` — approve человека для R3, `deploy_healthy` — healthcheck и метрики в норме (`SDLC_STATE_MACHINE.md` §4, §8).
+**Environments and rollout strategies.** Environment composition and strategy are defined at the project level (see `FR-CI` §3.1: "test levels, CI integration, environments, rollout strategies"; rollout to staging/prod — Stage 5 §14.1). The specific strategy (rolling, canary, blue/green) is a project config choice, not a platform choice. The platform guarantees only gates: `prod_approved` — human approve for R3, `deploy_healthy` — healthcheck and metrics normal (`SDLC_STATE_MACHINE.md` §4, §8).
 
-**Миграции БД** — R2-действие (§10.4, `SDLC_STATE_MACHINE.md` §8): применяются `make migrate-up`, откатываются `make migrate-down`, каждая пара `.up.sql` / `.down.sql` лежит в `migrations/postgres/` (0001–0009, `deploy/compose/README.md`). Проверенные миграции — условие перехода `Release → Deploy` (§3.15).
+**Database migrations** — R2 action (§10.4, `SDLC_STATE_MACHINE.md` §8): applied via `make migrate-up`, rolled back via `make migrate-down`, each `.up.sql` / `.down.sql` pair lives in `migrations/postgres/` (0001–0009, `deploy/compose/README.md`). Verified migrations are a condition for `Release → Deploy` transition (§3.15).
 
-### 11.3 Наблюдаемость
+### 11.3 Observability
 
-OTel Collector + Jaeger (always). Langfuse + Prometheus + Grafana (profile observability).
+OTel Collector + Jaeger (always). Langfuse + Prometheus + Grafana (observability profile).
 
-### 11.4 Стоимость
+### 11.4 Cost
 
-Бюджеты: шаг, задача, прогон, день, месяц. Оценка до запуска. 80% — предупреждение; жёсткий — остановка.
+Budgets: step, task, run, day, month. Estimation before run. 80% — warning; hard — stop.
 
-**Атрибуция по двум уровням (ADR-021):**
+**Attribution at two levels (ADR-021):**
 
-- `llm_logical_calls.final_cost_usd` — стоимость, произведшая результат (то, что видит агент).
-- `llm_logical_calls.total_cost_usd` — реальный расход (включая ретраи и failover).
-- `llm_attempts` — детализация per HTTP call для диагностики.
+- `llm_logical_calls.final_cost_usd` — cost that produced a result (what the agent sees).
+- `llm_logical_calls.total_cost_usd` — actual spend (including retries and failover).
+- `llm_attempts` — per HTTP call detail for diagnostics.
 
-При агрегации бюджетов используется `total_cost_usd` (реальные деньги). При отображении «стоимость задачи» — `final_cost_usd` (результат).
+When aggregating budgets, use `total_cost_usd` (real money). When displaying "task cost" — `final_cost_usd` (result).
 
-### 11.5 Профили развёртывания
+### 11.5 Deployment profiles
 
-| Профиль | Назначение | RAM | Состав |
+| Profile | Purpose | RAM | Composition |
 |---|---|---|---|
-| local-dev | Разработка на 16 ГБ | ~10 ГБ | Ядро + OTel + Jaeger |
-| local-full | Разработка на 32+ ГБ | ~30 ГБ | Ядро + OTel + Jaeger + Langfuse + Prometheus + Grafana |
-| prod | Kubernetes | — | Полный стек + управляемые БД |
+| local-dev | Development on 16 GB | ~10 GB | Core + OTel + Jaeger |
+| local-full | Development on 32+ GB | ~30 GB | Core + OTel + Jaeger + Langfuse + Prometheus + Grafana |
+| prod | Kubernetes | — | Full stack + managed DBs |
 
-## 12. Технологический стек
+## 12. Technology stack
 
-### 12.1. Бэкенд
+### 12.1. Backend
 
-- **Язык:** Go 1.26+ (ADR-001).
-- **Фреймворки:** chi/echo, OpenAPI 3.1.
-- **MCP:** `github.com/mark3labs/mcp-go` (ADR-022) — Tool Gateway (MCP-сервер + клиент + ProxyTool).
-- **Оркестрация:** Temporal Go SDK (ADR-002), NATS JetStream.
-- **Наблюдаемость:** OpenTelemetry (NFR-4).
+- **Language:** Go 1.26+ (ADR-001).
+- **Frameworks:** chi/echo, OpenAPI 3.1.
+- **MCP:** `github.com/mark3labs/mcp-go` (ADR-022) — Tool Gateway (MCP server + client + ProxyTool).
+- **Orchestration:** Temporal Go SDK (ADR-002), NATS JetStream.
+- **Observability:** OpenTelemetry (NFR-4).
 
-### 12.2. Фронтенд (apps/web)
+### 12.2. Frontend (apps/web)
 
-- **Ядро:** Vite 6, React 18, TypeScript (strict, noUnusedLocals, noUnusedParameters).
-- **Стилизация:** Tailwind CSS v4 (CSS-first конфигурация, `@theme inline`), shadcn/ui (компоненты на Radix UI: Button, Input, Table, Card, Dialog, Dropdown, Tabs, Tooltip, Toast).
-- **Состояние и данные:** TanStack Query (серверное состояние, retry: 1, staleTime: 5 мин), Zustand v5 (глобальное состояние, auth store).
-- **Роутинг:** React Router DOM v7.18+, классический API (`BrowserRouter`, `Routes`, `Route`, `Navigate`).
-- **Тесты:** Vitest + Testing Library (jsdom), ESLint + typescript-eslint (`--max-warnings 0`).
-- **Сборка и раздача:** multi-stage Dockerfile (Node.js 20 Alpine — builder → Nginx Alpine — продакшн, порт 3000, SPA fallback, `/api/` proxy → `api:8000`, security-заголовки).
+- **Core:** Vite 6, React 18, TypeScript (strict, noUnusedLocals, noUnusedParameters).
+- **Styling:** Tailwind CSS v4 (CSS-first config, `@theme inline`), shadcn/ui (components on Radix UI: Button, Input, Table, Card, Dialog, Dropdown, Tabs, Tooltip, Toast).
+- **State and data:** TanStack Query (server state, retry: 1, staleTime: 5 min), Zustand v5 (global state, auth store).
+- **Routing:** React Router DOM v7.18+, classic API (`BrowserRouter`, `Routes`, `Route`, `Navigate`).
+- **Tests:** Vitest + Testing Library (jsdom), ESLint + typescript-eslint (`--max-warnings 0`).
+- **Build and serve:** multi-stage Dockerfile (Node.js 20 Alpine — builder → Nginx Alpine — production, port 3000, SPA fallback, `/api/` proxy → `api:8000`, security headers).
 
-**Архитектурные решения:**
+**Architectural decisions:**
 
-- **JWT-аутентификация:** токен хранится **в памяти** (Zustand store), не в `localStorage` (защита от XSS). При перезагрузке страницы сессия сбрасывается. `ProtectedRoute` редиректит на `/login`.
-- **API-клиент:** `src/lib/api.ts` — функции `login` и `fetchRoles` с явным `Authorization: Bearer <token>`; при `401` — `clearAuth()`.
-- **SSE (Server-Sent Events):** `src/lib/sse.ts` — обёртка над `EventSource` с `AbortController` для будущего стриминга логов агентов и обновлений. Пока заглушка.
-- **Страницы:** `/login` (аутентификация), `/` (Dashboard), `/registry/roles` (реальный API), `/registry/teams` и `/registry/processes` (stub).
+- **JWT authentication:** token is stored **in memory** (Zustand store), not in `localStorage` (XSS protection). On page reload, the session is cleared. `ProtectedRoute` redirects to `/login`.
+- **API client:** `src/lib/api.ts` — `login` and `fetchRoles` functions with explicit `Authorization: Bearer <token>`; on `401` — `clearAuth()`.
+- **SSE (Server-Sent Events):** `src/lib/sse.ts` — wrapper around `EventSource` with `AbortController` for future agent log streaming and updates. Currently a stub.
+- **Pages:** `/login` (authentication), `/` (Dashboard), `/registry/roles` (real API), `/registry/teams` and `/registry/processes` (stub).
 
-**Связанные требования:** NFR-8 (развёртывание через Compose → K8s), ADR-015 (единое имя `ai-sdlc-factory`).
+**Related requirements:** NFR-8 (deployment via Compose → K8s), ADR-015 (unified name `ai-sdlc-factory`).
 
-### 12.3. Данные
+### 12.3. Data
 
-- **СУБД:** PostgreSQL 18 + pgvector (property graph, ADR-003, ADR-019).
-- **Объектное хранилище:** Silo (S3-совместимый форк MinIO, ADR-020).
-- **Шина событий:** NATS JetStream.
+- **Database:** PostgreSQL 18 + pgvector (property graph, ADR-003, ADR-019).
+- **Object storage:** Silo (S3-compatible MinIO fork, ADR-020).
+- **Event bus:** NATS JetStream.
 
-### 12.4. Инфраструктура
+### 12.4. Infrastructure
 
-- **Контейнеризация:** Docker Compose (профили `local-dev`, `local-full`, ADR-018).
-- **Оркестрация:** Kubernetes (Helm) — в перспективе.
+- **Containerization:** Docker Compose (profiles `local-dev`, `local-full`, ADR-018).
+- **Orchestration:** Kubernetes (Helm) — future.
 
 ## 13. ADR
 
-Полный реестр — `docs/architecture/ADR.md` (ADR-001…ADR-022).
+Full registry — `docs/architecture/ADR.md` (ADR-001…ADR-022).
 
-## 14. План поставки
+## 14. Delivery plan
 
-### 14.1 Этапы
+### 14.1 Stages
 
-| Этап | Содержание | Критерий приёмки |
+| Stage | Content | Acceptance criterion |
 |---|---|---|
-| 0. Фундамент | Монорепозиторий, CI, Compose, БД, auth, Registry, UI, OTel+Jaeger, SLP v0 | Роль создаётся в UI; SLP v0 читается через API; `make up-local` работает |
-| 1. Один агент | Temporal, Agent Runtime, LLM Gateway, Tool Gateway, Sandbox | Агент создаёт ветку и открывает PR; CI зелёный |
-| 2. Команда | Роли PM/аналитик/архитектор/разработчик/ревьюер/QA; handoff; гейты | 6 агентов реализуют фичу от тикета до слитого PR |
-| 3. Знания | Knowledge Service, коннекторы, гибридный поиск; SLPr v1 + AST-индексация | Агент цитирует фрагмент; использует подграф SLPr |
-| 4. Архитектура | Architect role, AM v1, Diagram Service, self-correction, ADR, conformance | Архитектор строит C4, публикует в KB, ADR связаны с AM |
-| 5. Полный SDLC | Исследование, дизайн, трекер, CI/CD, GitOps, staging/prod | Демо-продукт от идеи до staging, затем prod с approve |
-| 6. Эксплуатация | Evals, replay, дашборды, hardening, K8s, бэкапы | Смена модели -> evals; security review; `make up-full` работает |
+| 0. Foundation | Monorepo, CI, Compose, DB, auth, Registry, UI, OTel+Jaeger, SLP v0 | Role created in UI; SLP v0 read via API; `make up-local` works |
+| 1. One agent | Temporal, Agent Runtime, LLM Gateway, Tool Gateway, Sandbox | Agent creates branch and opens PR; CI green |
+| 2. Team | PM/analyst/architect/developer/reviewer/QA roles; handoff; gates | 6 agents implement a feature from ticket to merged PR |
+| 3. Knowledge | Knowledge Service, connectors, hybrid search; SLPr v1 + AST indexing | Agent cites a fragment; uses SLPr subgraph |
+| 4. Architecture | Architect role, AM v1, Diagram Service, self-correction, ADR, conformance | Architect builds C4, publishes to KB, ADR linked to AM |
+| 5. Full SDLC | Research, design, tracker, CI/CD, GitOps, staging/prod | Demo product from idea to staging, then prod with approve |
+| 6. Operations | Evals, replay, dashboards, hardening, K8s, backups | Model swap -> evals; security review; `make up-full` works |
 
-## 15. Структура монорепозитория
+## 15. Monorepo structure
 
 ```
 ai-sdlc-factory/
@@ -430,90 +430,90 @@ ai-sdlc-factory/
   evals/ (roles, models)
 ```
 
-## 16. Инструкция для ИИ-агента
+## 16. Instructions for AI agent
 
-### 16.1 Правила работы
+### 16.1 Work rules
 
-1. Перед каждым этапом — план, дождись подтверждения.
-2. Этапы — строго по порядку.
-3. Контракты первыми (OpenAPI, JSON Schema, MCP-схемы), затем реализация.
-4. Отклонение от ADR — только через новый ADR.
-5. Безопасность не откладывается.
-6. Тесты — вместе с кодом; не ослабляй.
-7. Малые PR с Conventional Commits; ссылки на FR/NFR/ADR.
-8. Именование: `ai-sdlc-factory` везде.
-9. Профили развёртывания: указывай профиль для каждого нового сервиса.
+1. Before each stage — a plan, wait for confirmation.
+2. Stages — strictly in order.
+3. Contracts first (OpenAPI, JSON Schema, MCP schemas), then implementation.
+4. Deviation from ADR — only via a new ADR.
+5. Security is not deferred.
+6. Tests — with code; do not weaken.
+7. Small PRs with Conventional Commits; links to FR/NFR/ADR.
+8. Naming: `ai-sdlc-factory` everywhere.
+9. Deployment profiles: specify the profile for each new service.
 
-### 16.2 Definition of Done для этапа
+### 16.2 Definition of Done for a stage
 
-Перед завершением этапа (см. §14.1) убедись:
+Before completing a stage (see §14.1), verify:
 
-- [ ] CI зелёный (`ci.yml` — lint → test → build).
-- [ ] Покрытие нового кода ≥ 80% (`AGENTS.md`).
-- [ ] Логи без секретов.
-- [ ] Документация обновлена в том же PR.
-- [ ] Критерий приёмки этапа из §14.1 выполнен.
+- [ ] CI green (`ci.yml` — lint → test → build).
+- [ ] New code coverage ≥ 80% (`AGENTS.md`).
+- [ ] Logs without secrets.
+- [ ] Documentation updated in the same PR.
+- [ ] Stage acceptance criterion from §14.1 met.
 
-### 16.3 Чек-лист по семантическому слою
+### 16.3 Semantic layer checklist
 
-- [ ] Изменение SLP (мажорное) — R3, approval человека (`ONTOLOGY_SPEC.md` §2.3).
-- [ ] Изменение SLPr/AM — R2 с ревью.
-- [ ] Все артефакты ссылаются на URI сущностей (`ONTOLOGY_SPEC.md` §9, п. 5).
-- [ ] Снимок версии SLPr закреплён за прогоном (NFR-7).
+- [ ] SLP change (major) — R3, human approval (`ONTOLOGY_SPEC.md` §2.3).
+- [ ] SLPr/AM change — R2 with review.
+- [ ] All artifacts reference entity URIs (`ONTOLOGY_SPEC.md` §9, item 5).
+- [ ] SLPr version snapshot is pinned to the run (NFR-7).
 
-### 16.4 Чек-лист по архитектору и диаграммам
+### 16.4 Architect and diagrams checklist
 
-- [ ] Диаграмма прошла `diag.validate` (ADR-017).
-- [ ] Self-correction loop ≤ 3 итераций (§6.2, ADR-017).
-- [ ] ADR связаны с AM через сущности семантического слоя.
-- [ ] При изменении AM — зависимые диаграммы помечены как устаревшие.
+- [ ] Diagram passed `diag.validate` (ADR-017).
+- [ ] Self-correction loop ≤ 3 iterations (§6.2, ADR-017).
+- [ ] ADR linked to AM via semantic layer entities.
+- [ ] On AM change — dependent diagrams marked as outdated.
 
-### 16.5 Чек-лист по именованию
+### 16.5 Naming checklist
 
-- [ ] `apiVersion: ai-sdlc-factory/v1` в YAML.
-- [ ] Namespace онтологии: `ai-sdlc-factory/product-domain@^1`.
-- [ ] Корневой каталог: `ai-sdlc-factory/`.
-- [ ] Контейнеры и Helm-релизы: префикс `ai-sdlc-factory-*`.
-- [ ] Устаревшие имена (если были в истории) — отсутствуют (ADR-015).
+- [ ] `apiVersion: ai-sdlc-factory/v1` in YAML.
+- [ ] Ontology namespace: `ai-sdlc-factory/product-domain@^1`.
+- [ ] Root directory: `ai-sdlc-factory/`.
+- [ ] Containers and Helm releases: prefix `ai-sdlc-factory-*`.
+- [ ] Legacy names (if any in history) — absent (ADR-015).
 
-### 16.6 Тактика генерации файлов
+### 16.6 File generation tactics
 
-| Итерация | Задача | Файлы |
+| Iteration | Task | Files |
 |---|---|---|
-| 1. Инфраструктура и БД | Compose, миграции | Makefile, deploy/compose/**, migrations/** |
-| 2. Контракты и домен | OpenAPI, JSON Schema, доменные модели | packages/contracts/**, packages/ontology/**, backend/internal/domain/** |
-| 3. Семантика и архитектор | Semantic Service, AST-индексатор, Diagram Service | backend/internal/semantic/**, architect_engine/** |
-| 4. Песочницы и MCP | Tool Gateway, Sandbox Manager | backend/internal/sandbox/**, mcp/** |
-| 5. Оркестратор и LLM | Temporal workflow, Agent Runtime, LLM Gateway | backend/internal/llm/**, orchestra/**, transport/**, cmd/** |
-| 6. Фронтенд | Web UI | frontend/** |
+| 1. Infrastructure and DB | Compose, migrations | Makefile, deploy/compose/**, migrations/** |
+| 2. Contracts and domain | OpenAPI, JSON Schema, domain models | packages/contracts/**, packages/ontology/**, backend/internal/domain/** |
+| 3. Semantics and architect | Semantic Service, AST indexer, Diagram Service | backend/internal/semantic/**, architect_engine/** |
+| 4. Sandboxes and MCP | Tool Gateway, Sandbox Manager | backend/internal/sandbox/**, mcp/** |
+| 5. Orchestrator and LLM | Temporal workflow, Agent Runtime, LLM Gateway | backend/internal/llm/**, orchestra/**, transport/**, cmd/** |
+| 6. Frontend | Web UI | frontend/** |
 
-## 17. Открытые вопросы
+## 17. Open questions
 
-1. Structurizr DSL как основной формат C4 — согласовано?
-2. Глубина подграфа по умолчанию.
-3. Нужен ли RDF/OWL-экспорт в v1?
-4. Политика хранения снимков SLPr/AM/KB.
-5. Мультиязычность UI.
-6. Бюджеты по умолчанию.
-7. LiteLLM как прокси — допустим?
-8. Air-gapped режим в v1?
-9. Приоритетные провайдеры LLM.
-10. Политика по персональным данным.
-11. Парсить ли монорепо Bazel/Nx?
-12. Блокировка merge при critical drift — по умолчанию или нет?
+1. Structurizr DSL as the primary C4 format — agreed?
+2. Default subgraph depth.
+3. Is RDF/OWL export needed in v1?
+4. Snapshot retention policy for SLPr/AM/KB.
+5. UI multilingual support.
+6. Default budgets.
+7. LiteLLM as proxy — acceptable?
+8. Air-gapped mode in v1?
+9. Priority LLM providers.
+10. Personal data policy.
+11. Should we parse monorepo Bazel/Nx?
+12. Merge block on critical drift — default on or off?
 
-## Изменения документа
+## Document changes
 
-| Версия | Дата | Изменения |
+| Version | Date | Changes |
 |---|---|---|
-| 1.9 | 22.10.2026 | Добавлен ADR-022 (выбор `mark3labs/mcp-go` для Tool Gateway). §4.2, §11.1 и §12.1 ссылаются на ADR-022. (#83) |
-| 1.8 | 22.10.2026 | Восстановлена нумерация §1 (§1.1, §1.3), §5 (§5.1), §9 (§9.1), §16 (§16.2–§16.5). Ссылки на §1.4, §16.1, §16.6 сохранены. По итогам ревью: в §1.3 снята ссылка на ADR-015 (не про мультитенантность), в §9.1 уточнены источники иерархии KB, в §16.2 исправлен источник порога покрытия (`AGENTS.md`), в §16.5 сняты не подтверждённые историей имена (#78) |
+| 1.9 | 22.10.2026 | Added ADR-022 (selection of `mark3labs/mcp-go` for Tool Gateway). §4.2, §11.1, and §12.1 reference ADR-022. (#83) |
+| 1.8 | 22.10.2026 | Restored numbering: §1 (§1.1, §1.3), §5 (§5.1), §9 (§9.1), §16 (§16.2–§16.5). References to §1.4, §16.1, §16.6 preserved. Per review: removed ADR-015 reference from §1.3 (not about multitenancy), clarified KB hierarchy sources in §9.1, fixed coverage threshold source in §16.2 (`AGENTS.md`), removed unconfirmed historical names in §16.5 (#78) |
 
-| 1.7 | 22.10.2026 | Восстановлена нумерация §11: добавлены §11.1 «Интеграции» и §11.2 «Тестирование, сборка, деплой». Заголовок §11 дополнен словом «Стоимость» (§11.4). Ссылки §11.x не изменились (#75) |
-| 1.6 | 22.10.2026 | Добавлен §10.3 (Коды ответа аутентификации); тела ошибок приведены в соответствие с фактическими сообщениями middleware — Issue #71 |
-| 1.5 | 22.10.2026 | Добавлены §8.5 (LLM Gateway и профили моделей) и §11.4 (Стоимость); §11.3 и §11.5 приведены в порядок нумерации (#73) |
-| 1.4 | 21.10.2026 | Добавлены §4.3 (Web UI), §12 структурирован на §12.1–§12.4, добавлен §12.2 (Фронтенд) (#64) |
-| 1.3 | 20.10.2026 | Добавлены §8.3, §8.4 (Handoff-пакет), §10.1, §10.2 (Anti-Prompt Injection) |
-| 1.2 | 16.10.2026 | Первичная архитектура |
+| 1.7 | 22.10.2026 | Restored §11 numbering: added §11.1 "Integrations" and §11.2 "Testing, build, deploy". §11 heading extended with "Cost" (§11.4). §11.x references unchanged (#75) |
+| 1.6 | 22.10.2026 | Added §10.3 (Authentication response codes); error bodies aligned with actual middleware messages — Issue #71 |
+| 1.5 | 22.10.2026 | Added §8.5 (LLM Gateway and model profiles) and §11.4 (Cost); §11.3 and §11.5 numbering fixed (#73) |
+| 1.4 | 21.10.2026 | Added §4.3 (Web UI), §12 restructured into §12.1–§12.4, added §12.2 (Frontend) (#64) |
+| 1.3 | 20.10.2026 | Added §8.3, §8.4 (Handoff package), §10.1, §10.2 (Anti-Prompt Injection) |
+| 1.2 | 16.10.2026 | Initial architecture |
 
-**Конец документа.**
+**End of document.**
