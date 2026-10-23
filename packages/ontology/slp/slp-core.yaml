@@ -219,35 +219,35 @@ processes:
           gate: conformance_ok
           agents: [devops-engineer]
 # ── SLP v0 Classes ───────────────────────────────────────────
-# Платформенные классы онтологии SLP (Semantically-Layered Platform).
-# Каждый класс — узел уровня layer: SLP в property graph (sem_nodes).
+# Platform classes of the SLP (Semantically-Layered Platform) ontology.
+# Each class is a node at layer: SLP in the property graph (sem_nodes).
 # Refer to ONTOLOGY_SPEC.md §3.1 for the full list.
 classes:
   - name: Role
-    description: "Шаблон агента: назначение, инструкции, инструменты, модель"
+    description: "Agent template: purpose, instructions, tools, model"
   - name: Team
-    description: "Агенты + топология + процесс + знания"
+    description: "Agents + topology + process + knowledge"
   - name: Agent
-    description: "Экземпляр роли с моделью, настройками и бюджетом"
+    description: "Role instance with model, settings and budget"
   - name: Process
-    description: "Декларативный workflow SDLC"
+    description: "Declarative SDLC workflow"
   - name: Stage
-    description: "Стадия процесса"
+    description: "A stage of a process"
   - name: Gate
-    description: "Контрольная точка: автопроверка, агентное ревью или approve человека"
+    description: "Checkpoint: automated check, agent review or human approve"
   - name: ArtifactType
-    description: "Тип артефакта (документ, код, диаграмма, отчёт)"
+    description: "Kind of artifact (document, code, diagram, report)"
   - name: Tool
-    description: "MCP-инструмент, доступный агенту"
+    description: "MCP tool available to an agent"
   - name: ModelProfile
-    description: "Профиль возможностей LLM (code-strong, reasoning-strong, ...)"
+    description: "LLM capability profile (code-strong, reasoning-strong, ...)"
   - name: Capability
-    description: "Возможность роли (reasoning, coding, design, ...)"
+    description: "Role capability (reasoning, coding, design, ...)"
   - name: KnowledgeBase
-    description: "База знаний проекта или платформы"
+    description: "Knowledge base of a project or of the platform"
   - name: Scope
-    description: "Скоуп знаний (product, architecture, engineering, testing, ...)"
+    description: "Knowledge scope (product, architecture, engineering, testing, ...)"
   - name: Policy
-    description: "Политика безопасности или автономности (OPA/Rego)"
+    description: "Security or autonomy policy (OPA/Rego)"
   - name: AutonomyLevel
-    description: "Уровень автономности агента (R0-R3)"
+    description: "Agent autonomy level (R0-R3)"

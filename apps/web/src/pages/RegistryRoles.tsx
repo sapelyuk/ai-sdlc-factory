@@ -34,8 +34,8 @@ export function RegistryRoles() {
     <div className="min-h-screen bg-muted/40 p-4">
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Registry: Роли</h1>
-          <Button size="sm">Создать роль</Button>
+          <h1 className="text-2xl font-bold">Registry: Roles</h1>
+          <Button size="sm">Create Role</Button>
         </div>
 
         {isLoading && (
@@ -48,7 +48,7 @@ export function RegistryRoles() {
 
         {error && (
           <p className="rounded-md border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
-            Ошибка загрузки ролей
+            Failed to load roles
           </p>
         )}
 
@@ -56,17 +56,17 @@ export function RegistryRoles() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Имя</TableHead>
-                <TableHead>Версия</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead>Категория</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Category</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {roles.length === 0 ? (
                 <TableRow>
                   <td colSpan={4} className="text-center text-muted-foreground">
-                    Роли не найдены
+                    No roles found
                   </td>
                 </TableRow>
               ) : (

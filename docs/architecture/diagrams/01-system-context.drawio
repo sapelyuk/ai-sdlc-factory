@@ -7,40 +7,40 @@
         <mxCell id="title" value="&lt;b&gt;ai-sdlc-factory — System Context (C4 Level 1)&lt;/b&gt;&lt;br&gt;v1.2 | 16.10.2026 | ADR-001…ADR-020" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=14;spacing=8;fillColor=none;strokeColor=none;" vertex="1" parent="1">
           <mxGeometry x="40" y="30" width="600" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="platform" value="&lt;b&gt;ai-sdlc-factory&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Software System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Платформа сборки и оркестрации&lt;br&gt;продуктовых команд из ИИ-агентов" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+        <mxCell id="platform" value="&lt;b&gt;ai-sdlc-factory&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Software System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Platform for building and orchestrating&lt;br&gt;product teams of AI agents" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
           <mxGeometry x="620" y="380" width="360" height="140" as="geometry" />
         </mxCell>
-        <mxCell id="owner" value="&lt;b&gt;Владелец / оператор&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Person]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Собирает команды, задаёт&lt;br&gt;автономность и approve" style="shape=umlActor;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="owner" value="&lt;b&gt;Owner / Operator&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Person]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Assembles teams, sets&lt;br&gt;autonomy and approve" style="shape=umlActor;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="120" y="400" width="120" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="reviewers" value="&lt;b&gt;Люди-ревьюеры&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Person, опционально]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Подтверждают R3-действия,&lt;br&gt;проверяют архитектуру" style="shape=umlActor;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="reviewers" value="&lt;b&gt;Human reviewers&lt;/b&gt;&lt;br&gt;&lt;i&gt;[Person, optional]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Confirm R3 actions,&lt;br&gt;review the architecture" style="shape=umlActor;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="120" y="580" width="120" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="llm" value="&lt;b&gt;Провайдеры LLM&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;OpenAI, Anthropic, Google,&lt;br&gt;Ollama / vLLM (локально)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
+        <mxCell id="llm" value="&lt;b&gt;LLM providers&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;OpenAI, Anthropic, Google,&lt;br&gt;Ollama / vLLM (local)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
           <mxGeometry x="1300" y="180" width="240" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="vcs" value="&lt;b&gt;Git-хостинг&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;GitHub, GitLab, Gitea" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
+        <mxCell id="vcs" value="&lt;b&gt;Git hosting&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;GitHub, GitLab, Gitea" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
           <mxGeometry x="1300" y="330" width="240" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="ci" value="&lt;b&gt;CI/CD и облако&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;GitHub Actions, GitLab CI,&lt;br&gt;Argo CD, Kubernetes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
+        <mxCell id="ci" value="&lt;b&gt;CI/CD and cloud&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;GitHub Actions, GitLab CI,&lt;br&gt;Argo CD, Kubernetes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
           <mxGeometry x="1300" y="460" width="240" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="trackers" value="&lt;b&gt;Трекеры задач&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Linear, Jira, GitHub Issues,&lt;br&gt;встроенный Kanban" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
+        <mxCell id="trackers" value="&lt;b&gt;Issue trackers&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Linear, Jira, GitHub Issues,&lt;br&gt;built-in Kanban" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
           <mxGeometry x="1300" y="610" width="240" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="design" value="&lt;b&gt;Дизайн-инструменты&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Figma, HTML/SVG-прототипы" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
+        <mxCell id="design" value="&lt;b&gt;Design tools&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Figma, HTML/SVG prototypes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
           <mxGeometry x="1300" y="760" width="240" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="kbsrc" value="&lt;b&gt;Источники знаний&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Confluence, Notion, файлы,&lt;br&gt;веб-страницы, API-документация" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
+        <mxCell id="kbsrc" value="&lt;b&gt;Knowledge sources&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Confluence, Notion, files,&lt;br&gt;web pages, API docs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
           <mxGeometry x="40" y="180" width="240" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="res" value="&lt;b&gt;Источники исследований&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Веб-поиск, конкуренты,&lt;br&gt;отзывы, интервью" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
+        <mxCell id="res" value="&lt;b&gt;Research sources&lt;/b&gt;&lt;br&gt;&lt;i&gt;[External System]&lt;/i&gt;&lt;br&gt;&lt;br&gt;Web search, competitors,&lt;br&gt;reviews, interviews" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
           <mxGeometry x="40" y="680" width="240" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="e-owner" value="Использует UI,&lt;br&gt;подтверждает R3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="owner" target="platform">
+        <mxCell id="e-owner" value="Uses the UI,&lt;br&gt;confirms R3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="owner" target="platform">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e-reviewers" value="Approve, ревью" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="reviewers" target="platform">
+        <mxCell id="e-reviewers" value="Approve, review" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="reviewers" target="platform">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e-llm" value="HTTPS / API" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="platform" target="llm">
@@ -58,10 +58,10 @@
         <mxCell id="e-design" value="Figma API" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="platform" target="design">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e-kbsrc" value="Ингест знаний" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="kbsrc" target="platform">
+        <mxCell id="e-kbsrc" value="Knowledge ingest" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="kbsrc" target="platform">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e-res" value="Данные исследований" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="platform" target="res">
+        <mxCell id="e-res" value="Research data" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=#F5F5F5;fontSize=10;" edge="1" parent="1" source="platform" target="res">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>

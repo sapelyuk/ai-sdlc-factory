@@ -40,8 +40,8 @@ describe('Login Page', () => {
   it('renders login form', () => {
     render(<Login />, { wrapper: MemoryRouter })
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/пароль/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /войти/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 
   it('shows loading state on submit', async () => {
@@ -51,13 +51,13 @@ describe('Login Page', () => {
     render(<Login />, { wrapper: MemoryRouter })
 
     const emailInput = screen.getByLabelText(/email/i)
-    const passwordInput = screen.getByLabelText(/пароль/i)
-    const submitButton = screen.getByRole('button', { name: /войти/i })
+    const passwordInput = screen.getByLabelText(/password/i)
+    const submitButton = screen.getByRole('button', { name: /sign in/i })
 
     fireEvent.change(emailInput, { target: { value: 'admin@example.com' } })
     fireEvent.change(passwordInput, { target: { value: 'admin' } })
     fireEvent.click(submitButton)
 
-    expect(screen.getByRole('button', { name: /вход\.\.\./i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /signing in\.\.\./i })).toBeInTheDocument()
   })
 })

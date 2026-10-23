@@ -2,13 +2,13 @@
 #
 # tests/infra/test-otel-jaeger.sh
 #
-# Интеграционный тест: OTel Collector → Jaeger.
-# Проверяет, что трейс, отправленный через OTLP, появляется в Jaeger UI API.
+# Integration test: OTel Collector → Jaeger.
+# Verifies that a trace sent via OTLP appears in the Jaeger UI API.
 #
-# Использование:
+# Usage:
 #   bash tests/infra/test-otel-jaeger.sh [local-dev|local-full]
 #
-# Graceful skip, если Docker недоступен.
+# Graceful skip when Docker is unavailable.
 
 set -euo pipefail
 
@@ -36,29 +36,29 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   COMPOSE="$COMPOSE --env-file $ENV_FILE"
 fi
 
-# ── Проверка Docker ──────────────────────────────────────────────────
+# ── Docker check ───────────────────────────────────────────────────
 if ! command -v docker &>/dev/null || ! docker info &>/dev/null; then
-  echo "SKIP: Docker недоступен (пропускаем тест)"
+  echo "SKIP: Docker is unavailable (skipping test)"
   exit 0
 fi
 
-# ── Cleanup предыдущего запуска ──────────────────────────────────────
+# ── Cleanup previous run ───────────────────────────────────────────
 echo ">>> Cleanup..."
 $COMPOSE down --remove-orphans 2>/dev/null || true
 
-# ── Запуск OTel Collector + Jaeger ───────────────────────────────────
-echo ">>> Запуск otel-collector и jaeger (профиль: $PROFILE)..."
+# ── Start OTel Collector + Jaeger ──────────────────────────────────
+echo ">>> Starting otel-collector and jaeger (profile: $PROFILE)..."
 $COMPOSE up -d otel-collector jaeger
 
-# ── Ожидание healthy ─────────────────────────────────────────────────
-echo ">>> Ожидание healthy..."
+# ── Wait for healthy ───────────────────────────────────────────────
+echo ">>> Waiting for healthy..."
 MAX_RETRIES=30
 RETRY=0
 while [ $RETRY -lt $MAX_RETRIES ]; do
   OTEL_STATUS=$($COMPOSE ps otel-collector 2>/dev/null | grep -c "healthy" || true)
   JAEGER_STATUS=$($COMPOSE ps jaeger 2>/dev/null | grep -c "healthy" || true)
   if [ "$OTEL_STATUS" -ge 1 ] && [ "$JAEGER_STATUS" -ge 1 ]; then
-    echo ">>> Сервисы healthy"
+    echo ">>> Services healthy"
     break
   fi
   RETRY=$((RETRY + 1))
@@ -66,83 +66,83 @@ while [ $RETRY -lt $MAX_RETRIES ]; do
 done
 
 if [ $RETRY -ge $MAX_RETRIES ]; then
-  echo "FAIL: Сервисы не стали healthy за $((MAX_RETRIES * 2))s"
+  echo "FAIL: Services did not become healthy within $((MAX_RETRIES * 2))s"
   $COMPOSE logs otel-collector jaeger
   $COMPOSE down
   exit 1
 fi
 
-# ── Отправка тестового трейса ────────────────────────────────────────
-echo ">>> Отправка тестового трейса..."
+# ── Send test trace ────────────────────────────────────────────────
+echo ">>> Sending test trace..."
 if ! docker run --rm --network host \
     ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
     traces --otlp-endpoint localhost:4317 --otlp-insecure \
            --duration 2s --traces 1 2>/dev/null; then
-  echo "WARN: telemetrygen не смог отправить трейс (проверьте порт 4317)"
-  # Не фатально — возможно, telemetrygen ещё не доступен
+  echo "WARN: telemetrygen failed to send trace (check port 4317)"
+  # Non-fatal — telemetrygen may not be available yet
 fi
 
-# ── Ожидание обработки трейса ────────────────────────────────────────
-# Jaeger нужно время для индексации трейса (batch processor + indexing)
+# ── Wait for trace processing ──────────────────────────────────────
+# Jaeger needs time for indexing the trace (batch processor + indexing)
 sleep 5
 
-# ── Проверка Jaeger API ──────────────────────────────────────────────
-# 1. Проверяем, что API отвечает
-echo ">>> Проверка Jaeger API (/api/services)..."
+# ── Check Jaeger API ───────────────────────────────────────────────
+# 1. Check that the API responds
+echo ">>> Checking Jaeger API (/api/services)..."
 SERVICES_RESPONSE=$(curl -sf "http://localhost:16686/api/services" 2>/dev/null || echo "")
 
 if [ -z "$SERVICES_RESPONSE" ]; then
-  echo "FAIL: Jaeger API не отвечает на http://localhost:16686/api/services"
+  echo "FAIL: Jaeger API does not respond at http://localhost:16686/api/services"
   $COMPOSE logs jaeger
   $COMPOSE down
   exit 1
 fi
 
-echo ">>> Ответ Jaeger API:"
+echo ">>> Jaeger API response:"
 echo "$SERVICES_RESPONSE"
 
-# Проверяем, что в списке сервисов есть хотя бы один
+# Verify that at least one service is listed
 SERVICE_COUNT=$(echo "$SERVICES_RESPONSE" | grep -c '"name"' || true)
 if [ "$SERVICE_COUNT" -lt 1 ]; then
-  echo "FAIL: В Jaeger нет сервисов (трейс не дошёл)"
+  echo "FAIL: No services in Jaeger (trace did not arrive)"
   $COMPOSE down
   exit 1
 fi
 
-echo ">>> Найдено сервисов: $SERVICE_COUNT"
+echo ">>> Found services: $SERVICE_COUNT"
 
-# 2. РЕАЛЬНАЯ ПРОВЕРКА: ищем трейс через /api/traces
-# Ищем трейсы от сервиса "telemetrygen" (имя по умолчанию у telemetrygen)
-echo ">>> Проверка Jaeger API (/api/traces) — поиск отправленного трейса..."
+# 2. REAL CHECK: look for the trace via /api/traces
+# Search for traces from the "telemetrygen" service (default name for telemetrygen)
+echo ">>> Checking Jaeger API (/api/traces) — searching for sent trace..."
 TRACES_RESPONSE=$(curl -sf "http://localhost:16686/api/traces?service=telemetrygen&limit=10" 2>/dev/null || echo "")
 
 if [ -z "$TRACES_RESPONSE" ]; then
-  echo "WARN: /api/traces не ответил (возможно, трейс ещё индексируется)"
-  # Повторная попытка через 3 сек
+  echo "WARN: /api/traces did not respond (trace may still be indexing)"
+  # Retry after 3 sec
   sleep 3
   TRACES_RESPONSE=$(curl -sf "http://localhost:16686/api/traces?service=telemetrygen&limit=10" 2>/dev/null || echo "")
 fi
 
 if [ -z "$TRACES_RESPONSE" ]; then
-  echo "FAIL: Jaeger /api/traces не отвечает — трейс не найден"
-  echo ">>> Логи Jaeger:"
+  echo "FAIL: Jaeger /api/traces not responding — trace not found"
+  echo ">>> Jaeger logs:"
   $COMPOSE logs jaeger
   $COMPOSE down
   exit 1
 fi
 
-# Проверяем, что найден хотя бы один трейс
+# Verify at least one trace was found
 TRACE_COUNT=$(echo "$TRACES_RESPONSE" | grep -c '"traceID"' || true)
 if [ "$TRACE_COUNT" -lt 1 ]; then
-  echo "FAIL: В Jaeger нет трейсов от telemetrygen (OTel → Jaeger pipeline не работает)"
-  echo ">>> Ответ /api/traces:"
+  echo "FAIL: No telemetrygen traces in Jaeger (OTel → Jaeger pipeline broken)"
+  echo ">>> /api/traces response:"
   echo "$TRACES_RESPONSE"
   $COMPOSE down
   exit 1
 fi
 
-echo ">>> Найдено трейсов от telemetrygen: $TRACE_COUNT"
-echo ">>> Тест пройден: трейс отправлен и найден в Jaeger"
+echo ">>> Found telemetrygen traces: $TRACE_COUNT"
+echo ">>> Test passed: trace sent and found in Jaeger"
 
 # ── Cleanup ──────────────────────────────────────────────────────────
 echo ">>> Cleanup..."

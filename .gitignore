@@ -2,6 +2,9 @@
 /bin/
 /pkg/
 /*.exe
+# Go build artifacts: `go build ./...` drops binaries next to the package on
+# Windows, which must never be committed.
+*.exe
 /*.exe~
 /*.dll
 /*.so
