@@ -1,326 +1,326 @@
-# Реестр архитектурных решений (ADR) — ai-sdlc-factory
+# Architecture Decision Records (ADR) — ai-sdlc-factory
 
-**Версия 1.6 · 22.10.2026**
+**Version 1.6 · 22.10.2026**
 
-Формат: MADR. Статусы: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
-
----
-
-## ADR-001. Go как основной язык бэкенда
-
-**Статус:** accepted.
-
-**Контекст.** Требуется производительность, низкое потребление памяти, простой деплой, хорошая поддержка конкурентности.
-
-**Решение.** Весь бэкенд `ai-sdlc-factory` — на Go: Platform API, Registry, Orchestrator-обвязка, Agent Runtime, LLM Gateway, Tool Gateway, Sandbox Manager, Semantic Service, Knowledge Service, Diagram Service.
-
-**Последствия.** Temporal Go SDK; для провайдеров LLM без Go SDK — HTTP-адаптеры или LiteLLM.
-
-**Ссылки:** FR-TEAM, NFR-3, NFR-6.
+Format: MADR. Statuses: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
 
 ---
 
-## ADR-002. Temporal как движок durable execution
+## ADR-001. Go as primary backend language
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Контекст.** Долгие SDLC-процессы (часы-дни), паузы на approve человека, ретраи при падении LLM API.
+**Context.** Requires performance, low memory consumption, simple deployment, good concurrency support.
 
-**Решение.** Temporal (Go SDK). **Run**, **StageRun**, **TaskRun** — workflows. **AgentStep** и вызовы инструментов — activities с ключами идемпотентности.
+**Decision.** All `ai-sdlc-factory` backend — in Go: Platform API, Registry, Orchestrator wrapper, Agent Runtime, LLM Gateway, Tool Gateway, Sandbox Manager, Semantic Service, Knowledge Service, Diagram Service.
 
-**Последствия.** Плюсы: рестарты, таймеры, сигналы, долгие ожидания. Минусы: эксплуатационная сложность Temporal, требование детерминизма workflow-кода.
+**Consequences.** Temporal Go SDK; for LLM providers without Go SDK — HTTP adapters or LiteLLM.
 
-**Ссылки:** NFR-2, NFR-7.
-
----
-
-## ADR-003. Семантический слой как property graph в PostgreSQL
-
-**Статус:** accepted.
-
-**Контекст.** Нужен граф знаний для SLP/SLPr/AM с версионированием, темпоральностью, ACID и минимальной инфраструктурой.
-
-**Решение.** Property graph в PostgreSQL: `sem_nodes`, `sem_edges`, `sem_embeddings` (pgvector). GIN по props, btree по kind/project_id.
-
-**Последствия.** Единая СУБД упрощает эксплуатацию; сложные обходы — через рекурсивные CTE.
-
-**Ссылки:** FR-SEM-1…FR-SEM-6, NFR-10.
+**References:** FR-TEAM, NFR-3, NFR-6.
 
 ---
 
-## ADR-003b. Отложено: графовая СУБД как read-реплика
+## ADR-002. Temporal as durable execution engine
 
-**Статус:** proposed (отложено до v2).
+**Status:** accepted.
 
----
+**Context.** Long SDLC processes (hours-days), pauses for human approve, retries on LLM API failure.
 
-## ADR-004. Профили возможностей моделей вместо имён
+**Decision.** Temporal (Go SDK). **Run**, **StageRun**, **TaskRun** — workflows. **AgentStep** and tool calls — activities with idempotency keys.
 
-**Статус:** accepted.
+**Consequences.** Pros: restarts, timers, signals, long waits. Cons: Temporal operational complexity, deterministic workflow code requirement.
 
-**Решение.** Роли и агенты запрашивают профиль: `code-strong`, `code-fast`, `reasoning-strong`, `reasoning-fast`, `long-context`, `vision-capable`, `cheap-bulk`, `local-private`.
-
-**Ссылки:** FR-TEAM-3, NFR-9.
+**References:** NFR-2, NFR-7.
 
 ---
 
-## ADR-005. MCP как протокол инструментов
+## ADR-003. Semantic layer as property graph in PostgreSQL
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Решение.** Все внешние возможности агентов — MCP-серверы. Схемы инструментов ролей — в `packages/contracts/mcp-schemas/`.
+**Context.** Need a knowledge graph for SLP/SLPr/AM with versioning, temporality, ACID, and minimal infrastructure.
 
-**Ссылки:** FR-TEAM, NFR-6.
+**Decision.** Property graph in PostgreSQL: `sem_nodes`, `sem_edges`, `sem_embeddings` (pgvector). GIN on props, btree on kind/project_id.
 
----
+**Consequences.** Single DB simplifies operations; complex traversals — via recursive CTEs.
 
-## ADR-006. Диаграммы как код с публикацией в KB
-
-**Статус:** accepted.
-
-**Решение.** Канонические источники — Structurizr DSL (C4, основной), Mermaid, PlantUML. Рендер — в Diagram Service. Публикация — в Knowledge Service.
-
-**Ссылки:** FR-ARCH-1…FR-ARCH-7.
+**References:** FR-SEM-1…FR-SEM-6, NFR-10.
 
 ---
 
-## ADR-007. Код проекта не индексируется как документы
+## ADR-003b. Deferred: graph DB as read replica
 
-**Статус:** accepted.
-
-**Решение.** Агенты читают репозиторий инструментами в песочнице; для больших репозиториев — индекс символов на tree-sitter.
-
-**Ссылки:** FR-KB-3.
+**Status:** proposed (deferred to v2).
 
 ---
 
-## ADR-008. LLM Gateway на Go
+## ADR-004. Model capability profiles instead of names
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Решение.** Собственный сервис на Go с адаптерами к провайдерам, унификацией tool calling, fallback, учётом токенов и стоимости.
+**Decision.** Roles and agents request a profile: `code-strong`, `code-fast`, `reasoning-strong`, `reasoning-fast`, `long-context`, `vision-capable`, `cheap-bulk`, `local-private`.
 
-**Ссылки:** NFR-9, FR-OPS-2.
-
----
-
-## ADR-009. Песочницы на gVisor (v1) → Firecracker/Kata (v2)
-
-**Статус:** accepted.
-
-**Решение.** Изоляция ядра; отсутствие секретов внутри; allowlist сети через egress-proxy.
-
-**Ссылки:** NFR-1, NFR-5.
+**References:** FR-TEAM-3, NFR-9.
 
 ---
 
-## ADR-010. Разделение плоскостей управления, исполнения и данных
+## ADR-005. MCP as tool protocol
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Решение.** Жёсткие контракты (API, события) между плоскостями.
+**Decision.** All agent external capabilities — MCP servers. Role tool schemas — in `packages/contracts/mcp-schemas/`.
 
----
-
-## ADR-011. Онтология платформы (SLP) версионируется как API
-
-**Статус:** accepted.
-
-**Решение.** SLP — публичный контракт; semver; миграции экземпляров; старые прогоны читают свою версию.
-
-**Ссылки:** FR-SEM-1, FR-SEM-6.
+**References:** FR-TEAM, NFR-6.
 
 ---
 
-## ADR-012. ADR как первоклассный артефакт
+## ADR-006. Diagrams as code with KB publication
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Решение.** ADR — Markdown (MADR), версионируется в Git, индексируется в KB, привязан к SLPr/AM.
+**Decision.** Canonical sources — Structurizr DSL (C4, primary), Mermaid, PlantUML. Rendering — in Diagram Service. Publication — in Knowledge Service.
 
-**Ссылки:** FR-ARCH-7, FR-KB-4.
-
----
-
-## ADR-013. Уровни автономности R0–R3
-
-**Статус:** accepted.
-
-**Решение.** R0 (чтение) — авто; R1 (локальная запись) — авто; R2 (значимое) — по профилю; R3 (необратимое) — всегда approve человека.
-
-**Ссылки:** FR-OPS-1, NFR-5.
+**References:** FR-ARCH-1…FR-ARCH-7.
 
 ---
 
-## ADR-014. Семантический срез в контексте агента
+## ADR-007. Project code is not indexed as documents
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Решение.** Agent Runtime перед циклом запрашивает подграф глубины 1–2 вокруг сущностей задачи и включает его в контекст как JSON-LD.
+**Decision.** Agents read the repo with tools in the sandbox; for large repos — symbol indexing on tree-sitter.
 
-**Ссылки:** FR-SEM-4, FR-SEM-5.
-
----
-
-## ADR-015. Единое имя сервиса `ai-sdlc-factory`
-
-**Статус:** accepted.
-
-**Решение.** Имя `ai-sdlc-factory` используется единообразно: имя платформы, `apiVersion`, namespace онтологии, корневой каталог, префикс контейнеров.
+**References:** FR-KB-3.
 
 ---
 
-## ADR-016. AST-индексация кода и drift detection
+## ADR-008. LLM Gateway in Go
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Решение.** Воркер `semantic-indexer` при каждом коммите парсит код через tree-sitter. Воркер `drift_detector` сверяет фактический граф зависимостей с утверждённой AM.
+**Decision.** Own Go service with provider adapters, unified tool calling, fallback, token and cost accounting.
 
-**Ссылки:** FR-ARCH-6, FR-SEM-2, NFR-10.
-
----
-
-## ADR-017. Self-correction loop для архитектурных диаграмм
-
-**Статус:** accepted.
-
-**Решение.** Перед сохранением диаграммы Go-валидатор выполняет 4 шага: синтаксис DSL, существование узлов в AM, конфликты контрактов, запрещённые зависимости. Максимум 3 итерации.
-
-**Ссылки:** FR-ARCH-2, FR-ARCH-3, FR-ARCH-4, ADR-006.
+**References:** NFR-9, FR-OPS-2.
 
 ---
 
-## ADR-018. Переключение наблюдаемости через профили развёртывания
+## ADR-009. Sandboxes on gVisor (v1) → Firecracker/Kata (v2)
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Решение.** Langfuse остаётся частью архитектуры под профилем `observability`. `local-dev` не активирует observability. OTel Collector маршрутизирует: всегда в Jaeger, в `local-full` — дополнительно в Langfuse.
+**Decision.** Kernel isolation; no secrets inside; network allowlist via egress-proxy.
 
-**Ссылки:** FR-OPS-2, NFR-4, NFR-7, NFR-8.
-
----
-
-## ADR-019. Переход на PostgreSQL 18
-
-**Статус:** accepted.
-
-**Контекст.** В PostgreSQL 17 функция `uuidv7()` отсутствует (не входит в ядро). В миграциях M0 используется `uuidv7()` как нативная функция, что противоречит реальному поведению PG17 (тесты падали с `ERROR: function uuidv7() does not exist`).
-
-**Решение.** Обновляем целевую версию PostgreSQL до 18. В PG 18 `uuidv7()` — нативная функция ядра, что соответствует архитектуре property graph и ADR-003.
-
-**Последствия.**
-- ✅ Нативная `uuidv7()` без расширений.
-- ✅ +33% к производительности B-tree индексов на UUIDv7 (timestamp-based ordering).
-- ✅ Совместимость с `pgvector/pgvector:pg18`.
-- ⚠️ Требуется обновление образов в Compose, Dockerfiles, CI.
-- ⚠️ ADR-003, ADR-003b не меняются (property graph остаётся).
-
-**Ссылки:** SYSTEM_DESIGN.md §12, ONTOLOGY_SPEC.md §6.1.
+**References:** NFR-1, NFR-5.
 
 ---
 
-## ADR-020. Замена MinIO на Silo
+## ADR-010. Separation of control, execution, and data planes
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Контекст.** Официальные Docker-образы MinIO (`minio/minio`, `quay.io/minio/minio`) удалены из публичных реестров. Проект остался без S3-совместимого хранилища. Требуется замена, совместимая с существующим S3 API, `MINIO_*` переменными и данными.
+**Decision.** Strict contracts (API, events) between planes.
 
-**Решение.** Использовать **Silo** (`docker.io/pgsty/silo`) — community-форк MinIO, поддерживаемый Pigsty.
+---
 
-- S3 API, SigV4, SDK, presigned URL — без изменений.
-- `MINIO_*` env vars, `/minio/*` routes, `x-minio-*` headers, `minio_*` metrics — без изменений.
-- Формат данных (`.minio.sys`, erasure coding, object layouts) — совместим.
-- Клиент `mcli` (вместо `mc`).
+## ADR-011. Platform ontology (SLP) versioned as API
+
+**Status:** accepted.
+
+**Decision.** SLP — public contract; semver; instance migrations; old runs read their version.
+
+**References:** FR-SEM-1, FR-SEM-6.
+
+---
+
+## ADR-012. ADR as a first-class artifact
+
+**Status:** accepted.
+
+**Decision.** ADR — Markdown (MADR), versioned in Git, indexed in KB, linked to SLPr/AM.
+
+**References:** FR-ARCH-7, FR-KB-4.
+
+---
+
+## ADR-013. Autonomy levels R0–R3
+
+**Status:** accepted.
+
+**Decision.** R0 (read) — auto; R1 (local write) — auto; R2 (significant) — per profile; R3 (irreversible) — always human approve.
+
+**References:** FR-OPS-1, NFR-5.
+
+---
+
+## ADR-014. Semantic slice in agent context
+
+**Status:** accepted.
+
+**Decision.** Agent Runtime requests a subgraph of depth 1–2 around task entities before the loop and includes it in context as JSON-LD.
+
+**References:** FR-SEM-4, FR-SEM-5.
+
+---
+
+## ADR-015. Unified service name `ai-sdlc-factory`
+
+**Status:** accepted.
+
+**Decision.** Name `ai-sdlc-factory` used uniformly: platform name, `apiVersion`, ontology namespace, root directory, container prefix.
+
+---
+
+## ADR-016. AST code indexing and drift detection
+
+**Status:** accepted.
+
+**Decision.** Worker `semantic-indexer` parses code via tree-sitter on every commit. Worker `drift_detector` compares the actual dependency graph with the approved AM.
+
+**References:** FR-ARCH-6, FR-SEM-2, NFR-10.
+
+---
+
+## ADR-017. Self-correction loop for architectural diagrams
+
+**Status:** accepted.
+
+**Decision.** Before saving a diagram, the Go validator performs 4 steps: DSL syntax, node existence in AM, contract conflicts, forbidden dependencies. Maximum 3 iterations.
+
+**References:** FR-ARCH-2, FR-ARCH-3, FR-ARCH-4, ADR-006.
+
+---
+
+## ADR-018. Switching observability via deployment profiles
+
+**Status:** accepted.
+
+**Decision.** Langfuse remains part of the architecture under the `observability` profile. `local-dev` does not activate observability. OTel Collector routes: always to Jaeger, in `local-full` — additionally to Langfuse.
+
+**References:** FR-OPS-2, NFR-4, NFR-7, NFR-8.
+
+---
+
+## ADR-019. Migration to PostgreSQL 18
+
+**Status:** accepted.
+
+**Context.** PostgreSQL 17 lacks `uuidv7()` function (not part of the core). M0 migrations use `uuidv7()` as a native function, which contradicts actual PG17 behavior (tests failed with `ERROR: function uuidv7() does not exist`).
+
+**Decision.** Upgrade target PostgreSQL version to 18. In PG 18, `uuidv7()` is a native core function, aligning with property graph architecture and ADR-003.
+
+**Consequences.**
+- ✅ Native `uuidv7()` without extensions.
+- ✅ +33% B-tree index performance on UUIDv7 (timestamp-based ordering).
+- ✅ Compatibility with `pgvector/pgvector:pg18`.
+- ⚠️ Requires updating images in Compose, Dockerfiles, CI.
+- ⚠️ ADR-003, ADR-003b unchanged (property graph remains).
+
+**References:** SYSTEM_DESIGN.md §12, ONTOLOGY_SPEC.md §6.1.
+
+---
+
+## ADR-020. Replacing MinIO with Silo
+
+**Status:** accepted.
+
+**Context.** Official MinIO Docker images (`minio/minio`, `quay.io/minio/minio`) removed from public registries. The project lost its S3-compatible storage. A replacement compatible with existing S3 API, `MINIO_*` variables, and data is required.
+
+**Decision.** Use **Silo** (`docker.io/pgsty/silo`) — a community fork of MinIO, maintained by Pigsty.
+
+- S3 API, SigV4, SDK, presigned URL — unchanged.
+- `MINIO_*` env vars, `/minio/*` routes, `x-minio-*` headers, `minio_*` metrics — unchanged.
+- Data format (`.minio.sys`, erasure coding, object layouts) — compatible.
+- Client `mcli` (instead of `mc`).
 - Healthcheck: `silo healthcheck ready`.
 
-**Последствия.**
-- Приложения (`api`, `worker`, `knowledge`) не требуют изменений кода.
-- Compose-файлы обновлены: `minio` → `silo`, `minio-init` → `silo-init`.
-- Документация обновлена.
-- Volume `minio-data` сохранён (данные совместимы, миграция не требуется).
-- Если в будущем Silo станет недоступен — можно вернуться к MinIO (при наличии образа) или перейти на другой S3-совместимый сервис (например, RustFS) с минимальными изменениями.
+**Consequences.**
+- Applications (`api`, `worker`, `knowledge`) require no code changes.
+- Compose files updated: `minio` → `silo`, `minio-init` → `silo-init`.
+- Documentation updated.
+- Volume `minio-data` preserved (data compatible, no migration required).
+- If Silo becomes unavailable in the future — can revert to MinIO (if image available) or switch to another S3-compatible service (e.g., RustFS) with minimal changes.
 
-**Ссылки:** Issue #3, ADR-018.
+**References:** Issue #3, ADR-018.
 
 ---
 
 ## ADR-021. LLM Gateway: routing, fallback per (provider, model), cost attribution
 
-**Статус:** accepted.
+**Status:** accepted.
 
-**Контекст.**
+**Context.**
 
-LLM Gateway должен маршрутизировать запросы по capability-профилям (`code-strong`, `reasoning-strong` и т.д.), обеспечивать fallback при сбоях и учитывать стоимость для NFR-9. Наивный дизайн приводит к трём проблемам:
+LLM Gateway must route requests by capability profiles (`code-strong`, `reasoning-strong`, etc.), provide fallback on failures, and account for cost for NFR-9. Naive design leads to three problems:
 
-1. **Floating alias** (`claude-sonnet-4-latest`) может быть перепиннут провайдером, тихо меняя контракт профиля. Агент, ожидавший одно поведение, получит другое без предупреждения.
-2. **`404` на одной модели** не означает недоступность всего провайдера. Парковать весь провайдер на `404` — превращать детерминированную ошибку (config defect) в flapping-сигнал.
-3. **Ретраи и mid-stream failover** внутри одного логического вызова не должны трижды увеличивать `cost_usd` — иначе NFR-9 завышает расход на величину ретраев.
+1. **Floating alias** (`claude-sonnet-4-latest`) can be repinned by the provider, silently changing the profile contract. An agent expecting one behavior will get another without warning.
+2. **`404` on one model** does not mean the whole provider is unavailable. Parking the whole provider on `404` — turning a deterministic error (config defect) into a flapping signal.
+3. **Retries and mid-stream failover** within a single logical call must not triple `cost_usd` — otherwise NFR-9 overstates spend by the amount of retries.
 
-**Решение.**
+**Decision.**
 
-1. **Профили пиннят версию.** В `model_profiles` хранится `model_id` с конкретной версией (`claude-sonnet-4-20250101`), не alias (`-latest`). Смена модели — R2-действие (PR в `model_profiles`).
-2. **Fallback per `(provider, model)`.** Health-трекинг ведётся по паре `(provider, model_id)`. Классификация ошибок:
+1. **Profiles pin the version.** `model_profiles` stores `model_id` with a specific version (`claude-sonnet-4-20250101`), not an alias (`-latest`). Model change is an R2 action (PR to `model_profiles`).
+2. **Fallback per `(provider, model)`.** Health tracking is per `(provider, model_id)` pair. Error classification:
    - `404` (model not found) → config defect, no cooldown, alert.
    - `401` / `403` → auth defect, no cooldown, alert.
    - `400` → bad request, no cooldown, log.
-   - `429` / `5xx` / `timeout` → availability, cooldown с exponential backoff (60s → 4h max, jitter). После cooldown — пробный запрос.
-3. **Стоимость на двух уровнях.**
-   - `llm_logical_calls` — одна строка на логический запрос (атрибуция по `run_id`/`task_id`).
-   - `llm_attempts` — N строк на HTTP-попытки (реальный расход).
-   - В `llm_logical_calls` хранятся `final_cost_usd` (успешная попытка = что произвело результат) и `total_cost_usd` (сумма всех попыток = реальный расход).
+   - `429` / `5xx` / `timeout` → availability, cooldown with exponential backoff (60s → 4h max, jitter). After cooldown — a probe request.
+3. **Cost at two levels.**
+   - `llm_logical_calls` — one row per logical request (attributed by `run_id`/`task_id`).
+   - `llm_attempts` — N rows per HTTP attempt (actual spend).
+   - `llm_logical_calls` stores `final_cost_usd` (successful attempt = what produced the result) and `total_cost_usd` (sum of all attempts = actual spend).
 
-**Последствия.**
+**Consequences.**
 
-- NFR-9 (стоимость) считается корректно: атрибуция по логическому ID не задваивается ретраями.
-- Смена модели через alias не может тихо изменить поведение профиля.
-- `404` не вызывает каскадный cooldown всего провайдера.
-- Схема БД сложнее: две таблицы вместо одной (`llm_calls` → `llm_logical_calls` + `llm_attempts`). Историческая миграция `0007_init_audit_and_cost` не переписывается; разделение вводится новой миграцией.
-- Streaming — в v2; при mid-stream failover будем захватывать partial usage по `usage.completion_tokens` провайдера, не по счётчику клиента.
+- NFR-9 (cost) is correctly accounted: attribution by logical ID is not doubled by retries.
+- Model change via alias cannot silently change profile behavior.
+- `404` does not trigger cascading cooldown of the whole provider.
+- DB schema is more complex: two tables instead of one (`llm_calls` → `llm_logical_calls` + `llm_attempts`). Historical migration `0007_init_audit_and_cost` is not rewritten; separation is introduced by a new migration.
+- Streaming — in v2; on mid-stream failover we will capture partial usage by `usage.completion_tokens` from the provider, not by the client counter.
 
-**Ссылки:** FR-OPS-2, NFR-9, ADR-004, ADR-008, ADR-013, `SYSTEM_DESIGN.md` §8.5, §11.4, Issue #73.
-
----
-
-## ADR-022. Выбор `mark3labs/mcp-go` для Tool Gateway (MCP-прокси)
-
-**Статус:** accepted.
-
-**Контекст.**
-Tool Gateway должен предоставлять агентам единый MCP-эндпоинт, федератировать несколько upstream MCP-серверов, применять OPA-политики (R0–R3), вести аудит вызовов и выполнять credential brokering через Vault. Реализация «с нуля» на Go потребовала бы месяцев работы и постоянной поддержки меняющейся MCP-спецификации. Рассматривались альтернативы:
-
-- **AgentGateway** (Rust, Apache 2.0) — мощный data plane, но избыточен: LLM-routing и CEL-RBAC не нужны для MCP-слоя; вносит Rust в Go-монорепо.
-- **IBM ContextForge** (Python, Apache 2.0) — полная enterprise-функциональность (OAuth, RBAC, admin UI), но ~150K строк кода; портирование на Go нецелесообразно, запуск отдельного Python-сервиса усложняет эксплуатацию.
-- **Официальный `modelcontextprotocol/go-sdk`** — Tier 1, но API ещё evolves; отсутствует готовый механизм `ProxyTool` для проксирования upstream-серверов.
-- **`github.com/mark3labs/mcp-go`** — community SDK, MIT, ~9.2k звёзд, активная разработка; поддерживает stdio, SSE, Streamable HTTP; **содержит `ProxyTool`** и используется в референсном `mcpproxy-go` для проксирования MCP-серверов. На момент принятия решения стабильная версия — `v1.1.1`.
-
-**Решение.**
-Использовать **`github.com/mark3labs/mcp-go`** как библиотеку для MCP-сервера и MCP-клиента в `apps/tool-gateway`. Собственный Go-слой навешивает:
-
-- загрузку инструментов из `packages/contracts/mcp-schemas/*.json`;
-- OPA-проверку перед каждым вызовом (уровни R0–R3 согласно ADR-013);
-- аудит с хэш-цепочкой;
-- credential brokering через Vault/OpenBao (агент не видит токены);
-- проксирование вызовов в upstream MCP-серверы через `ProxyTool`.
-
-Версия библиотеки фиксируется в `go.mod` (на момент написания — `v1.1.1` или более поздняя стабильная).
-
-**Последствия.**
-- **Плюсы:** Go-нативный стек, MIT-лицензия (совместима с AGPLv3), готовые транспорты (stdio/SSE/Streamable HTTP), `ProxyTool` для федерации, активное сообщество, лёгкая интеграция с OPA и Vault.
-- **Минусы:** зависимость от community-проекта; при необходимости миграции на официальный `modelcontextprotocol/go-sdk` потребуется адаптер (протокольная граница небольшая, оценка ~1 день).
-- **Ограничения:** Tool Gateway не реализует собственный LLM-routing (это делает LLM Gateway по ADR-021); AgentGateway и ContextForge не используются.
-
-**Ссылки:** ADR-005 (MCP как протокол инструментов), ADR-008 (LLM Gateway на Go), ADR-013 (уровни R0–R3), ADR-021 (LLM Gateway routing/fallback/cost), NFR-5 (безопасность), NFR-6 (расширяемость), FR-TEAM.
+**References:** FR-OPS-2, NFR-9, ADR-004, ADR-008, ADR-013, `SYSTEM_DESIGN.md` §8.5, §11.4, Issue #73.
 
 ---
 
-## Изменения документа
+## ADR-022. Selection of `mark3labs/mcp-go` for Tool Gateway (MCP proxy)
 
-| Версия | Дата | Изменения |
+**Status:** accepted.
+
+**Context.**
+Tool Gateway must provide agents with a single MCP endpoint, federate multiple upstream MCP servers, apply OPA policies (R0–R3), audit calls, and perform credential brokering via Vault. A "from scratch" Go implementation would take months and require constant maintenance of the evolving MCP spec. Alternatives considered:
+
+- **AgentGateway** (Rust, Apache 2.0) — powerful data plane, but overkill: LLM-routing and CEL-RBAC are not needed for the MCP layer; introduces Rust into a Go monorepo.
+- **IBM ContextForge** (Python, Apache 2.0) — full enterprise functionality (OAuth, RBAC, admin UI), but ~150K lines of code; porting to Go is not worthwhile, running a separate Python service complicates operations.
+- **Official `modelcontextprotocol/go-sdk`** — Tier 1, but API still evolves; lacks a ready `ProxyTool` mechanism for proxying upstream servers.
+- **`github.com/mark3labs/mcp-go`** — community SDK, MIT, ~9.2k stars, active development; supports stdio, SSE, Streamable HTTP; **contains `ProxyTool`** and is used in the reference `mcpproxy-go` for proxying MCP servers. At the time of decision, stable version was `v1.1.1`.
+
+**Decision.**
+Use **`github.com/mark3labs/mcp-go`** as the library for MCP server and MCP client in `apps/tool-gateway`. Own Go layer adds:
+
+- loading tools from `packages/contracts/mcp-schemas/*.json`;
+- OPA check before every call (R0–R3 levels per ADR-013);
+- audit with hash chain;
+- credential brokering via Vault/OpenBao (agent does not see tokens);
+- proxying calls to upstream MCP servers via `ProxyTool`.
+
+Library version is pinned in `go.mod` (at time of writing — `v1.1.1` or later stable).
+
+**Consequences.**
+- **Pros:** Go-native stack, MIT license (compatible with AGPLv3), ready transports (stdio/SSE/Streamable HTTP), `ProxyTool` for federation, active community, easy integration with OPA and Vault.
+- **Cons:** dependency on a community project; if migration to official `modelcontextprotocol/go-sdk` is needed, an adapter is required (protocol boundary is small, estimated ~1 day).
+- **Limitations:** Tool Gateway does not implement its own LLM-routing (LLM Gateway does that per ADR-021); AgentGateway and ContextForge are not used.
+
+**References:** ADR-005 (MCP as tool protocol), ADR-008 (LLM Gateway in Go), ADR-013 (R0–R3 levels), ADR-021 (LLM Gateway routing/fallback/cost), NFR-5 (security), NFR-6 (extensibility), FR-TEAM.
+
+---
+
+## Document changes
+
+| Version | Date | Changes |
 |---|---|---|
-| 1.6 | 22.10.2026 | Добавлен ADR-022 (выбор `mark3labs/mcp-go` для Tool Gateway) (#83) |
-| 1.5 | 22.10.2026 | Добавлен ADR-021 (LLM Gateway: routing, fallback, cost attribution) (#73) |
-| 1.4 | 19.10.2026 | Добавлен ADR-020 (MinIO → Silo) |
-| 1.3 | 17.10.2026 | Добавлен ADR-019 |
-| 1.2 | 16.10.2026 | Добавлены ADR-018 |
-| 1.1 | 16.10.2026 | Добавлены ADR-016, ADR-017 |
-| 1.0 | 16.10.2026 | Первичный реестр ADR-001…ADR-015 |
+| 1.6 | 22.10.2026 | Added ADR-022 (selection of `mark3labs/mcp-go` for Tool Gateway) (#83) |
+| 1.5 | 22.10.2026 | Added ADR-021 (LLM Gateway: routing, fallback, cost attribution) (#73) |
+| 1.4 | 19.10.2026 | Added ADR-020 (MinIO → Silo) |
+| 1.3 | 17.10.2026 | Added ADR-019 |
+| 1.2 | 16.10.2026 | Added ADR-018 |
+| 1.1 | 16.10.2026 | Added ADR-016, ADR-017 |
+| 1.0 | 16.10.2026 | Initial ADR registry ADR-001…ADR-015 |
