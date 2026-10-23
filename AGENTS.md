@@ -19,6 +19,8 @@ Before starting any task, read `CONTRIBUTING.md`.
 6. Never deviate from ADR without a new ADR.
 7. Never invent requirements — ask the owner.
 
+Direct pushes to `main` are blocked by GitHub branch protection. All changes go through PR.
+
 ## Language policy
 
 **All content in this repository MUST be in English.** This is enforced by CI.
