@@ -1,103 +1,103 @@
-# AGENT_KICKOFF — превращение документации в GitHub Issues
+# AGENT_KICKOFF — converting documentation into GitHub Issues
 
-**Версия 1.1 · 21.10.2026 · для ИИ-агента-исполнителя**
+**Version 1.1 · 21.10.2026 · for AI agent executor**
 
-Этот документ описывает, как превратить архитектурную документацию `ai-sdlc-factory` в структурированный план работ в GitHub Issues.
-
----
-
-## 0. Роль агента
-
-Ты — **Principal Technical Program Manager** для проекта `ai-sdlc-factory`. Ты не пишешь код в рамках этой задачи. Твой результат — набор milestones, labels, issues и связей между ними.
+This document describes how to convert the `ai-sdlc-factory` architectural documentation into a structured plan of work in GitHub Issues.
 
 ---
 
-## 1. Обязательное чтение
+## 0. Agent role
 
-Прочитай в указанном порядке:
+You are the **Principal Technical Program Manager** for the `ai-sdlc-factory` project. You do not write code within this task. Your output is a set of milestones, labels, issues, and their relationships.
 
-| № | Файл | Что из него берётся |
+---
+
+## 1. Mandatory reading
+
+Read in the specified order:
+
+| # | File | What to extract |
 |---|---|---|
-| 1 | `docs/README.md` | Навигация по документации |
-| 2 | `docs/architecture/SYSTEM_DESIGN.md` | Требования (FR-*, NFR-*), принципы, этапы поставки (§14.1), структура монорепозитория (§15), тактика генерации файлов (§16.6) |
-| 3 | `docs/architecture/ADR.md` | 18 архитектурных решений (ADR-001…ADR-018) |
-| 4 | `docs/architecture/ONTOLOGY_SPEC.md` | Семантический слой: SLP, SLPr, AM |
-| 5 | `docs/architecture/SDLC_STATE_MACHINE.md` | Состояния задач, гейты, условия блокировки |
-| 6 | `docs/architecture/MCP_TOOLS.md` | Инструменты агентов по ролям |
-| 7 | `docs/architecture/diagrams/README.md` | Набор C4-диаграмм |
-| 8 | `deploy/compose/README.md` | Профили развёртывания `local-dev` / `local-full` |
+| 1 | `docs/README.md` | Documentation navigation |
+| 2 | `docs/architecture/SYSTEM_DESIGN.md` | Requirements (FR-*, NFR-*), principles, delivery stages (§14.1), monorepo structure (§15), file generation tactics (§16.6) |
+| 3 | `docs/architecture/ADR.md` | 18 architecture decisions (ADR-001…ADR-018) |
+| 4 | `docs/architecture/ONTOLOGY_SPEC.md` | Semantic layer: SLP, SLPr, AM |
+| 5 | `docs/architecture/SDLC_STATE_MACHINE.md` | Task states, gates, blocking conditions |
+| 6 | `docs/architecture/MCP_TOOLS.md` | Agent tools by role |
+| 7 | `docs/architecture/diagrams/README.md` | C4 diagram set |
+| 8 | `deploy/compose/README.md` | Deployment profiles `local-dev` / `local-full` |
 
-После чтения составь сжатый отчёт (10–15 строк): ключевые цели, стек, ключевые ADR, этапы поставки.
-
----
-
-## 2. Что нужно произвести
-
-Твой результат — четыре артефакта в GitHub:
-
-1. **Milestones** — по одному на каждый этап поставки из `SYSTEM_DESIGN.md` §14.1 (Этапы 0–6).
-2. **Labels** — стандартизированный набор (см. §4).
-3. **Issues** — по одной или нескольким задачам на каждый этап.
-4. **Связи** — зависимости между issues, привязка к milestones, labels, ссылки на FR/NFR/ADR.
+After reading, produce a concise report (10–15 lines): key goals, stack, key ADRs, delivery stages.
 
 ---
 
-## 3. Правила декомпозиции
+## 2. What to produce
 
-### 3.1 Источник структуры
+Your output is four artifacts in GitHub:
 
-Основа — **этапы поставки** из `SYSTEM_DESIGN.md` §14.1. Каждый этап = один **milestone**.
+1. **Milestones** — one per each delivery stage from `SYSTEM_DESIGN.md` §14.1 (Stages 0–6).
+2. **Labels** — standardized set (see §4).
+3. **Issues** — one or more tasks per stage.
+4. **Relationships** — dependencies between issues, milestone binding, labels, links to FR/NFR/ADR.
 
-### 3.2 Размер issues
+---
 
-- **1 issue = 0.5–3 дня работы** для одного разработчика.
-- Если задача больше — разбить.
-- Если задача меньше 2 часов — объединить с соседней.
-- **Spike-задачи** — отдельный тип, с явным time-box.
+## 3. Decomposition rules
 
-### 3.3 Что обязательно в каждом issue
+### 3.1 Source of structure
 
-- Заголовок: `<area>: <краткое действие>`
-- Ссылки на FR-* / NFR-* из `SYSTEM_DESIGN.md` §3
-- Ссылки на ADR-* из `ADR.md`
-- Ссылка на раздел `SYSTEM_DESIGN.md` — **только фактически существующий** (см. §3.4)
-- Acceptance criteria в формате Given/When/Then
-- Тестовый план
-- Оценка сложности (`size:S` / `size:M` / `size:L`)
-- Milestone и labels
+The basis is **delivery stages** from `SYSTEM_DESIGN.md` §14.1. Each stage = one **milestone**.
 
-### 3.4 Проверка ссылок на разделы
+### 3.2 Issue size
 
-Перед созданием issue убедись, что указываемый раздел существует:
+- **1 issue = 0.5–3 days of work** for one developer.
+- If the task is larger — split it.
+- If the task is less than 2 hours — merge with a neighbor.
+- **Spike tasks** — a separate type, with explicit time-box.
+
+### 3.3 What is mandatory in each issue
+
+- Title: `<area>: <short action>`
+- Links to FR-* / NFR-* from `SYSTEM_DESIGN.md` §3
+- Links to ADR-* from `ADR.md`
+- Link to `SYSTEM_DESIGN.md` section — **only actually existing** (see §3.4)
+- Acceptance criteria in Given/When/Then format
+- Test plan
+- Complexity estimate (`size:S` / `size:M` / `size:L`)
+- Milestone and labels
+
+### 3.4 Section reference validation
+
+Before creating an issue, verify the referenced section exists:
 
 ```bash
-git grep -n "^#\+ <N>\." -- docs/architecture/SYSTEM_DESIGN.md
+git grep -n "^#+ <N>\." -- docs/architecture/SYSTEM_DESIGN.md
 ```
 
-Если нужного подраздела нет — **не выдумывай номер**. Either сошлись на родительский раздел (§12 вместо §12.2), либо создай spike-issue по правилам `AGENTS.md` («Что делать при обнаружении пробела в документации»).
+If the subsection does not exist — **do not invent a number**. Either reference the parent section (§12 instead of §12.2), or create a spike-issue per `AGENTS.md` rules ("What to do when finding a documentation gap").
 
 ---
 
 ## 4. Labels
 
-### 4.1 По типу работы
+### 4.1 By work type
 
-| Label | Цвет | Значение |
+| Label | Color | Meaning |
 |---|---|---|
-| `type:feature` | `#0E8A16` | Новая функциональность |
-| `type:infra` | `#5319E7` | Инфраструктура, Compose, миграции |
-| `type:contract` | `#1D76DB` | OpenAPI, JSON Schema, MCP-схемы |
-| `type:test` | `#FBCA04` | Только тесты |
-| `type:docs` | `#0075CA` | Документация |
-| `type:spike` | `#D4C5F9` | Исследование, time-box |
-| `type:refactor` | `#BFD4F2` | Рефакторинг |
-| `type:security` | `#B60205` | Безопасность |
+| `type:feature` | `#0E8A16` | New feature |
+| `type:infra` | `#5319E7` | Infrastructure, Compose, migrations |
+| `type:contract` | `#1D76DB` | OpenAPI, JSON Schema, MCP schemas |
+| `type:test` | `#FBCA04` | Tests only |
+| `type:docs` | `#0075CA` | Documentation |
+| `type:spike` | `#D4C5F9` | Investigation, time-box |
+| `type:refactor` | `#BFD4F2` | Refactoring |
+| `type:security` | `#B60205` | Security |
 
-### 4.2 По области
+### 4.2 By area
 
-| Label | Область |
+| Label | Area |
 |---|---|
-| `area:infra` | Compose, миграции |
+| `area:infra` | Compose, migrations |
 | `area:semantic` | Semantic Service, SLP, SLPr, AM |
 | `area:architecture` | Architect engine, Diagram Service, ADR |
 | `area:orchestration` | Temporal, workflow, Agent Runtime |
@@ -109,87 +109,87 @@ git grep -n "^#\+ <N>\." -- docs/architecture/SYSTEM_DESIGN.md
 | `area:observability` | OTel, Jaeger, Langfuse |
 | `area:registry` | Registry, roles, teams |
 
-### 4.3 По приоритету
+### 4.3 By priority
 
-| Label | Значение |
+| Label | Meaning |
 |---|---|
-| `p0` | Блокер |
-| `p1` | Высокий |
-| `p2` | Средний |
+| `p0` | Blocker |
+| `p1` | High |
+| `p2` | Medium |
 
-### 4.4 По размеру
+### 4.4 By size
 
-| Label | Оценка |
+| Label | Estimate |
 |---|---|
-| `size:S` | до 0.5 дня |
-| `size:M` | 0.5–1.5 дня |
-| `size:L` | 1.5–3 дня |
+| `size:S` | up to 0.5 day |
+| `size:M` | 0.5–1.5 days |
+| `size:L` | 1.5–3 days |
 
-### 4.5 Особые
+### 4.5 Special
 
-| Label | Когда ставить |
+| Label | When to set |
 |---|---|
-| `blocked` | Есть незакрытая зависимость |
-| `needs-approval` | Требует approve владельца |
-| `r3` | Затрагивает необратимые действия |
-| `security-critical` | Требует security review |
+| `blocked` | Has an open dependency |
+| `needs-approval` | Requires owner approval |
+| `r3` | Involves irreversible actions |
+| `security-critical` | Requires security review |
 
 ---
 
-## 5. Шаблон issue
+## 5. Issue template
 
 ```markdown
-## Контекст
+## Context
 
-<1–3 предложения. Что делаем и зачем.>
+<1–3 sentences. What we are doing and why.>
 
-## Ссылки
+## References
 
-- Требования: `FR-XXX`, `NFR-XXX`
+- Requirements: `FR-XXX`, `NFR-XXX`
 - ADR: `ADR-XXX`
-- Раздел: `docs/architecture/SYSTEM_DESIGN.md` §X.Y
-  > ⚠️ **Внимание:** Указывай только фактически существующие разделы. Проверь через `git grep -n "^##" -- docs/architecture/SYSTEM_DESIGN.md`. Если подраздела нет — сошлись на родительский раздел (например, §12 вместо §12.2) или создай его в текущей задаче. Не оставляй битых ссылок.
+- Section: `docs/architecture/SYSTEM_DESIGN.md` §X.Y
+  > ⚠️ **Warning:** Only reference actually existing sections. Verify with `git grep -n "^##" -- docs/architecture/SYSTEM_DESIGN.md`. If a subsection does not exist — reference the parent section (e.g., §12 instead of §12.2) or create it in the current task. Do not leave broken links.
 
-## Что сделать
+## What to do
 
-- [ ] Пункт 1
-- [ ] Пункт 2
+- [ ] Item 1
+- [ ] Item 2
 
 ## Acceptance criteria
 
 - [ ] Given … When … Then …
 
-## Тестовый план
+## Test plan
 
-- [ ] Unit-тесты
-- [ ] Integration-тесты
-- [ ] Contract-тесты
+- [ ] Unit tests
+- [ ] Integration tests
+- [ ] Contract tests
 - [ ] E2E
-- [ ] Покрытие нового кода ≥ 80%
+- [ ] New code coverage ≥ 80%
 
-## Зависимости
+## Dependencies
 
 - Blocked by: #<issue>
 - Blocks: #<issue>
 
-## Оценка
+## Estimate
 
 - Size: S | M | L
 - Priority: p0 | p1 | p2
 
 ## Definition of Done
 
-- [ ] Код в PR, зелёный CI
-- [ ] Тесты зелёные, покрытие ≥ 80%
-- [ ] Логи без секретов
-- [ ] Документация обновлена
+- [ ] Code in PR, green CI
+- [ ] Tests green, coverage ≥ 80%
+- [ ] Logs without secrets
+- [ ] Documentation updated
 ```
 
 ---
 
-## Изменения документа
+## Document changes
 
-| Версия | Дата | Изменения |
+| Version | Date | Changes |
 |---|---|---|
-| 1.1 | 21.10.2026 | Добавлены §3.4 (проверка ссылок на разделы) и предупреждение в шаблон issue (#64) |
-| 1.0 | 16.10.2026 | Первичная спецификация |
+| 1.1 | 21.10.2026 | Added §3.4 (section reference validation) and warning in issue template (#64) |
+| 1.0 | 16.10.2026 | Initial specification |
