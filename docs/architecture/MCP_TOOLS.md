@@ -1,18 +1,18 @@
-# MCP-инструменты агентов — ai-sdlc-factory
+# Agent MCP tools — ai-sdlc-factory
 
-**Версия 1.2 · 20.10.2026**
+**Version 1.2 · 20.10.2026**
 
-## 1. Общие правила
+## 1. General rules
 
-- Все инструменты доступны через **Tool Gateway**.
-- Каждый вызов проходит **Policy Engine**; для R2/R3 может требовать approve.
-- Секреты подставляет Tool Gateway (credential brokering).
-- Правила доступа: `Role.tools.allow` — белый список; `Role.tools.deny` — чёрный список, приоритетнее `allow`.
+- All tools are available through **Tool Gateway**.
+- Every call passes through **Policy Engine**; for R2/R3 may require approval.
+- Secrets are injected by Tool Gateway (credential brokering).
+- Access rules: `Role.tools.allow` — whitelist; `Role.tools.deny` — blacklist, higher priority than `allow`.
 
-**Ограничения по ролям (Anti-Injection):**
-При назначении инструментов роли (см. `spec.tools` в YAML) MUST соблюдаться правило разделения возможностей. Ни одна роль не должна иметь одновременно `web.*` (недоверенный контент), `secrets.read` / `fs.*` (приватные данные) и `git.push` / `deploy.*` / `tracker.write` (исходящий канал). Если роль требует пересечения этих доменов, задача должна быть декомпозирована на два шага (например, «Исследование» → Handoff → «Реализация»).
+**Role constraints (Anti-Injection):**
+When assigning tools to a role (see `spec.tools` in YAML), the separation of capabilities rule MUST be observed. No role must simultaneously have `web.*` (untrusted content), `secrets.read` / `fs.*` (private data), and `git.push` / `deploy.*` / `tracker.write` (outbound channel). If a role requires crossing these domains, the task must be decomposed into two steps (e.g., "Research" → Handoff → "Implementation").
 
-## 2. Формат файла схемы
+## 2. Schema file format
 
 ```json
 {
@@ -20,7 +20,7 @@
   "schema_version": "ai-sdlc-factory/v1",
   "tools": [{
     "name": "<tool.name>",
-    "description": "<описание>",
+    "description": "<description>",
     "input_schema": { "type": "object", "properties": { } },
     "output_schema": { "type": "object", "properties": { } },
     "risk_level": "R0|R1|R2|R3"
@@ -28,123 +28,123 @@
 }
 ```
 
-## 3. Инструменты по ролям
+## 3. Tools by role
 
 ### 3.1 `pm_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `pm.create_prd` | Создать PRD | R1 |
-| `pm.update_backlog` | Обновить бэклог | R1 |
-| `tracker.comment` | Комментарий в тикете | R1 |
-| `kb.search` | Поиск в KB | R0 |
+| `pm.create_prd` | Create PRD | R1 |
+| `pm.update_backlog` | Update backlog | R1 |
+| `tracker.comment` | Comment on ticket | R1 |
+| `kb.search` | Search in KB | R0 |
 
 ### 3.2 `researcher_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `web.search` | Поиск в интернете | R0 |
-| `web.fetch` | Загрузка страницы | R0 |
-| `research.summarize` | Сводка по источникам | R0 |
-| `kb.write_draft` | Черновик в KB | R1 |
+| `web.search` | Internet search | R0 |
+| `web.fetch` | Page fetch | R0 |
+| `research.summarize` | Source summary | R0 |
+| `kb.write_draft` | Draft in KB | R1 |
 
 ### 3.3 `analyst_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `slpr.propose_node` | Предложить сущность SLPr | R2 |
-| `slpr.propose_edge` | Предложить связь | R2 |
-| `slpr.search` | Поиск по SLPr | R0 |
+| `slpr.propose_node` | Propose SLPr entity | R2 |
+| `slpr.propose_edge` | Propose edge | R2 |
+| `slpr.search` | Search SLPr | R0 |
 
 ### 3.4 `designer_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `figma.read` | Чтение файла Figma | R0 |
-| `figma.write` | Правка фреймов | R2 |
-| `design.export_tokens` | Экспорт токенов | R1 |
+| `figma.read` | Read Figma file | R0 |
+| `figma.write` | Edit frames | R2 |
+| `design.export_tokens` | Export tokens | R1 |
 
 ### 3.5 `architect_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `sem.am_read` | Чтение AM | R0 |
-| `sem.am_write` | Правка AM | R2 |
-| `diag.render` | Рендер DSL в SVG/PNG | R1 |
-| `diag.validate` | Валидация DSL | R1 |
-| `diag.publish` | Публикация в KB | R2 |
-| `adr.propose` | Предложить ADR | R2 |
+| `sem.am_read` | Read AM | R0 |
+| `sem.am_write` | Edit AM | R2 |
+| `diag.render` | Render DSL to SVG/PNG | R1 |
+| `diag.validate` | Validate DSL | R1 |
+| `diag.publish` | Publish to KB | R2 |
+| `adr.propose` | Propose ADR | R2 |
 
-**Запрещено:** `deploy.prod`, `secrets.read`, `git.push_protected`.
+**Forbidden:** `deploy.prod`, `secrets.read`, `git.push_protected`.
 
 ### 3.6 `developer_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `git.clone` | Клонирование репо | R0 |
-| `git.branch` | Создание ветки | R1 |
-| `git.commit` | Коммит | R1 |
-| `git.push` | Push ветки | R1 |
-| `sandbox.exec` | Команда в песочнице | R1 |
-| `fs.read` | Чтение файла | R0 |
-| `fs.write` | Запись файла | R1 |
+| `git.clone` | Clone repo | R0 |
+| `git.branch` | Create branch | R1 |
+| `git.commit` | Commit | R1 |
+| `git.push` | Push branch | R1 |
+| `sandbox.exec` | Command in sandbox | R1 |
+| `fs.read` | Read file | R0 |
+| `fs.write` | Write file | R1 |
 
-**Запрещено:** `deploy.prod`, `secrets.read`, `git.push_protected`.
+**Forbidden:** `deploy.prod`, `secrets.read`, `git.push_protected`.
 
 ### 3.7 `qa_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `sandbox.exec` | Прогон тестов | R1 |
+| `sandbox.exec` | Run tests | R1 |
 | `test.run` | Unit/integration/e2e | R1 |
-| `test.report` | Отчёт покрытия | R0 |
-| `bug.open` | Открыть баг-репорт | R1 |
+| `test.report` | Coverage report | R0 |
+| `bug.open` | Open bug report | R1 |
 
 ### 3.8 `devops_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `ci.trigger` | Запуск CI | R1 |
-| `ci.status` | Статус CI | R0 |
-| `deploy.staging` | Деплой в staging | R2 |
-| `deploy.prod` | Деплой в prod | R3 |
-| `deploy.rollback` | Откат | R2 |
+| `ci.trigger` | Trigger CI | R1 |
+| `ci.status` | CI status | R0 |
+| `deploy.staging` | Deploy to staging | R2 |
+| `deploy.prod` | Deploy to prod | R3 |
+| `deploy.rollback` | Rollback | R2 |
 
 ### 3.9 `reviewer_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `git.diff` | Diff PR | R0 |
-| `pr.review` | Ревью PR | R1 |
+| `git.diff` | PR diff | R0 |
+| `pr.review` | Review PR | R1 |
 | `pr.approve` | Approve | R1 |
 
 ### 3.10 `security_tools.json`
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `sast.run` | Статический анализ | R1 |
-| `dep.scan` | Сканирование зависимостей | R1 |
-| `secret.scan` | Сканирование на секреты | R1 |
+| `sast.run` | Static analysis | R1 |
+| `dep.scan` | Dependency scan | R1 |
+| `secret.scan` | Secret scan | R1 |
 
-## 4. Универсальные инструменты
+## 4. Universal tools
 
-| Инструмент | Описание | Risk |
+| Tool | Description | Risk |
 |---|---|---|
-| `kb.search` | Поиск в KB | R0 |
-| `sem.query` | Запрос по семантическому графу | R0 |
-| `tracker.comment` | Комментарий | R1 |
-| `agent.handoff` | Handoff-пакет | R1 |
+| `kb.search` | Search in KB | R0 |
+| `sem.query` | Query semantic graph | R0 |
+| `tracker.comment` | Comment | R1 |
+| `agent.handoff` | Handoff package | R1 |
 
-## 5. Маппинг на Tool Gateway
+## 5. Tool Gateway mapping
 
-1. Загружает схемы из `packages/contracts/mcp-schemas/`.
-2. Фильтрует инструменты по `Role.tools.allow` и `Role.tools.deny`.
-3. Для каждого вызова: проверяет права, применяет политику, подставляет секреты, выполняет вызов, логирует.
+1. Load schemas from `packages/contracts/mcp-schemas/`.
+2. Filter tools by `Role.tools.allow` and `Role.tools.deny`.
+3. For each call: check permissions, apply policy, inject secrets, execute call, log.
 
-## Изменения документа
+## Document changes
 
-| Версия | Дата | Изменения |
+| Version | Date | Changes |
 |---|---|---|
-| 1.2 | 20.10.2026 | Добавлены ограничения по ролям (Anti-Injection) |
-| 1.1 | 16.10.2026 | Добавлены sem.*, diag.*, adr.*, slpr.* |
-| 1.0 | 16.10.2026 | Первичный реестр |
+| 1.2 | 20.10.2026 | Added role constraints (Anti-Injection) |
+| 1.1 | 16.10.2026 | Added sem.*, diag.*, adr.*, slpr.* |
+| 1.0 | 16.10.2026 | Initial registry |

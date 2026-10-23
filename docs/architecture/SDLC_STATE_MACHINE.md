@@ -1,8 +1,8 @@
 # SDLC State Machine — ai-sdlc-factory
 
-**Версия 1.1 · 16.10.2026**
+**Version 1.1 · 16.10.2026**
 
-## 1. Общая схема
+## 1. Overview
 
 ```
 [*] --> Idea --> Research --> Requirements --> RequirementsReview
@@ -13,105 +13,105 @@ Monitoring --> [*]
 Monitoring --> Research (feedback loop)
 ```
 
-## 2. Состояния
+## 2. States
 
-| Состояние | Ответственный | Входные артефакты | Выходные артефакты |
+| State | Responsible | Input artifacts | Output artifacts |
 |---|---|---|---|
-| `Idea` | PM | цель владельца | описание проблемы |
-| `Research` | Researcher | гипотеза | отчёт исследования |
-| `Requirements` | PM + Analyst | отчёт исследования | PRD, SLPr v1, user stories |
-| `RequirementsReview` | Reviewer + человек | PRD, SLPr v1 | approve / reject |
-| `Design` | Designer | PRD | макеты, прототипы |
-| `Architecture` | Architect | PRD, SLPr | AM v1, C4-диаграммы, ADR |
-| `ArchitectureReview` | Reviewer + Tech Lead | AM, ADR, диаграммы | approve / reject |
-| `Planning` | PM + Architect | AM, PRD | эпики, задачи, спринт |
-| `InDev` | Developer | тикеты | ветки, PR, коммиты |
+| `Idea` | PM | owner goal | problem description |
+| `Research` | Researcher | hypothesis | research report |
+| `Requirements` | PM + Analyst | research report | PRD, SLPr v1, user stories |
+| `RequirementsReview` | Reviewer + human | PRD, SLPr v1 | approve / reject |
+| `Design` | Designer | PRD | mockups, prototypes |
+| `Architecture` | Architect | PRD, SLPr | AM v1, C4 diagrams, ADR |
+| `ArchitectureReview` | Reviewer + Tech Lead | AM, ADR, diagrams | approve / reject |
+| `Planning` | PM + Architect | AM, PRD | epics, tasks, sprint |
+| `InDev` | Developer | tickets | branches, PRs, commits |
 | `CodeReview` | Reviewer + Architect | PR | approve / changes_requested |
-| `QA` | QA / SDET | PR + критерии приёмки | автотесты, отчёт покрытия |
-| `Build` | DevOps | merged PR | образ, RC, SBOM |
-| `Release` | Release Manager + человек | RC | approve / reject |
-| `Deploy` | DevOps | approve | развёрнутый стенд |
-| `Monitoring` | DevOps + PM | метрики | отчёты, задачи обратной связи |
+| `QA` | QA / SDET | PR + acceptance criteria | autotests, coverage report |
+| `Build` | DevOps | merged PR | image, RC, SBOM |
+| `Release` | Release Manager + human | RC | approve / reject |
+| `Deploy` | DevOps | approve | deployed environment |
+| `Monitoring` | DevOps + PM | metrics | reports, feedback tasks |
 
-## 3. Переходы и условия
+## 3. Transitions and conditions
 
 ### 3.9 InDev → CodeReview
 
-Условие: PR открыт; CI зелёный; покрытие нового кода >= 80%; Conventional Commits соблюдены.
+Condition: PR opened; CI green; new code coverage >= 80%; Conventional Commits observed.
 
 ### 3.10 CodeReview → QA
 
-Условие: approve от ревьюера (не автора PR); max_rounds=3.
+Condition: approval from reviewer (not PR author); max_rounds=3.
 
 ### 3.12 QA → Build
 
-Условие: все уровни тестов зелёные; пороги покрытия выполнены; critical/high баги закрыты.
+Condition: all test levels green; coverage thresholds met; critical/high bugs closed.
 
 ### 3.15 Release → Deploy
 
-Условие: гейт `human_approval` для prod; release notes в KB; миграции БД проверены.
+Condition: `human_approval` gate for prod; release notes in KB; DB migrations verified.
 
-## 4. Гейты
+## 4. Gates
 
-| Гейт | Тип | Где применяется | Критерий |
+| Gate | Type | Where applied | Criterion |
 |---|---|---|---|
-| `requirements_approved` | human_approval | RequirementsReview → Design | Approve + закрытые комментарии |
-| `architecture_approved` | human_approval | ArchitectureReview → Planning | Approve + валидная AM |
-| `ci_green` | auto | InDev → CodeReview | Все CI-проверки зелёные |
-| `review_approved` | agent_review | CodeReview → QA | Approve от ревьюера |
-| `qa_passed` | auto | QA → Build | Тесты зелёные, пороги покрытия |
-| `sbom_signed` | auto | Build → Release | SBOM + подпись образа |
-| `prod_approved` | human_approval | Release → Deploy | Approve человека (R3) |
-| `deploy_healthy` | auto | Deploy → Monitoring | Healthcheck + метрики в норме |
-| `conformance_ok` | auto | На merge в main | Drift <= warning |
-| `kb_published` | agent_review | Диаграмма → KB | Валидатор + ревью |
-| `semantic_valid` | auto | Все изменения SLPr/AM | Правила вывода §7 |
+| `requirements_approved` | human_approval | RequirementsReview → Design | Approve + resolved comments |
+| `architecture_approved` | human_approval | ArchitectureReview → Planning | Approve + valid AM |
+| `ci_green` | auto | InDev → CodeReview | All CI checks green |
+| `review_approved` | agent_review | CodeReview → QA | Approve from reviewer |
+| `qa_passed` | auto | QA → Build | Tests green, coverage thresholds |
+| `sbom_signed` | auto | Build → Release | SBOM + image signature |
+| `prod_approved` | human_approval | Release → Deploy | Human approve (R3) |
+| `deploy_healthy` | auto | Deploy → Monitoring | Healthcheck + metrics normal |
+| `conformance_ok` | auto | On merge to main | Drift <= warning |
+| `kb_published` | agent_review | Diagram → KB | Validator + review |
+| `semantic_valid` | auto | All SLPr/AM changes | Inference rules §7 |
 
-## 5. Условия блокировки
+## 5. Blocking conditions
 
-Задача **блокируется** при:
-1. Наличии `critical` дефектов в QA.
-2. Провале CI или тестов.
-3. Отсутствии approve от необходимого гейта.
-4. Превышении бюджета.
-5. Обнаружении `drift` уровня `critical`.
-6. Наличии `stale` диаграмм.
-7. Обнаружении prompt injection.
+A task is **blocked** when:
+1. Presence of `critical` defects in QA.
+2. CI or test failure.
+3. Missing approval from required gate.
+4. Budget exceeded.
+5. `drift` of `critical` level detected.
+6. Presence of `stale` diagrams.
+7. Prompt injection detected.
 
-## 6. Эскалация
+## 6. Escalation
 
-Эскалация человеку при:
-- превышении `max_rounds` в цикле ревью (по умолчанию 3);
-- превышении `max_steps` или `max_cost_usd`;
-- детекторе повторяющихся действий;
-- отказе 3 итераций self-correction loop.
+Escalation to human when:
+- `max_rounds` exceeded in review loop (default 3);
+- `max_steps` or `max_cost_usd` exceeded;
+- repeated actions detector triggered;
+- 3 iterations of self-correction loop rejected.
 
-## 7. Предохранители
+## 7. Circuit breakers
 
-| Предохранитель | Значение по умолчанию |
+| Circuit breaker | Default value |
 |---|---|
-| `max_rounds` в цикле ревью | 3 |
-| `max_steps` на TaskRun | 60 |
-| `max_cost_usd` на TaskRun | 3.0 |
-| `max_wall_minutes` на TaskRun | 45 |
-| `deadline` на StageRun | 24 часа |
+| `max_rounds` in review loop | 3 |
+| `max_steps` per TaskRun | 60 |
+| `max_cost_usd` per TaskRun | 3.0 |
+| `max_wall_minutes` per TaskRun | 45 |
+| `deadline` per StageRun | 24 hours |
 
-## 8. Уровни риска и автономность
+## 8. Risk levels and autonomy
 
-| Уровень | Действия | Гейт |
+| Level | Actions | Gate |
 |---|---|---|
-| R0 | Чтение (KB, репо, веб) | Автоматически |
-| R1 | Коммит в рабочую ветку, комментарии, PR | Автоматически |
-| R2 | Merge в main, миграции БД, staging deploy | По профилю автономности |
-| R3 | Prod deploy, удаление данных, смена прав | Всегда approve человека |
+| R0 | Read (KB, repo, web) | Automatic |
+| R1 | Commit to working branch, comments, PR | Automatic |
+| R2 | Merge to main, DB migrations, staging deploy | Per autonomy profile |
+| R3 | Prod deploy, data deletion, permission changes | Always human approve |
 
-## 9. Снимки версий для воспроизводимости
+## 9. Version snapshots for reproducibility
 
-Каждый Run закрепляет: `role_versions[]`, `team_version`, `process_version`, `model_profiles[]`, `knowledge_snapshot_id`, `slp_version`, `slpr_version`, `am_version`.
+Each Run pins: `role_versions[]`, `team_version`, `process_version`, `model_profiles[]`, `knowledge_snapshot_id`, `slp_version`, `slpr_version`, `am_version`.
 
-## Изменения документа
+## Document changes
 
-| Версия | Дата | Изменения |
+| Version | Date | Changes |
 |---|---|---|
-| 1.1 | 16.10.2026 | Добавлены гейты conformance_ok, semantic_valid |
-| 1.0 | 16.10.2026 | Первичная спецификация |
+| 1.1 | 16.10.2026 | Added conformance_ok, semantic_valid gates |
+| 1.0 | 16.10.2026 | Initial specification |
