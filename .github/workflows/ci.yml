@@ -130,3 +130,34 @@ jobs:
         if: steps.frontend.outputs.present == 'true'
         working-directory: apps/web
         run: npm run build
+
+  cyrillic-check:
+    name: English-only check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for Cyrillic characters
+        run: |
+          echo "Checking for Cyrillic characters in tracked files..."
+          
+          # Search for Cyrillic in all text files, excluding node_modules and .git
+          MATCHES=$(grep -rI "[А-Яа-яёЁ]" \
+            --include="*.md" \
+            --include="*.yaml" \
+            --include="*.yml" \
+            --include="*.json" \
+            --include="*.go" \
+            --include="*.ts" \
+            --include="*.tsx" \
+            --exclude-dir=node_modules \
+            --exclude-dir=.git \
+            . || true)
+            
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Cyrillic characters found. The repository is English-only."
+            echo "$MATCHES"
+            exit 1
+          fi
+          
+          echo "OK: no Cyrillic characters found."

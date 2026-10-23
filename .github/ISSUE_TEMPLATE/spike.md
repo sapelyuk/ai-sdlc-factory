@@ -1,29 +1,29 @@
 ---
 name: Spike
-about: Исследовательская задача (time-box)
-title: "spike: <исследование>"
+about: Research task (time-box)
+title: "spike: <investigation>"
 labels: "type:spike"
 assignees: ""
 ---
 
-## Контекст
+## Context
 
-<Что нужно исследовать и зачем.>
+<What needs to be investigated and why.>
 
-## Цель спайка
+## Spike goal
 
-<Чёткий результат, который должен быть получен.>
+<Clear outcome that should be achieved.>
 
 ## Time-box
 
-- <X> часов/дней
+- <X> hours/days
 
-## Вопросы для исследования
+## Questions to investigate
 
 1. ...
 2. ...
 
-## Оценка
+## Assessment
 
 - Size: S | M | L
 - Priority: p0 | p1 | p2

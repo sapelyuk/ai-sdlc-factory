@@ -1,44 +1,44 @@
 ---
 name: Feature
-about: Новая функциональность
-title: "<area>: <краткое действие>"
+about: New feature
+title: "<area>: <short action>"
 labels: "type:feature"
 assignees: ""
 ---
 
-## Контекст
+## Context
 
-<1-3 предложения. Что делаем и зачем.>
+<1-3 sentences. What are we doing and why.>
 
-## Ссылки
+## References
 
-- Требования: `FR-XXX`, `NFR-XXX`
+- Requirements: `FR-XXX`, `NFR-XXX`
 - ADR: `ADR-XXX`
-- Раздел: `docs/architecture/SYSTEM_DESIGN.md` section X.Y
+- Section: `docs/architecture/SYSTEM_DESIGN.md` section X.Y
 
-## Что сделать
+## What to do
 
-- [ ] Пункт 1
-- [ ] Пункт 2
+- [ ] Item 1
+- [ ] Item 2
 
 ## Acceptance criteria
 
 - [ ] Given ... When ... Then ...
 
-## Тестовый план
+## Test plan
 
-- [ ] Unit-тесты
-- [ ] Integration-тесты
-- [ ] Покрытие >= 80%
+- [ ] Unit tests
+- [ ] Integration tests
+- [ ] Coverage >= 80%
 
-## Оценка
+## Assessment
 
 - Size: S | M | L
 - Priority: p0 | p1 | p2
 
 ## Definition of Done
 
-- [ ] Код в PR, зелёный CI
-- [ ] Тесты зелёные, покрытие >= 80%
-- [ ] Логи без секретов
-- [ ] Документация обновлена
+- [ ] Code in PR, green CI
+- [ ] Tests green, coverage >= 80%
+- [ ] Logs without secrets
+- [ ] Documentation updated

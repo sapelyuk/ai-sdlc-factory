@@ -1,60 +1,55 @@
-## Контекст
+## Context
 
-<Краткое описание изменений и их назначения. 2-3 предложения.>
+<Brief description of changes and their purpose. 2-3 sentences.>
 
-## Language
+## References to requirements
 
-This PR description MUST be in English.
+<!-- Mandatory: reference FR/NFR from docs/architecture/SYSTEM_DESIGN.md section 3 -->
 
-## Ссылки на требования
+- Requirements: FR-XXX, NFR-XXX
+  <!-- Example: FR-TEAM, NFR-5 -->
 
-<!-- Обязательно укажите ссылки на FR/NFR из docs/architecture/SYSTEM_DESIGN.md section 3 -->
+## References to ADR
 
-- Требования: FR-XXX, NFR-XXX
-  <!-- Пример: FR-TEAM, NFR-5 -->
-
-## Ссылки на ADR
-
-<!-- Обязательно укажите ссылки на ADR из docs/architecture/ADR.md -->
+<!-- Mandatory: reference ADR from docs/architecture/ADR.md -->
 
 - ADR: ADR-XXX
-  <!-- Пример: ADR-003, ADR-018 -->
+  <!-- Example: ADR-003, ADR-018 -->
 
-## Связанные issues
+## Related issues
 
-<!-- Укажите связанные issues через #<number> -->
+<!-- Reference related issues via #<number> -->
 
 - Closes: #<issue>
 - Related: #<issue>
 
-## Что сделано
+## What was done
 
-- [ ] Изменение 1
-- [ ] Изменение 2
+- [ ] Change 1
+- [ ] Change 2
 
-## Как тестировать
+## How to test
 
-<!-- Опишите шаги для проверки изменений -->
+<!-- Describe steps to verify changes -->
 
 1. make up-local
 2. ...
 
-## Тип изменений
+## Type of change
 
-- [ ] Новая функциональность (feature)
-- [ ] Исправление бага (fix)
-- [ ] Рефакторинг (refactor)
-- [ ] Обновление документации (docs)
-- [ ] Изменение инфраструктуры (infra)
-- [ ] Изменение контрактов (contract)
-- [ ] Тесты (test)
-- [ ] Безопасность (security)
+- [ ] New feature
+- [ ] Bug fix
+- [ ] Refactoring
+- [ ] Documentation update
+- [ ] Infrastructure change
+- [ ] Contract change
+- [ ] Tests
+- [ ] Security
 
 ## Definition of Done
 
-- [ ] Код в PR, зелёный CI
-- [ ] Тесты зелёные, покрытие >= 80%
-- [ ] Логи без секретов
-- [ ] Документация обновлена в том же PR
-- [ ] Ссылки на FR/NFR/ADR в описании PR
-
+- [ ] Code in PR, green CI
+- [ ] Tests green, coverage >= 80%
+- [ ] Logs without secrets
+- [ ] Documentation updated in the same PR
+- [ ] References to FR/NFR/ADR in PR description

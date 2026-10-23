@@ -1,41 +1,41 @@
-# Документация ai-sdlc-factory
+# ai-sdlc-factory Documentation
 
-Репозиторий документации платформы `ai-sdlc-factory` — мультиагентной среды разработки, где команды ИИ-агентов реализуют полный SDLC под контролем владельца.
+The `ai-sdlc-factory` documentation repository — a multi-agent development platform where AI agent teams implement the full SDLC under owner control.
 
-## Структура
+## Structure
 
-- [`architecture/SYSTEM_DESIGN.md`](architecture/SYSTEM_DESIGN.md) — главный архитектурный документ (v1.2). Точка входа для ИИ-агента-исполнителя.
-- [`architecture/ADR.md`](architecture/ADR.md) — реестр архитектурных решений (ADR-001…ADR-018).
-- [`architecture/ONTOLOGY_SPEC.md`](architecture/ONTOLOGY_SPEC.md) — спецификация семантического слоя (SLP / SLPr / AM).
-- [`architecture/SDLC_STATE_MACHINE.md`](architecture/SDLC_STATE_MACHINE.md) — состояния задач, переходы, гейты, условия блокировки.
-- [`architecture/MCP_TOOLS.md`](architecture/MCP_TOOLS.md) — реестр MCP-инструментов по ролям.
-- [`AGENT_KICKOFF.md`](AGENT_KICKOFF.md) — инструкция по превращению документации в GitHub Issues.
+- [`architecture/SYSTEM_DESIGN.md`](architecture/SYSTEM_DESIGN.md) — main architecture document (v1.2). Entry point for the executor AI agent.
+- [`architecture/ADR.md`](architecture/ADR.md) — architecture decision record registry (ADR-001…ADR-018).
+- [`architecture/ONTOLOGY_SPEC.md`](architecture/ONTOLOGY_SPEC.md) — semantic layer specification (SLP / SLPr / AM).
+- [`architecture/SDLC_STATE_MACHINE.md`](architecture/SDLC_STATE_MACHINE.md) — task states, transitions, gates, and blocking conditions.
+- [`architecture/MCP_TOOLS.md`](architecture/MCP_TOOLS.md) — MCP tools registry organized by role.
+- [`AGENT_KICKOFF.md`](AGENT_KICKOFF.md) — guide for converting documentation into GitHub Issues.
 
-## Как читать
+## How to read
 
-1. Начните с `SYSTEM_DESIGN.md` — это полная картина.
-2. Перед реализацией — прочитайте `ADR.md` (обязательные решения).
-3. Для работы над семантическим слоем — `ONTOLOGY_SPEC.md`.
-4. Для работы над оркестрацией — `SDLC_STATE_MACHINE.md`.
-5. Для работы над Tool Gateway — `MCP_TOOLS.md`.
+1. Start with `SYSTEM_DESIGN.md` for the full picture.
+2. Before implementation — read `ADR.md` (binding decisions).
+3. For semantic layer work — `ONTOLOGY_SPEC.md`.
+4. For orchestration work — `SDLC_STATE_MACHINE.md`.
+5. For Tool Gateway work — `MCP_TOOLS.md`.
 
-## Соглашения
+## Conventions
 
-- Имя сервиса: **`ai-sdlc-factory`**.
+- Service name: **`ai-sdlc-factory`**.
 - `apiVersion` YAML: **`ai-sdlc-factory/v1`**.
-- Namespace онтологии: **`ai-sdlc-factory/product-domain@^1`**.
-- Корневой каталог монорепозитория: **`ai-sdlc-factory/`**.
-- Префикс контейнеров и Helm-релизов: **`ai-sdlc-factory-*`**.
-- Слова MUST / SHOULD / MAY — в значении RFC 2119.
-- Идентификаторы (G, P, FR-*, NFR-*, ADR-*) — стабильны.
+- Ontology namespace: **`ai-sdlc-factory/product-domain@^1`**.
+- Monorepo root directory: **`ai-sdlc-factory/`**.
+- Container and Helm release prefix: **`ai-sdlc-factory-*`**.
+- MUST / SHOULD / MAY — per RFC 2119.
+- Identifiers (G, P, FR-*, NFR-*, ADR-*) are stable.
 
-## Контрибьюция
+## Contribution
 
-- Изменения архитектуры — PR с обновлением соответствующего ADR.
-- Изменения семантического слоя — PR с обновлением `ONTOLOGY_SPEC.md` и версии онтологии.
-- Изменения процесса — PR с обновлением `SDLC_STATE_MACHINE.md`.
-- Каждый PR — ссылки на FR/NFR/ADR.
+- Architecture changes — PR with corresponding ADR update.
+- Semantic layer changes — PR with `ONTOLOGY_SPEC.md` update and ontology version bump.
+- Process changes — PR with `SDLC_STATE_MACHINE.md` update.
+- Every PR — references to FR/NFR/ADR.
 
-## Лицензия
+## License
 
 AGPLv3 (GNU Affero General Public License v3)

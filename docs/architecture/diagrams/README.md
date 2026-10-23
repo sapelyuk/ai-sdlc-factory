@@ -1,47 +1,47 @@
-# Диаграммы архитектуры ai-sdlc-factory
+# ai-sdlc-factory Architecture Diagrams
 
-Набор архитектурных диаграмм в формате **draw.io** (`.drawio`).
+A set of architecture diagrams in **draw.io** format (`.drawio`).
 
-## Состав
+## Contents
 
-| Файл | C4-уровень | Раздел | Описание |
+| File | C4 Level | Section | Description |
 |---|---|---|---|
-| `01-system-context.drawio` | Level 1 — Context | §4.1 | Платформа и внешние системы |
-| `02-container-diagram.drawio` | Level 2 — Containers | §4.2 | Три плоскости и сервисы |
-| `03-component-diagram-orchestrator.drawio` | Level 3 — Components | §8 | Внутренняя структура Orchestrator |
+| `01-system-context.drawio` | Level 1 — Context | §4.1 | Platform and external systems |
+| `02-container-diagram.drawio` | Level 2 — Containers | §4.2 | Three planes and services |
+| `03-component-diagram-orchestrator.drawio` | Level 3 — Components | §8 | Internal structure of Orchestrator |
 
-## Как открыть
+## How to open
 
-### Вариант 1 — draw.io в браузере
+### Option 1 — draw.io in browser
 
-1. Откройте [app.diagrams.net](https://app.diagrams.net).
-2. `File → Open` → выберите `.drawio` файл.
+1. Open [app.diagrams.net](https://app.diagrams.net).
+2. `File → Open` → select the `.drawio` file.
 
-### Вариант 2 — VS Code
+### Option 2 — VS Code
 
-1. Установите расширение `hediet.vscode-drawio`.
-2. Откройте `.drawio` файл.
+1. Install the `hediet.vscode-drawio` extension.
+2. Open the `.drawio` file.
 
-## Нейминг
+## Naming
 
 `NN-<kind>-<subject>.drawio`
-- `NN` — порядковый номер (01, 02, ...)
+- `NN` — sequential number (01, 02, ...)
 - `kind` ∈ {`context`, `container`, `component`, `sequence`, `deployment`, `er`}
 
-## Правила работы с диаграммами
+## Rules for working with diagrams
 
-1. При изменении архитектуры в `SYSTEM_DESIGN.md` — обновить диаграмму **в том же PR**.
-2. Изменения в `.drawio` ревьюются как код.
-3. Если диаграмма противоречит `SYSTEM_DESIGN.md` — приоритет у документа.
+1. When updating architecture in `SYSTEM_DESIGN.md` — update the diagram **in the same PR**.
+2. Changes to `.drawio` files are reviewed as code.
+3. If a diagram contradicts `SYSTEM_DESIGN.md` — the document takes precedence.
 
-## Экспорт для GitHub
+## Export for GitHub
 
-1. Откройте `.drawio` в draw.io.
+1. Open `.drawio` in draw.io.
 2. `File → Export as → SVG`.
-3. Сохраните в `docs/architecture/diagrams/exports/<name>.svg`.
+3. Save to `docs/architecture/diagrams/exports/<name>.svg`.
 
-## Изменения документа
+## Document changes
 
-| Версия | Дата | Изменения |
+| Version | Date | Changes |
 |---|---|---|
-| 1.0 | 16.10.2026 | Первичное описание |
+| 1.0 | 2026-10-16 | Initial description |
