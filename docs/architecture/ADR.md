@@ -24,7 +24,7 @@ Format: MADR. Statuses: `proposed` | `accepted` | `superseded` | `deprecated` | 
 
 **Status:** accepted.
 
-**Context.** Long SDLC processes (hours-days), pauses for human approve, retries on LLM API failure.
+**Context.** Long SDLC processes (hours-days), pauses for human approval, retries on LLM API failure.
 
 **Decision.** Temporal (Go SDK). **Run**, **StageRun**, **TaskRun** — workflows. **AgentStep** and tool calls — activities with idempotency keys.
 
@@ -146,7 +146,7 @@ Format: MADR. Statuses: `proposed` | `accepted` | `superseded` | `deprecated` | 
 
 **Status:** accepted.
 
-**Decision.** R0 (read) — auto; R1 (local write) — auto; R2 (significant) — per profile; R3 (irreversible) — always human approve.
+**Decision.** R0 (read) — auto; R1 (local write) — auto; R2 (significant) — per profile; R3 (irreversible) — always human approval.
 
 **References:** FR-OPS-1, NFR-5.
 
