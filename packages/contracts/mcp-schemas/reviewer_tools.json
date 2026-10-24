@@ -1,0 +1,208 @@
+{
+  "role": "code-reviewer",
+  "schema_version": "ai-sdlc-factory/v1",
+  "tools": [
+    {
+      "name": "git.diff",
+      "description": "Retrieves the diff for a pull request or between branches.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "pr_number": { "type": "integer" },
+          "base": { "type": "string" },
+          "head": { "type": "string" }
+        },
+        "required": ["repo"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "diff": { "type": "string" }
+        }
+      },
+      "risk_level": "R0",
+      "idempotent": true,
+      "requires_approval": "never"
+    },
+    {
+      "name": "git.read",
+      "description": "Reads file contents, commits, or branch information from a repository.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "path": { "type": "string" },
+          "ref": { "type": "string" },
+          "operation": { "type": "string", "enum": ["file", "commit", "branch", "log"] }
+        },
+        "required": ["repo", "operation"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "content": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      },
+      "risk_level": "R0",
+      "idempotent": true,
+      "requires_approval": "never"
+    },
+    {
+      "name": "pr.review",
+      "description": "Creates a code review comment on a pull request.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pr_number": { "type": "integer" },
+          "repo": { "type": "string" },
+          "body": { "type": "string" },
+          "line": { "type": "integer" },
+          "side": { "type": "string", "enum": ["left", "right"] }
+        },
+        "required": ["pr_number", "repo", "body"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "review_id": { "type": "string" },
+          "review_url": { "type": "string" }
+        }
+      },
+      "risk_level": "R1",
+      "idempotent": false,
+      "requires_approval": "never"
+    },
+    {
+      "name": "pr.approve",
+      "description": "Approves a pull request.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pr_number": { "type": "integer" },
+          "repo": { "type": "string" }
+        },
+        "required": ["pr_number", "repo"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "pr_number": { "type": "integer" }
+        }
+      },
+      "risk_level": "R1",
+      "idempotent": false,
+      "requires_approval": "never"
+    },
+    {
+      "name": "pr.request_changes",
+      "description": "Requests changes on a pull request, indicating that modifications are needed before approval.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pr_number": { "type": "integer" },
+          "repo": { "type": "string" },
+          "body": { "type": "string" }
+        },
+        "required": ["pr_number", "repo", "body"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "pr_number": { "type": "integer" }
+        }
+      },
+      "risk_level": "R1",
+      "idempotent": false,
+      "requires_approval": "never"
+    },
+    {
+      "name": "sem.query",
+      "description": "Queries the semantic layer (SLP/AM) for architecture models and relationships.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "kind": { "type": "string" },
+          "depth": { "type": "integer" }
+        },
+        "required": ["query"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "nodes": { "type": "array" },
+          "edges": { "type": "array" }
+        }
+      },
+      "risk_level": "R0",
+      "idempotent": true,
+      "requires_approval": "never"
+    },
+    {
+      "name": "kb.search",
+      "description": "Searches the knowledge base using hybrid (BM25 + vector) retrieval.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "limit": { "type": "integer" },
+          "scope": { "type": "string", "enum": ["platform", "team", "project", "role", "task"] }
+        },
+        "required": ["query"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "content": { "type": "string" },
+                "score": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "risk_level": "R0",
+      "idempotent": true,
+      "requires_approval": "never"
+    },
+    {
+      "name": "slpr.search",
+      "description": "Searches the product semantic layer (SLPr) for nodes and edges.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "kind": { "type": "string" },
+          "depth": { "type": "integer" }
+        },
+        "required": ["query"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "nodes": { "type": "array" },
+          "edges": { "type": "array" }
+        }
+      },
+      "risk_level": "R0",
+      "idempotent": true,
+      "requires_approval": "never"
+    }
+  ],
+  "deny": ["deploy.prod", "secrets.read", "git.push_protected"]
+}

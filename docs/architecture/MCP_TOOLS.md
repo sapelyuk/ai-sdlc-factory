@@ -115,6 +115,7 @@ When assigning tools to a role (see `spec.tools` in YAML), the separation of cap
 | Tool | Description | Risk |
 |---|---|---|
 | `git.diff` | PR diff | R0 |
+| `git.read` | Reads file contents from the repository | R0 |
 | `pr.review` | Review PR | R1 |
 | `pr.approve` | Approve | R1 |
 
