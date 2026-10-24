@@ -373,5 +373,5 @@
       "requires_approval": "never"
     }
   ],
-  "deny": ["deploy.prod", "secrets.read", "git.push_protected", "policy.change"]
+  "deny": ["deploy.prod", "secrets.read", "git.push_protected"]
 }
