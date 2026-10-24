@@ -1,0 +1,232 @@
+{
+  "role": "qa-engineer",
+  "schema_version": "ai-sdlc-factory/v1",
+  "tools": [
+    {
+      "name": "git.clone",
+      "description": "Clones a repository into the sandbox workspace.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "branch": { "type": "string" }
+        },
+        "required": ["url"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "path": { "type": "string" }
+        }
+      },
+      "risk_level": "R0",
+      "idempotent": false,
+      "requires_approval": "never"
+    },
+    {
+      "name": "sandbox.exec",
+      "description": "Executes a command inside the agent sandbox (e.g. running test suites).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string" },
+          "timeout": { "type": "integer" }
+        },
+        "required": ["command"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "exit_code": { "type": "integer" }
+        }
+      },
+      "risk_level": "R1",
+      "idempotent": false,
+      "requires_approval": "never"
+    },
+    {
+      "name": "test.run",
+      "description": "Runs unit, integration, or end-to-end tests. Results are verified before reporting.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "filter": { "type": "string" },
+          "timeout": { "type": "integer" },
+          "parallel": { "type": "boolean" },
+          "level": { "type": "string", "enum": ["unit", "integration", "e2e"] }
+        },
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "passed": { "type": "integer" },
+          "failed": { "type": "integer" },
+          "skipped": { "type": "integer" },
+          "coverage": { "type": "number" }
+        }
+      },
+      "risk_level": "R1",
+      "idempotent": true,
+      "requires_approval": "never"
+    },
+    {
+      "name": "test.report",
+      "description": "Generates and publishes a test coverage report to the knowledge base.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "run_id": { "type": "string" },
+          "artifacts": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["title"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "report_url": { "type": "string" }
+        }
+      },
+      "risk_level": "R0",
+      "idempotent": false,
+      "requires_approval": "never"
+    },
+    {
+      "name": "bug.open",
+      "description": "Opens a new bug report linked to a tracker ticket.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "linked_ticket": { "type": "string" },
+          "severity": { "type": "string", "enum": ["blocker", "critical", "major", "minor", "trivial"] }
+        },
+        "required": ["title", "description"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "bug_url": { "type": "string" },
+          "bug_id": { "type": "string" }
+        }
+      },
+      "risk_level": "R1",
+      "idempotent": false,
+      "requires_approval": "never"
+    },
+    {
+      "name": "pr.block",
+      "description": "Blocks a pull request from merging due to test failures or policy violations.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pr_number": { "type": "integer" },
+          "repo": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "required": ["pr_number", "repo", "reason"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "pr_number": { "type": "integer" }
+        }
+      },
+      "risk_level": "R1",
+      "idempotent": false,
+      "requires_approval": "never"
+    },
+    {
+      "name": "pr.comment",
+      "description": "Posts a comment on a pull request (e.g. test results, review notes).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pr_number": { "type": "integer" },
+          "repo": { "type": "string" },
+          "body": { "type": "string" }
+        },
+        "required": ["pr_number", "repo", "body"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "comment_url": { "type": "string" },
+          "comment_id": { "type": "string" }
+        }
+      },
+      "risk_level": "R1",
+      "idempotent": false,
+      "requires_approval": "never"
+    },
+    {
+      "name": "kb.search",
+      "description": "Searches the knowledge base using hybrid (BM25 + vector) retrieval.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "limit": { "type": "integer" },
+          "scope": { "type": "string", "enum": ["platform", "team", "project", "role", "task"] }
+        },
+        "required": ["query"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "content": { "type": "string" },
+                "score": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "risk_level": "R0",
+      "idempotent": true,
+      "requires_approval": "never"
+    },
+    {
+      "name": "slpr.search",
+      "description": "Searches the product semantic layer (SLPr) for nodes and edges.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "kind": { "type": "string" },
+          "depth": { "type": "integer" }
+        },
+        "required": ["query"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["success", "error"] },
+          "nodes": { "type": "array" },
+          "edges": { "type": "array" }
+        }
+      },
+      "risk_level": "R0",
+      "idempotent": true,
+      "requires_approval": "never"
+    }
+  ],
+  "deny": ["deploy.prod", "secrets.read", "git.push_protected"]
+}
