@@ -13,6 +13,26 @@ import (
 
 const openAIBaseURL = "https://api.openai.com/v1"
 
+// openaiErrorUsage extracts token usage from an OpenAI error body.
+// The Chat Completions API only includes usage on 200; however some
+// gateways echo usage on 429/5xx. When the provider does not bill on
+// failure this returns ok=false and the attempt records cost_usd = 0.
+func openaiErrorUsage(body []byte) (PartialUsage, bool) {
+	var env struct {
+		Usage *struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil || env.Usage == nil {
+		return PartialUsage{}, false
+	}
+	if env.Usage.PromptTokens == 0 && env.Usage.CompletionTokens == 0 {
+		return PartialUsage{}, false
+	}
+	return PartialUsage{TokensIn: env.Usage.PromptTokens, TokensOut: env.Usage.CompletionTokens}, true
+}
+
 // OpenAIProvider implements Provider for the OpenAI Chat Completions API.
 type OpenAIProvider struct {
 	baseURL string
@@ -109,7 +129,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, modelID string, req domain.Ch
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return domain.ChatResponse{}, BuildHTTPError(resp, p.Name(), modelID)
+		return domain.ChatResponse{}, BuildError(resp, p.Name(), modelID, openaiErrorUsage)
 	}
 
 	var parsed openaiResponse

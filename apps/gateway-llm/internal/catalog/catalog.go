@@ -99,9 +99,9 @@ func (c *Catalog) For(ctx context.Context, profileName string) ([]domain.ModelPr
 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	entries := c.profiles[profileName]
-	if len(entries) == 0 {
-		return nil, fmt.Errorf("profile %q: %w", profileName, domain.ErrNoAvailable)
+	entries, exists := c.profiles[profileName]
+	if !exists || len(entries) == 0 {
+		return nil, fmt.Errorf("profile %q: %w", profileName, domain.ErrUnknownProfile)
 	}
 	// Return a copy to avoid data races on the cached slice.
 	out := make([]domain.ModelProfile, len(entries))

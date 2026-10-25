@@ -119,15 +119,12 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("%s: status %d for model %s: %s", e.Provider, e.StatusCode, e.ModelID, e.Body)
 }
 
-// BuildHTTPError reads the body from an HTTP response and returns an HTTPError.
-func BuildHTTPError(resp *http.Response, provider, modelID string) error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	return &HTTPError{
-		StatusCode: resp.StatusCode,
-		Body:       strings.TrimSpace(string(body)),
-		Provider:   provider,
-		ModelID:    modelID,
-	}
+// PartialUsage carries token usage a provider reports alongside an error
+// response. When present the router accrues it into total_cost_usd (ADR-021,
+// NFR-9).
+type PartialUsage struct {
+	TokensIn  int
+	TokensOut int
 }
 
 // UsageError wraps an error with partial token usage (e.g. provider returns
@@ -142,16 +139,54 @@ type UsageError struct {
 func (e *UsageError) Error() string { return e.Err.Error() }
 func (e *UsageError) Unwrap() error { return e.Err }
 
-// NewHTTPErrorWithUsage builds an HTTPError and attaches partial usage.
-func NewHTTPErrorWithUsage(resp *http.Response, provider, modelID string, tokensIn, tokensOut int) error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+const errorBodyLimit = 4096
+
+// BuildError reads the response body and builds the error for a non-200
+// response. When the provider reports usage alongside the error (a rate limit
+// hit after partial generation, a 5xx after streaming output), the returned
+// error is a *UsageError so the router can accrue it into total_cost_usd
+// (ADR-021, NFR-9). Providers that never bill on failure yield a plain
+// *HTTPError and the attempt is recorded with cost_usd = 0.
+func BuildError(resp *http.Response, provider, modelID string, parseUsage func(body []byte) (PartialUsage, bool)) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyLimit))
 	base := &HTTPError{
 		StatusCode: resp.StatusCode,
 		Body:       strings.TrimSpace(string(body)),
 		Provider:   provider,
 		ModelID:    modelID,
 	}
-	return &UsageError{Err: base, TokensIn: tokensIn, TokensOut: tokensOut}
+	if parseUsage == nil {
+		return base
+	}
+	if u, ok := parseUsage(body); ok {
+		return &UsageError{
+			Err:       base,
+			TokensIn:  u.TokensIn,
+			TokensOut: u.TokensOut,
+		}
+	}
+	return base
+}
+
+// BuildHTTPError reads the response body and returns a plain HTTPError.
+// Deprecated: use BuildError with an optional usage parser instead.
+func BuildHTTPError(resp *http.Response, provider, modelID string) error {
+	return BuildError(resp, provider, modelID, nil)
+}
+
+// NewHTTPErrorWithUsage builds an HTTPError from a pre-read response body and
+// attaches the partial usage the provider billed before failing.
+func NewHTTPErrorWithUsage(statusCode int, body []byte, provider, modelID string, tokensIn, tokensOut int) error {
+	return &UsageError{
+		Err: &HTTPError{
+			StatusCode: statusCode,
+			Body:       strings.TrimSpace(string(body)),
+			Provider:   provider,
+			ModelID:    modelID,
+		},
+		TokensIn:  tokensIn,
+		TokensOut: tokensOut,
+	}
 }
 
 // NewHTTPClient returns a configured HTTP client with timeout.

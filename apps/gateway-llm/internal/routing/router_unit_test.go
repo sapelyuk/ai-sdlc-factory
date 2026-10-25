@@ -55,10 +55,10 @@ func (s *stubRepo) HealthFor(ctx context.Context, keys []repository.ModelKey) (m
 	return out, nil
 }
 
+// CreateLogicalCall mirrors the real repository: it is detached from the
+// caller context via context.WithoutCancel so a canceled request never loses
+// the attribution row.
 func (s *stubRepo) CreateLogicalCall(ctx context.Context, call *domain.LogicalCall) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	s.created = append(s.created, call)
 	// Assign an ID if not already set (mimics DB behavior).
 	if call.ID == uuid.Nil {
@@ -68,9 +68,10 @@ func (s *stubRepo) CreateLogicalCall(ctx context.Context, call *domain.LogicalCa
 	return nil
 }
 
-// FinishLogicalCall mirrors the repository: a canceled context aborts the
-// write, which is exactly how a live pgx connection behaves when the client
-// disconnects. Tests rely on this to prove the finalizer detaches from ctx.
+// FinishLogicalCall mirrors the real repository: it is detached from the
+// caller context via context.WithoutCancel so a canceled request can still
+// finalize the row. The stub checks ctx.Err() only when the context has NOT
+// been detached — this allows tests to verify the defer's detachment.
 func (s *stubRepo) FinishLogicalCall(ctx context.Context, call *domain.LogicalCall) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -346,8 +347,6 @@ func TestRouterAllFailed(t *testing.T) {
 	}
 }
 
-// SKIP: Phase 3.2 — partial finalization defer (tests fail until defer is implemented)
-/*
 // TestRouterPartialFinalizationOnContextCancel verifies the critical NFR:
 // if the calling context is canceled (client disconnect), the logical call
 // is finalized as 'failed' instead of remaining 'partial'.
@@ -407,7 +406,6 @@ func TestRouterPartialFinalizationOnPanic(t *testing.T) {
 	}()
 	rtr.Chat(context.Background(), "code-strong", chatReq(), CallMeta{})
 }
-*/
 
 // TestRouterCooldownSkipsAvailableModels verifies that models whose
 // (provider, model) is in cooldown are skipped, and if ALL are in cooldown

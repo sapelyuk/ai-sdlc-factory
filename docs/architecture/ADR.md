@@ -258,7 +258,7 @@ LLM Gateway must route requests by capability profiles (`code-strong`, `reasonin
 
 **Decision.**
 
-1. **Profiles pin the version.** `model_profiles` stores `model_id` with a specific version (`claude-sonnet-4-20250101`), not an alias (`-latest`). Model change is an R2 action (PR to `model_profiles`).
+1. **Profiles pin the version.** `model_profiles` stores `model_id` with a specific version (`claude-sonnet-4-20250101`), not an alias (`-latest`). Model change is an R2 action (PR to `model_profiles`). The actual table is `llm_model_profiles` (global) to avoid conflict with the workspace-scoped `model_profiles` from migration 0001.
 2. **Fallback per `(provider, model)`.** Health tracking is per `(provider, model_id)` pair. Error classification:
    - `404` (model not found) → config defect, no cooldown, alert.
    - `401` / `403` → auth defect, no cooldown, alert.

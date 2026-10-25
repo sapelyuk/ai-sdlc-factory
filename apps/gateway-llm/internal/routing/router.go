@@ -111,11 +111,33 @@ func (r *Router) Chat(ctx context.Context, profileName string, req domain.ChatRe
 		return nil, err
 	}
 
+	// If the calling context is canceled (client disconnect) or a provider
+	// panics, this deferred finalizer detaches from the request context and
+	// writes the row as 'failed' within a 5-second budget. This prevents
+	// orphaned 'partial' rows (NFR-3: cost attribution reliability).
+	finalized := false
+	defer func() {
+		if finalized {
+			return
+		}
+		finalizeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		call.Status = "failed"
+		if call.CompletedAt == nil {
+			t := r.now()
+			call.CompletedAt = &t
+		}
+		if err := r.repo.FinishLogicalCall(finalizeCtx, call); err != nil {
+			log.Printf("ERROR: failed to finalize partial logical call %s: %v", call.ID, err)
+		}
+	}()
+
 	var lastErr error
 	for i, entry := range available {
 		key := repository.ModelKey{Provider: entry.Provider, ModelID: entry.ModelID}
 		res, attemptErr := r.tryAttempt(ctx, call, i+1, entry, key, req, health)
 		if attemptErr == nil {
+			finalized = true // tryAttempt already called FinishLogicalCall
 			return res, nil
 		}
 		lastErr = attemptErr
@@ -128,6 +150,8 @@ func (r *Router) Chat(ctx context.Context, profileName string, req domain.ChatRe
 	call.CompletedAt = &completed
 	if err := r.repo.FinishLogicalCall(ctx, call); err != nil {
 		log.Printf("ERROR: failed to persist failed logical call %s: %v", call.ID, err)
+	} else {
+		finalized = true
 	}
 	return &Result{LogicalCall: call}, fmt.Errorf("%w: %w", domain.ErrAllFailed, lastErr)
 }

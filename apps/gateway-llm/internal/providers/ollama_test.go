@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -135,5 +136,39 @@ func TestOllamaConnectionRefused(t *testing.T) {
 	}
 	if _, ok := err.(*HTTPError); ok {
 		t.Errorf("error %v is an HTTPError, want a transport failure", err)
+	}
+}
+
+// TestOllamaUsageErrorInBody covers NFR-9: Ollama may return usage even on
+// error (e.g. partial evaluation before a crash).
+func TestOllamaUsageErrorInBody(t *testing.T) {
+	body := `{"error":"model not loaded","prompt_eval_count":256,"eval_count":0}`
+	srv := stubServer(t, staticHandler(http.StatusNotFound, body))
+	p := NewOllama(srv.URL)
+
+	_, err := p.Chat(context.Background(), ollamaModel, chatReq())
+	if err == nil {
+		t.Fatal("expected error for 404 with usage")
+	}
+	var ue *UsageError
+	if !errors.As(err, &ue) {
+		t.Fatalf("expected *UsageError, got %T", err)
+	}
+	if ue.TokensIn != 256 || ue.TokensOut != 0 {
+		t.Errorf("usage = %d/%d, want 256/0", ue.TokensIn, ue.TokensOut)
+	}
+}
+
+// TestOllamaNoUsageInErrorBody covers the common case: no usage on error.
+func TestOllamaNoUsageInErrorBody(t *testing.T) {
+	srv := stubServer(t, staticHandler(http.StatusForbidden, `{"error":"forbidden"}`))
+	p := NewOllama(srv.URL)
+
+	_, err := p.Chat(context.Background(), ollamaModel, chatReq())
+	if err == nil {
+		t.Fatal("expected error for 403")
+	}
+	if _, ok := err.(*UsageError); ok {
+		t.Error("expected a plain *HTTPError, not *UsageError")
 	}
 }

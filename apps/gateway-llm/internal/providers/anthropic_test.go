@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -156,5 +157,50 @@ func TestAnthropicCanceledContext(t *testing.T) {
 
 	if _, err := p.Chat(ctx, anthropicModel, chatReq()); err == nil {
 		t.Fatal("Chat succeeded with a canceled context")
+	}
+}
+
+// TestAnthropicUsageErrorInBody covers NFR-9: when the provider reports token
+// usage alongside a non-200 response, the adapter must return a *UsageError so
+// the router can accrue total_cost_usd.
+func TestAnthropicUsageErrorInBody(t *testing.T) {
+	body := `{"type":"error","error":{"type":"rate_limit_error","message":"slow down"},"usage":{"input_tokens":500,"output_tokens":100}}`
+	srv := stubServer(t, staticHandler(http.StatusTooManyRequests, body))
+	p := NewAnthropicWithBaseURL("key", srv.URL+"/v1")
+
+	_, err := p.Chat(context.Background(), anthropicModel, chatReq())
+	if err == nil {
+		t.Fatal("expected error for 429 with usage")
+	}
+	var ue *UsageError
+	if !errors.As(err, &ue) {
+		t.Fatalf("expected *UsageError, got %T", err)
+	}
+	if ue.TokensIn != 500 {
+		t.Errorf("TokensIn = %d, want 500", ue.TokensIn)
+	}
+	if ue.TokensOut != 100 {
+		t.Errorf("TokensOut = %d, want 100", ue.TokensOut)
+	}
+	// The underlying HTTPError must also be accessible via Unwrap.
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusTooManyRequests {
+		t.Errorf("wrapped HTTPError = %v, want 429", httpErr)
+	}
+}
+
+// TestAnthropicNoUsageInErrorBody covers the common case: provider returns an
+// error without usage (no tokens billed). The adapter must return a plain
+// *HTTPError so the attempt records cost_usd = 0.
+func TestAnthropicNoUsageInErrorBody(t *testing.T) {
+	srv := stubServer(t, staticHandler(http.StatusForbidden, `{"type":"error","error":{"message":"no key"}}`))
+	p := NewAnthropicWithBaseURL("key", srv.URL+"/v1")
+
+	_, err := p.Chat(context.Background(), anthropicModel, chatReq())
+	if err == nil {
+		t.Fatal("expected error for 403")
+	}
+	if _, ok := err.(*UsageError); ok {
+		t.Error("expected a plain *HTTPError, not *UsageError")
 	}
 }

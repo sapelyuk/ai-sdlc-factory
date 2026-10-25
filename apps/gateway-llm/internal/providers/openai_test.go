@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -165,5 +166,48 @@ func TestOpenAIInvalidJSON(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "decode openai response") {
 		t.Errorf("error = %v, want a decode failure", err)
+	}
+}
+
+// TestOpenAIUsageErrorInBody covers NFR-9: when the provider reports token
+// usage alongside a non-200 response, the adapter must return a *UsageError.
+func TestOpenAIUsageErrorInBody(t *testing.T) {
+	body := `{"error":{"message":"Rate limit reached","type":"rate_limit_error"},"usage":{"prompt_tokens":400,"completion_tokens":80}}`
+	srv := stubServer(t, staticHandler(http.StatusTooManyRequests, body))
+	p := NewOpenAIWithBaseURL("key", srv.URL+"/v1")
+
+	_, err := p.Chat(context.Background(), openAIModel, chatReq())
+	if err == nil {
+		t.Fatal("expected error for 429 with usage")
+	}
+	var ue *UsageError
+	if !errors.As(err, &ue) {
+		t.Fatalf("expected *UsageError, got %T", err)
+	}
+	if ue.TokensIn != 400 {
+		t.Errorf("TokensIn = %d, want 400", ue.TokensIn)
+	}
+	if ue.TokensOut != 80 {
+		t.Errorf("TokensOut = %d, want 80", ue.TokensOut)
+	}
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusTooManyRequests {
+		t.Errorf("wrapped HTTPError = %v, want 429", httpErr)
+	}
+}
+
+// TestOpenAINoUsageInErrorBody covers the common case: provider returns an
+// error without usage. The adapter must return a plain *HTTPError so the
+// attempt records cost_usd = 0.
+func TestOpenAINoUsageInErrorBody(t *testing.T) {
+	srv := stubServer(t, staticHandler(http.StatusForbidden, `{"error":{"message":"invalid key"}}`))
+	p := NewOpenAIWithBaseURL("key", srv.URL+"/v1")
+
+	_, err := p.Chat(context.Background(), openAIModel, chatReq())
+	if err == nil {
+		t.Fatal("expected error for 403")
+	}
+	if _, ok := err.(*UsageError); ok {
+		t.Error("expected a plain *HTTPError, not *UsageError")
 	}
 }

@@ -88,9 +88,11 @@ CREATE TABLE llm_attempts (
 
 CREATE INDEX idx_attempts_logical ON llm_attempts (logical_call_id);
 
-COMMIT;
-
 -- ── Seed data ─────────────────────────────────────────────────
+-- Placed inside the transaction so the catalog is available immediately
+-- after the migration is applied. The table is named llm_model_profiles to
+-- avoid conflict with the workspace-scoped model_profiles from migration
+-- 0001 (ADR-021: global vs workspace-scoped profiles).
 INSERT INTO llm_model_profiles (profile_name, provider, model_id, priority, capabilities, cost_per_mtok_in, cost_per_mtok_out) VALUES
     ('code-strong',      'anthropic',  'claude-sonnet-4-20250101',      0, '{"context_window":200000,"supports_tools":true}', 3.00, 15.00),
     ('code-strong',      'openai',     'gpt-4o-2024-11-20',            1, '{"context_window":128000,"supports_tools":true}', 2.50, 10.00),
@@ -99,3 +101,5 @@ INSERT INTO llm_model_profiles (profile_name, provider, model_id, priority, capa
     ('code-fast',        'openai',     'gpt-4o-mini-2024-07-18',       0, '{"context_window":128000,"supports_tools":true}', 0.15, 0.60),
     ('cheap-bulk',       'openai',     'gpt-4o-mini-2024-07-18',       0, '{"context_window":128000,"supports_tools":true}', 0.15, 0.60),
     ('local-private',    'ollama',     'llama3.1:8b-instruct-q4_K_M',  0, '{"context_window":128000,"supports_tools":false}', 0.00, 0.00);
+
+COMMIT;

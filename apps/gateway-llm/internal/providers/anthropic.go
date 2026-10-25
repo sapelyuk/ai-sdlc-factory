@@ -14,6 +14,27 @@ import (
 const anthropicBaseURL = "https://api.anthropic.com/v1"
 const anthropicVersion = "2023-06-01"
 
+// anthropicErrorUsage extracts token usage from an Anthropic error body.
+// The Messages API only includes usage on 200; however some gateways and
+// the streaming variant echo usage on 424/429/5xx responses. When the
+// provider does not bill on failure this returns ok=false and the attempt
+// row records cost_usd = 0.
+func anthropicErrorUsage(body []byte) (PartialUsage, bool) {
+	var env struct {
+		Usage *struct {
+			InputTokens  int `json:"input_tokens"`
+			OutputTokens int `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil || env.Usage == nil {
+		return PartialUsage{}, false
+	}
+	if env.Usage.InputTokens == 0 && env.Usage.OutputTokens == 0 {
+		return PartialUsage{}, false
+	}
+	return PartialUsage{TokensIn: env.Usage.InputTokens, TokensOut: env.Usage.OutputTokens}, true
+}
+
 // AnthropicProvider implements Provider for the Anthropic Messages API.
 type AnthropicProvider struct {
 	baseURL string
@@ -116,7 +137,7 @@ func (p *AnthropicProvider) Chat(ctx context.Context, modelID string, req domain
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return domain.ChatResponse{}, BuildHTTPError(resp, p.Name(), modelID)
+		return domain.ChatResponse{}, BuildError(resp, p.Name(), modelID, anthropicErrorUsage)
 	}
 
 	var parsed anthropicResponse

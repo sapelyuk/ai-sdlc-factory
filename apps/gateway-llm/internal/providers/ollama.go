@@ -12,6 +12,24 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/domain"
 )
 
+// ollamaErrorUsage extracts token usage from an Ollama error body.
+// Ollama may return prompt_eval_count / eval_count even on error (e.g. when
+// the model starts evaluating before an error occurs). When absent the
+// attempt records cost_usd = 0.
+func ollamaErrorUsage(body []byte) (PartialUsage, bool) {
+	var env struct {
+		PromptEvalCount int `json:"prompt_eval_count"`
+		EvalCount       int `json:"eval_count"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return PartialUsage{}, false
+	}
+	if env.PromptEvalCount == 0 && env.EvalCount == 0 {
+		return PartialUsage{}, false
+	}
+	return PartialUsage{TokensIn: env.PromptEvalCount, TokensOut: env.EvalCount}, true
+}
+
 const defaultOllamaBaseURL = "http://localhost:11434"
 
 // OllamaProvider implements Provider for a local Ollama server.
@@ -81,7 +99,7 @@ func (p *OllamaProvider) Chat(ctx context.Context, modelID string, req domain.Ch
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return domain.ChatResponse{}, BuildHTTPError(resp, p.Name(), modelID)
+		return domain.ChatResponse{}, BuildError(resp, p.Name(), modelID, ollamaErrorUsage)
 	}
 
 	var parsed ollamaChatResponse

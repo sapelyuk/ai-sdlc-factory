@@ -74,7 +74,7 @@ Response:
   - `404 / 401 / 403 / 400` → config/auth defect, no cooldown, logged as alert.
   - `429 / 5xx / timeout` → availability, cooldown with exponential backoff (60s → 4h, jitter).
 - **Dual-level cost**: `final_cost_usd` (successful attempt) ≠ `total_cost_usd` (sum of all attempts). Partial usage from retries is captured via `UsageError`.
-- **RLS**: logical calls and attempts are scoped to `workspace_id` via PostgreSQL Row Level Security.
+- **RLS**: logical calls are scoped to `workspace_id` via PostgreSQL Row Level Security; attempts are linked to logical calls via `logical_call_id` and do not use RLS.
 
 ## Testing
 

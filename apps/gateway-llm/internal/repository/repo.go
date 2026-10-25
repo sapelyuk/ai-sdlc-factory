@@ -33,8 +33,10 @@ func (r *Repo) Pool() *pgxpool.Pool { return r.pool }
 // CreateLogicalCall inserts a new logical call in 'partial' state
 // (the CHECK constraint of llm_logical_calls does not allow 'in_progress';
 // 'partial' marks a call that has not reached a final state yet).
+// The write is detached from the caller context so a client disconnect does
+// not lose the attribution row (NFR-3: cost attribution reliability).
 func (r *Repo) CreateLogicalCall(ctx context.Context, call *domain.LogicalCall) error {
-	return inTenantTx(ctx, r.pool, func(tx pgx.Tx, workspaceID uuid.UUID) error {
+	return inTenantTx(context.WithoutCancel(ctx), r.pool, func(tx pgx.Tx, workspaceID uuid.UUID) error {
 		call.WorkspaceID = workspaceID
 		if call.StartedAt.IsZero() {
 			call.StartedAt = time.Now().UTC()
@@ -55,10 +57,10 @@ func (r *Repo) CreateLogicalCall(ctx context.Context, call *domain.LogicalCall) 
 }
 
 // FinishLogicalCall writes the final state of a logical call.
-// finalCostUSD is the cost of the successful attempt (nil when none),
-// totalCostUSD is the sum over all attempts (actual spend, NFR-9).
+// The write is detached from the caller context so a client disconnect does
+// not leave the row in 'partial' state (NFR-3).
 func (r *Repo) FinishLogicalCall(ctx context.Context, call *domain.LogicalCall) error {
-	return inTenantTx(ctx, r.pool, func(tx pgx.Tx, workspaceID uuid.UUID) error {
+	return inTenantTx(context.WithoutCancel(ctx), r.pool, func(tx pgx.Tx, workspaceID uuid.UUID) error {
 		tag, err := tx.Exec(ctx, `
 			UPDATE llm_logical_calls SET
 				model_id_used = $3, provider_used = $4, status = $5,
