@@ -4,6 +4,7 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -178,9 +179,26 @@ func (r *Router) tryAttempt(
 
 	// Failed attempt.
 	class := providers.Classify(err)
-	if insertErr := r.insertAttempt(ctx, call, attemptNum, entry, class.String(), err.Error(), nil, nil, started, latencyMs); insertErr != nil {
+	tokensIn, tokensOut := 0, 0
+	var cost float64
+
+	// If the error carries partial usage (e.g. provider billed tokens before 429),
+	// accumulate toward total_cost_usd (NFR-9).
+	var usageErr *providers.UsageError
+	if errors.As(err, &usageErr) {
+		tokensIn = usageErr.TokensIn
+		tokensOut = usageErr.TokensOut
+		cost = ComputeCost(entry, tokensIn, tokensOut)
+	}
+
+	if insertErr := r.insertAttempt(ctx, call, attemptNum, entry, class.String(), err.Error(), &tokensIn, &tokensOut, started, latencyMs, &cost); insertErr != nil {
 		log.Printf("ERROR: %v", insertErr)
 	}
+
+	// Accumulate partial costs toward total.
+	call.TotalTokensIn += tokensIn
+	call.TotalTokensOut += tokensOut
+	call.TotalCostUSD = round4(call.TotalCostUSD + cost)
 
 	if providers.ShouldCooldown(class) {
 		// Availability event: extend exponential backoff (60s → 4h, jitter).

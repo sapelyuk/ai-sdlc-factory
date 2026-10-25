@@ -278,11 +278,23 @@ services:
       context: ../..
       dockerfile: apps/gateway-llm/Dockerfile
     container_name: ai-sdlc-factory-gateway-llm
+    ports:
+      - "8040:8040"
     environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ai_sdlc_factory}:${POSTGRES_PASSWORD:-ai_sdlc_dev_password}@postgres:5432/${POSTGRES_DB:-ai_sdlc_factory}?sslmode=disable
+      PORT: "8040"
       AI_ANTHROPIC_API_KEY: ${AI_ANTHROPIC_API_KEY:-}
       AI_OPENAI_API_KEY: ${AI_OPENAI_API_KEY:-}
+      AI_OLLAMA_BASE_URL: ${AI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8040/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
-      - api
+      postgres:
+        condition: service_healthy
 
   tool-gateway:
     build:

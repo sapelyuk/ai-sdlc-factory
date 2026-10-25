@@ -3,6 +3,7 @@ package domain
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,7 +24,7 @@ type ModelProfile struct {
 // ValidatePinned checks that model_id does not contain "-latest".
 // Returns an error if the model_id uses a floating alias.
 func (m ModelProfile) ValidatePinned() error {
-	if len(m.ModelID) >= 7 && m.ModelID[len(m.ModelID)-7:] == "-latest" {
+	if strings.Contains(m.ModelID, "-latest") {
 		return ErrFloatingAlias
 	}
 	return nil

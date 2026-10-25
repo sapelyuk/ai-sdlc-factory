@@ -130,6 +130,30 @@ func BuildHTTPError(resp *http.Response, provider, modelID string) error {
 	}
 }
 
+// UsageError wraps an error with partial token usage (e.g. provider returns
+// usage alongside a non-200 response). This enables dual-cost accounting:
+// total_cost_usd may exceed final_cost_usd when earlier attempts consume tokens.
+type UsageError struct {
+	Err       error
+	TokensIn  int
+	TokensOut int
+}
+
+func (e *UsageError) Error() string { return e.Err.Error() }
+func (e *UsageError) Unwrap() error { return e.Err }
+
+// NewHTTPErrorWithUsage builds an HTTPError and attaches partial usage.
+func NewHTTPErrorWithUsage(resp *http.Response, provider, modelID string, tokensIn, tokensOut int) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	base := &HTTPError{
+		StatusCode: resp.StatusCode,
+		Body:       strings.TrimSpace(string(body)),
+		Provider:   provider,
+		ModelID:    modelID,
+	}
+	return &UsageError{Err: base, TokensIn: tokensIn, TokensOut: tokensOut}
+}
+
 // NewHTTPClient returns a configured HTTP client with timeout.
 func NewHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
