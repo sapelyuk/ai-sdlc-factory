@@ -1,0 +1,5 @@
+# Go test coverage artifacts
+cover
+coverage
+coverage.txt
+*.out
