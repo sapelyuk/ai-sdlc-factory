@@ -174,21 +174,6 @@ func BuildHTTPError(resp *http.Response, provider, modelID string) error {
 	return BuildError(resp, provider, modelID, nil)
 }
 
-// NewHTTPErrorWithUsage builds an HTTPError from a pre-read response body and
-// attaches the partial usage the provider billed before failing.
-func NewHTTPErrorWithUsage(statusCode int, body []byte, provider, modelID string, tokensIn, tokensOut int) error {
-	return &UsageError{
-		Err: &HTTPError{
-			StatusCode: statusCode,
-			Body:       strings.TrimSpace(string(body)),
-			Provider:   provider,
-			ModelID:    modelID,
-		},
-		TokensIn:  tokensIn,
-		TokensOut: tokensOut,
-	}
-}
-
 // NewHTTPClient returns a configured HTTP client with timeout.
 func NewHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
