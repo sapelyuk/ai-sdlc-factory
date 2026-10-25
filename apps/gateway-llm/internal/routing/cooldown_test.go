@@ -20,9 +20,9 @@ func TestNextCooldown(t *testing.T) {
 		{"cf=5: 960s", 5, 960 * time.Second, 1056 * time.Second},
 		{"cf=6: 1920s", 6, 1920 * time.Second, 2112 * time.Second},
 		{"cf=7: 3840s", 7, 3840 * time.Second, 4224 * time.Second},
-		// 60s << 7 = 7680s ≈ 2h14m — cap не срабатывает; джиттер = d/10 ≈ 12m48s
+		// 60s << 7 = 7680s ≈ 2h14m — cap does not trigger; jitter = d/10 ≈ 12m48s
 		{"cf=8: ~2h14m (uncapped)", 8, 7680 * time.Second, 7680*time.Second + 13*time.Minute},
-		// 60s << 8 = 15360s > 4h — cap срабатывает
+		// 60s << 8 = 15360s > 4h — cap triggers
 		{"cf=9: 4h (capped)", 9, 4 * time.Hour, 4*time.Hour + 24*time.Minute},
 		{"cf=10: 4h (capped)", 10, 4 * time.Hour, 4*time.Hour + 24*time.Minute},
 		{"cf=0: treated as 1", 0, 60 * time.Second, 66 * time.Second},

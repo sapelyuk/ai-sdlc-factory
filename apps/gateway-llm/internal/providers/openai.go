@@ -106,7 +106,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, modelID string, req domain.Ch
 	if err != nil {
 		return domain.ChatResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return domain.ChatResponse{}, BuildHTTPError(resp, p.Name(), modelID)
