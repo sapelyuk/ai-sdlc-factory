@@ -10,9 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/identity"
-	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/routing"
 )
 
 // Router wraps chi.Mux with common middleware and routes.
@@ -20,8 +18,14 @@ type Router struct {
 	r *chi.Mux
 }
 
+// Pinger is the readiness dependency of GET /readyz. *pgxpool.Pool satisfies
+// it; tests substitute a stub so the endpoint is covered without a database.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
 // NewRouter creates a new router with all routes.
-func NewRouter(chat *routing.Router, pool *pgxpool.Pool) *Router {
+func NewRouter(chat ChatRouter, db Pinger) *Router {
 	r := chi.NewMux()
 
 	r.Use(middleware.RequestID)
@@ -44,7 +48,7 @@ func NewRouter(chat *routing.Router, pool *pgxpool.Pool) *Router {
 	r.Get("/readyz", func(w http.ResponseWriter, req *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
 		defer cancel()
-		if err := pool.Ping(ctx); err != nil {
+		if err := db.Ping(ctx); err != nil {
 			writeError(w, http.StatusServiceUnavailable, "database unavailable")
 			return
 		}

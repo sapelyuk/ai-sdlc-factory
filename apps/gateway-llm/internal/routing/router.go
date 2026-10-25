@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/catalog"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/domain"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/providers"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/repository"
@@ -31,16 +30,32 @@ type Result struct {
 	Content     string
 }
 
+// catalogSource abstracts the model catalog for testability.
+type catalogSource interface {
+	For(ctx context.Context, profileName string) ([]domain.ModelProfile, error)
+}
+
+// callRepo abstracts persistence operations needed by the router.
+type callRepo interface {
+	HealthFor(ctx context.Context, keys []repository.ModelKey) (map[repository.ModelKey]*domain.ModelHealth, error)
+	CreateLogicalCall(ctx context.Context, call *domain.LogicalCall) error
+	FinishLogicalCall(ctx context.Context, call *domain.LogicalCall) error
+	InsertAttempt(ctx context.Context, a *domain.Attempt) error
+	RecordSuccess(ctx context.Context, key repository.ModelKey) error
+	RecordAvailabilityFailure(ctx context.Context, key repository.ModelKey, errType string, cooldownUntil time.Time) error
+	RecordConfigError(ctx context.Context, key repository.ModelKey, errType string) error
+}
+
 // Router routes a chat request across the models of a capability profile.
 type Router struct {
-	catalog   *catalog.Catalog
-	repo      *repository.Repo
+	catalog   catalogSource
+	repo      callRepo
 	providers map[string]providers.Provider
 	now       func() time.Time
 }
 
 // New creates a Router.
-func New(cat *catalog.Catalog, repo *repository.Repo, providers map[string]providers.Provider) *Router {
+func New(cat catalogSource, repo callRepo, providers map[string]providers.Provider) *Router {
 	return &Router{catalog: cat, repo: repo, providers: providers, now: func() time.Time { return time.Now().UTC() }}
 }
 

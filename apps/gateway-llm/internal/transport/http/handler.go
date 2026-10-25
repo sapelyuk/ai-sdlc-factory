@@ -1,6 +1,7 @@
 package httptransport
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -44,8 +45,15 @@ type chatResponse struct {
 	Usage         usageResponse `json:"usage"`
 }
 
+// ChatRouter is the routing dependency of POST /v1/llm/chat.
+// *routing.Router implements it; tests substitute a stub so the HTTP layer is
+// covered without a database or live providers.
+type ChatRouter interface {
+	Chat(ctx context.Context, profileName string, req domain.ChatRequest, meta routing.CallMeta) (*routing.Result, error)
+}
+
 // chatHandler handles POST /v1/llm/chat.
-func chatHandler(router *routing.Router) http.HandlerFunc {
+func chatHandler(router ChatRouter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		workspaceID, err := identity.WorkspaceID(r.Context())
 		if err != nil {

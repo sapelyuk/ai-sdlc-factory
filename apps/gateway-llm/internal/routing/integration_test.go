@@ -92,6 +92,10 @@ func newLLMEnv(t *testing.T, name string) *llmEnv {
 	t.Helper()
 
 	if output, err := exec.CommandContext(timeoutContext(t, 10*time.Second), "docker", "info").CombinedOutput(); err != nil {
+		// In CI a missing Docker is a pipeline failure, not a skip.
+		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
+			t.Fatalf("Docker is required for integration tests in CI: %s", strings.TrimSpace(string(output)))
+		}
 		t.Skipf("Docker is unavailable; skipping PostgreSQL integration test: %s", strings.TrimSpace(string(output)))
 	}
 
