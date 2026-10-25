@@ -218,7 +218,7 @@ Required handoff package fields:
 
 **Capability profiles pin the model version.**
 
-A profile (`code-strong`, `reasoning-strong`, `code-fast`, `cheap-bulk`, `local-private`) is a capability contract. `model_profiles` stores the **specific pinned version** of the model (`claude-sonnet-4-20250101`), not an alias (`-latest`). This protects against silent profile contract changes when the provider repins the alias. Model change is an R2 action (see ADR-021).
+A profile (`code-strong`, `reasoning-strong`, `code-fast`, `cheap-bulk`, `local-private`) is a capability contract. `model_profiles` stores the **specific pinned version** of the model (`claude-sonnet-4-20250101`), not an alias (`-latest`). This protects against silent profile contract changes when the provider repins the alias. Model change is an R2 action (see ADR-021). The actual table is `llm_model_profiles` (global) to avoid conflict with the workspace-scoped `model_profiles` from migration 0001.
 
 **Fallback per `(provider, model)`.**
 
