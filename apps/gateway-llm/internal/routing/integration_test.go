@@ -539,6 +539,43 @@ func TestRLS_Isolation(t *testing.T) {
 	}
 }
 
+// TestCreateLogicalCall_SurvivesContextCancel covers NFR-3: the attribution
+// row must be written even when the client disconnects. The repository
+// detaches both callbacks from the caller context, so an already-canceled
+// context must not abort the INSERT/UPDATE nor the surrounding transaction.
+func TestCreateLogicalCall_SurvivesContextCancel(t *testing.T) {
+	env := newLLMEnv(t, "llm_router_cancel")
+
+	canceled, cancel := context.WithCancel(env.tenant())
+	cancel()
+
+	call := &domain.LogicalCall{
+		ProfileName: "code-strong",
+		StartedAt:   time.Now().UTC(),
+	}
+	if err := env.repo.CreateLogicalCall(canceled, call); err != nil {
+		t.Fatalf("CreateLogicalCall with canceled context: %v", err)
+	}
+	if call.ID == uuid.Nil {
+		t.Fatal("logical call ID is nil, want a persisted row")
+	}
+
+	completed := time.Now().UTC()
+	call.Status = "succeeded"
+	call.CompletedAt = &completed
+	if err := env.repo.FinishLogicalCall(canceled, call); err != nil {
+		t.Fatalf("FinishLogicalCall with canceled context: %v", err)
+	}
+
+	stored, err := env.repo.GetLogicalCall(env.tenant(), call.ID)
+	if err != nil {
+		t.Fatalf("get logical call: %v", err)
+	}
+	if stored.Status != "succeeded" {
+		t.Errorf("stored status = %q, want succeeded", stored.Status)
+	}
+}
+
 // TestCatalogRejectsLatest covers ADR-021: profiles must pin model versions.
 // A floating "-latest" alias is a configuration defect and must abort the
 // whole catalog load rather than be silently skipped.

@@ -36,7 +36,8 @@ func (r *Repo) Pool() *pgxpool.Pool { return r.pool }
 // The write is detached from the caller context so a client disconnect does
 // not lose the attribution row (NFR-3: cost attribution reliability).
 func (r *Repo) CreateLogicalCall(ctx context.Context, call *domain.LogicalCall) error {
-	return inTenantTx(context.WithoutCancel(ctx), r.pool, func(tx pgx.Tx, workspaceID uuid.UUID) error {
+	ctx = context.WithoutCancel(ctx)
+	return inTenantTx(ctx, r.pool, func(tx pgx.Tx, workspaceID uuid.UUID) error {
 		call.WorkspaceID = workspaceID
 		if call.StartedAt.IsZero() {
 			call.StartedAt = time.Now().UTC()
@@ -60,7 +61,8 @@ func (r *Repo) CreateLogicalCall(ctx context.Context, call *domain.LogicalCall) 
 // The write is detached from the caller context so a client disconnect does
 // not leave the row in 'partial' state (NFR-3).
 func (r *Repo) FinishLogicalCall(ctx context.Context, call *domain.LogicalCall) error {
-	return inTenantTx(context.WithoutCancel(ctx), r.pool, func(tx pgx.Tx, workspaceID uuid.UUID) error {
+	ctx = context.WithoutCancel(ctx)
+	return inTenantTx(ctx, r.pool, func(tx pgx.Tx, workspaceID uuid.UUID) error {
 		tag, err := tx.Exec(ctx, `
 			UPDATE llm_logical_calls SET
 				model_id_used = $3, provider_used = $4, status = $5,
