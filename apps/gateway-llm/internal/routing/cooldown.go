@@ -18,7 +18,8 @@ const (
 
 // NextCooldown returns the cooldown duration for the given number of
 // consecutive failures (1-based): 60s * 2^(failures-1), capped at 4h,
-// plus up to 10% jitter.
+// plus up to 10% jitter (jitter is applied inside the cap so max
+// duration never exceeds 4h).
 func NextCooldown(consecutiveFailures int) time.Duration {
 	if consecutiveFailures < 1 {
 		consecutiveFailures = 1
@@ -28,9 +29,8 @@ func NextCooldown(consecutiveFailures int) time.Duration {
 		shift = maxShift
 	}
 	d := CooldownBase << shift
-	if d > CooldownMax {
-		d = CooldownMax
-	}
+	// Cap first, then jitter — this guarantees the result never exceeds CooldownMax.
+	d = min(d, CooldownMax)
 	jitter := time.Duration(rand.Int63n(int64(d / 10)))
 	return d + jitter
 }
