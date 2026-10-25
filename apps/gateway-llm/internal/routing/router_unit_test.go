@@ -404,7 +404,9 @@ func TestRouterPartialFinalizationOnPanic(t *testing.T) {
 			t.Errorf("finished status = %q, want failed", repo.finished[0].Status)
 		}
 	}()
-	rtr.Chat(context.Background(), "code-strong", chatReq(), CallMeta{})
+	// The provider panics, so Chat never returns normally; the deferred
+	// recover above asserts the finalization side effect.
+	_, _ = rtr.Chat(context.Background(), "code-strong", chatReq(), CallMeta{})
 }
 
 // TestRouterCooldownSkipsAvailableModels verifies that models whose
