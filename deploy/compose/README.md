@@ -28,6 +28,7 @@ make ps-local
 | Web UI | http://localhost:3000 | http://localhost:3000 |
 | Platform API | http://localhost:8000 | http://localhost:8000 |
 | LLM Gateway | http://localhost:8040 | http://localhost:8040 |
+| Tool Gateway (MCP) | http://localhost:8030/mcp | http://localhost:8030/mcp |
 | Temporal UI | http://localhost:8080 | — |
 | Silo Console | http://localhost:9001 | http://localhost:9001 |
 | Jaeger UI | http://localhost:16686 | http://localhost:16686 |
@@ -45,6 +46,7 @@ make ps-local
 | NATS | 4222 (client), 8222 (monitoring) | Event bus (JetStream) | always |
 | Vault | 8200 | Secret management (dev mode) | always |
 | OPA | 8181 | Policy engine (Rego) | always |
+| Tool Gateway | 8030 | MCP proxy for agents | always |
 | Temporal Server | 7233 | Durable execution for local-dev | local-dev |
 | Temporal UI | 8080 | Workflow viewer | local-dev |
 
@@ -285,5 +287,6 @@ Migrations are in `migrations/postgres/`:
 | 8 | `0008_init_registry` | roles, teams, processes (semver) |
 | 9 | `0009_init_users` | users, JWT auth, RBAC |
 | 10 | `0010_llm_gateway` | llm_model_profiles, model_health, llm_logical_calls, llm_attempts |
+| 11 | `0011_tool_gateway_audit` | tool_call_audit_log (hash-chained audit) |
 
 Each migration has a paired `.up.sql` / `.down.sql` file for applying and rolling back.

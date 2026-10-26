@@ -301,9 +301,25 @@ services:
       context: ../..
       dockerfile: apps/tool-gateway/Dockerfile
     container_name: ai-sdlc-factory-tool-gateway
+    ports:
+      - "${TOOL_GATEWAY_PORT:-8030}:8030"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ai_sdlc_factory}:${POSTGRES_PASSWORD:-ai_sdlc_dev_password}@postgres:5432/${POSTGRES_DB:-ai_sdlc_factory}?sslmode=disable
+      PORT: "8030"
+      OPA_URL: http://opa:8181
+      SCHEMA_DIR: /app/packages/contracts/mcp-schemas
+      POLICY_DIR: /app/packages/policy
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: ${VAULT_TOKEN:-root}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8030/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
-      api:
-        condition: service_started
+      postgres:
+        condition: service_healthy
       vault:
         condition: service_healthy
       opa:
