@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/config"
+	mcpserver "github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/mcp"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/policy"
 )
 
@@ -78,5 +79,29 @@ func TestNewAuthorizer(t *testing.T) {
 
 	if _, err := newAuthorizer(&config.Config{PolicyDir: t.TempDir()}, logger); err == nil {
 		t.Fatal("expected an error for an empty policy directory")
+	}
+}
+
+func TestNewExecutor(t *testing.T) {
+	logger := discardLogger()
+
+	executor, err := newExecutor(&config.Config{}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := executor.(mcpserver.StubExecutor); !ok {
+		t.Fatalf("executor = %T, want mcpserver.StubExecutor", executor)
+	}
+
+	executor, err = newExecutor(&config.Config{MCPUpstreams: "*=http://sandbox:9000/mcp"}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := executor.(*mcpserver.ProxyExecutor); !ok {
+		t.Fatalf("executor = %T, want *mcpserver.ProxyExecutor", executor)
+	}
+
+	if _, err := newExecutor(&config.Config{MCPUpstreams: "git.push"}, logger); err == nil {
+		t.Fatal("expected an error for a malformed MCP_UPSTREAMS value")
 	}
 }

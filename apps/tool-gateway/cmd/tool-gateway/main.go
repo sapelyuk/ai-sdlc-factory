@@ -81,12 +81,22 @@ func run(logger *slog.Logger) error {
 	}
 
 	redactor := credentials.NewRedactor()
+
+	executor, err := newExecutor(cfg, logger)
+	if err != nil {
+		return err
+	}
+	if closer, ok := executor.(interface{ Close() error }); ok {
+		defer func() { _ = closer.Close() }()
+	}
+
 	gateway, err := mcpserver.NewServer(mcpserver.Options{
 		Catalog:    cat,
 		Authorizer: authorizer,
 		Auditor:    auditor,
 		Broker:     broker,
 		Redactor:   redactor,
+		Executor:   executor,
 		Logger:     logger,
 	})
 	if err != nil {
@@ -161,4 +171,22 @@ func newAuthorizer(cfg *config.Config, logger *slog.Logger) (policy.Authorizer, 
 	}
 	logger.Info("using in-process policy engine", "dir", cfg.PolicyDir)
 	return engine, nil
+}
+
+func newExecutor(cfg *config.Config, logger *slog.Logger) (mcpserver.Executor, error) {
+	if cfg.MCPUpstreams == "" {
+		logger.Warn("MCP_UPSTREAMS is empty; using the stub executor")
+		return mcpserver.StubExecutor{}, nil
+	}
+
+	routes, err := mcpserver.ParseUpstreams(cfg.MCPUpstreams)
+	if err != nil {
+		return nil, err
+	}
+	executor, err := mcpserver.NewProxyExecutor(routes, nil)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("proxying to upstream MCP servers", "routes", executor.Routes())
+	return executor, nil
 }

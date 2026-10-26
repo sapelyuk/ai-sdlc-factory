@@ -41,6 +41,11 @@ type Config struct {
 
 	// PolicyTimeout bounds every OPA request.
 	PolicyTimeout time.Duration
+
+	// MCPUpstreams routes tools to upstream MCP servers. The raw value is a
+	// comma-separated list of tool=url pairs; "*" is the fallback route.
+	// When empty, the gateway runs with the stub executor.
+	MCPUpstreams string
 }
 
 // Load reads configuration from environment variables.
@@ -76,6 +81,7 @@ func Load() (*Config, error) {
 		VaultSecretMount: env("VAULT_SECRET_MOUNT", "secret"),
 		VaultCacheTTL:    cacheTTL,
 		PolicyTimeout:    timeout,
+		MCPUpstreams:     os.Getenv("MCP_UPSTREAMS"),
 	}, nil
 }
 

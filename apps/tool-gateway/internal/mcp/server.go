@@ -40,9 +40,9 @@ type Call struct {
 
 // Executor runs a tool call.
 //
-// v1 ships StubExecutor only. The Sandbox Manager integration (issue #13)
-// replaces it with an executor that proxies to upstream MCP servers via
-// mcp-go ProxyTool.
+// ProxyExecutor forwards calls to upstream MCP servers (configured through
+// MCP_UPSTREAMS). StubExecutor is the fallback for local runs without
+// upstreams; the sandbox-backed executor lands with issue #13.
 type Executor interface {
 	Execute(ctx context.Context, call Call) (map[string]any, error)
 }

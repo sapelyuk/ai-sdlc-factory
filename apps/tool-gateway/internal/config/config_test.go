@@ -10,7 +10,7 @@ func clearEnv(t *testing.T) {
 	for _, key := range []string{
 		"PORT", "DATABASE_URL", "OPA_URL", "POLICY_DIR", "SCHEMA_DIR",
 		"VAULT_ADDR", "VAULT_TOKEN", "VAULT_SECRET_MOUNT", "VAULT_CACHE_TTL",
-		"POLICY_TIMEOUT",
+		"POLICY_TIMEOUT", "MCP_UPSTREAMS",
 	} {
 		t.Setenv(key, "")
 	}
@@ -43,6 +43,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("POLICY_DIR", "/policies")
 	t.Setenv("VAULT_CACHE_TTL", "30s")
 	t.Setenv("POLICY_TIMEOUT", "2s")
+	t.Setenv("MCP_UPSTREAMS", "*=http://sandbox:9000/mcp")
 
 	cfg, err := Load()
 	if err != nil {
@@ -62,6 +63,9 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.PolicyTimeout != 2*time.Second {
 		t.Fatalf("policy timeout = %v", cfg.PolicyTimeout)
+	}
+	if cfg.MCPUpstreams != "*=http://sandbox:9000/mcp" {
+		t.Fatalf("mcp upstreams = %q", cfg.MCPUpstreams)
 	}
 }
 
