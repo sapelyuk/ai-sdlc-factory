@@ -311,6 +311,8 @@ services:
       POLICY_DIR: /app/packages/policy
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: ${VAULT_TOKEN:-root}
+      # Optional tool=url routes to upstream MCP servers; empty uses the stub executor.
+      MCP_UPSTREAMS: ${MCP_UPSTREAMS:-}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8030/healthz"]
       interval: 30s

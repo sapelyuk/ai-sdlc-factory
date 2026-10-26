@@ -93,6 +93,24 @@ call and returns only the injected environment variable names.
 - Without `VAULT_TOKEN` the gateway starts, but tools that need a secret fail
   closed.
 
+## Upstream proxy
+
+Authorized calls are forwarded to upstream MCP servers over Streamable HTTP
+using the `mcp-go` client. Routes are configured with `MCP_UPSTREAMS`, a
+comma-separated list of `tool=url` pairs; `*` is the fallback route:
+
+```bash
+MCP_UPSTREAMS="git.clone=http://git-mcp:9000/mcp,git.push=http://git-mcp:9000/mcp,*=http://sandbox:9000/mcp"
+```
+
+- Connections are established lazily and cached per URL; the MCP handshake
+  runs on first use.
+- Brokered credentials travel in the `_meta` field
+  `ai-sdlc-factory/credentials` and never reach the agent.
+- Upstream errors (`isError`) and transport failures are audited as `error`.
+- With `MCP_UPSTREAMS` empty the gateway uses the stub executor, which is the
+  default for `make up-local`.
+
 ## Configuration
 
 | Variable | Default | Description |
@@ -107,6 +125,7 @@ call and returns only the injected environment variable names.
 | `VAULT_TOKEN` | — | Vault token; empty disables credential brokering |
 | `VAULT_SECRET_MOUNT` | `secret` | KV mount name |
 | `VAULT_CACHE_TTL` | `60s` | Secret cache TTL |
+| `MCP_UPSTREAMS` | — | Comma-separated `tool=url` upstream routes; empty uses the stub executor |
 
 Schema loading is fail-fast: a malformed or missing schema file prevents the
 service from starting.
@@ -157,6 +176,9 @@ go tool cover -func=coverage.out
 
 # Integration test (requires Docker; starts PostgreSQL 18 via testcontainers)
 go test -run TestToolGatewayEndToEnd -v ./internal/mcp/
+
+# Upstream proxy integration test (no Docker; in-process test MCP server)
+go test -run TestProxyExecutorAgainstUpstreamServer -v ./internal/mcp/
 ```
 
 The integration test applies migration 0011, starts the real HTTP router with
@@ -166,9 +188,8 @@ denied with HTTP 403, and recomputes the audit hash chain from PostgreSQL.
 
 ## Current limitations (v1)
 
-- Tool execution is a stub (`{"status": "success", "message": "stub"}`).
-  Upstream MCP federation via `mcp-go` `ProxyTool` and the Sandbox Manager
-  integration land in issue #13.
+- Tool execution is a stub unless `MCP_UPSTREAMS` is configured. The
+  sandbox-backed executor for untrusted code execution lands in issue #13.
 - Only the schema files currently present in
   `packages/contracts/mcp-schemas/` are loaded. Issue #16 delivered three role
   schemas (`developer`, `qa`, `reviewer`); the other seven role files from
