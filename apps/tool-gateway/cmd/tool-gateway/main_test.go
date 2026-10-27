@@ -85,23 +85,29 @@ func TestNewAuthorizer(t *testing.T) {
 func TestNewExecutor(t *testing.T) {
 	logger := discardLogger()
 
-	executor, err := newExecutor(&config.Config{}, logger)
+	executor, err := newExecutor(&config.Config{SandboxManagerURL: "http://localhost:8060"}, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := executor.(mcpserver.StubExecutor); !ok {
-		t.Fatalf("executor = %T, want mcpserver.StubExecutor", executor)
+	if _, ok := executor.(*mcpserver.SandboxExecutor); !ok {
+		t.Fatalf("executor = %T, want *mcpserver.SandboxExecutor", executor)
 	}
 
-	executor, err = newExecutor(&config.Config{MCPUpstreams: "*=http://sandbox:9000/mcp"}, logger)
+	executor, err = newExecutor(&config.Config{
+		MCPUpstreams:      "*=http://sandbox:9000/mcp",
+		SandboxManagerURL: "http://sandbox-manager:8060",
+	}, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := executor.(*mcpserver.ProxyExecutor); !ok {
-		t.Fatalf("executor = %T, want *mcpserver.ProxyExecutor", executor)
+	if _, ok := executor.(*mcpserver.SandboxExecutor); !ok {
+		t.Fatalf("executor = %T, want *mcpserver.SandboxExecutor", executor)
 	}
 
-	if _, err := newExecutor(&config.Config{MCPUpstreams: "git.push"}, logger); err == nil {
+	if _, err := newExecutor(&config.Config{
+		MCPUpstreams:      "git.push",
+		SandboxManagerURL: "http://sandbox-manager:8060",
+	}, logger); err == nil {
 		t.Fatal("expected an error for a malformed MCP_UPSTREAMS value")
 	}
 }

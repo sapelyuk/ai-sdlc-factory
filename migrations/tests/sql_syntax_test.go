@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDownSQLDropTableIfExists verifies that all .down.sql files use
-// DROP TABLE IF EXISTS and DROP INDEX IF EXISTS.
+// TestDownSQLDropTableIfExists verifies that destructive down migrations use
+// IF EXISTS for tables and indexes.
 func TestDownSQLDropTableIfExists(t *testing.T) {
 	migrationsDir := getMigrationsDir(t)
 	entries, err := os.ReadDir(migrationsDir)
@@ -39,13 +39,16 @@ func TestDownSQLDropTableIfExists(t *testing.T) {
 
 		content := string(data)
 
-		// Check for DROP TABLE IF EXISTS
-		tableMatches := dropTableRegex.FindAllStringIndex(content, -1)
-		assert.GreaterOrEqual(t, len(tableMatches), 1,
-			"%s should contain at least one DROP TABLE IF EXISTS", name)
-
 		// Check that all DROP TABLE statements use IF EXISTS
 		allDropTable := regexp.MustCompile(`(?i)DROP\s+TABLE`).FindAllStringIndex(content, -1)
+		if len(allDropTable) > 0 {
+			tableMatches := dropTableRegex.FindAllStringIndex(content, -1)
+			assert.GreaterOrEqual(t, len(tableMatches), 1,
+				"%s should use DROP TABLE IF EXISTS", name)
+		} else {
+			assert.True(t, regexp.MustCompile(`(?i)ALTER\s+TABLE|DROP\s+INDEX`).MatchString(content),
+				"%s should contain a reversible schema change", name)
+		}
 		for _, match := range allDropTable {
 			start := match[0]
 			end := start + 25
@@ -172,8 +175,8 @@ func assertBeginCommit(t *testing.T, suffix string) {
 	}
 }
 
-// TestAllTablesHaveWorkspaceID verifies that all up.sql files with tables
-// include workspace_id column and RLS policies.
+// TestAllTablesHaveWorkspaceID verifies that migrations creating tables
+// include workspace_id columns and RLS policies.
 func TestAllTablesHaveWorkspaceID(t *testing.T) {
 	migrationsDir := getMigrationsDir(t)
 	entries, err := os.ReadDir(migrationsDir)
@@ -199,6 +202,9 @@ func TestAllTablesHaveWorkspaceID(t *testing.T) {
 		require.NoError(t, err, "failed to read %s", name)
 
 		content := string(data)
+		if !regexp.MustCompile(`(?i)CREATE\s+TABLE`).MatchString(content) {
+			continue
+		}
 
 		// Check for workspace_id NOT NULL
 		workspaceMatches := workspaceIDRegex.FindAllStringIndex(content, -1)

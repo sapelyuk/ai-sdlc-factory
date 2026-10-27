@@ -173,6 +173,12 @@ func TestMigrateUp(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "NO", isNullable, "workspace_id should NOT NULL on sem_nodes")
 
+	var workspacePathExists int
+	err = db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'task_runs' AND column_name = 'workspace_path'").Scan(&workspacePathExists)
+	require.NoError(t, err)
+	assert.Equal(t, 1, workspacePathExists, "task_runs.workspace_path should exist after migrations")
+
 	// ── Verify HNSW index exists ──────────────────────────────
 	var idxname string
 	err = db.QueryRowContext(ctx,
@@ -297,8 +303,8 @@ func TestMigrationNumbering(t *testing.T) {
 	entries, err := os.ReadDir(migrationsDir)
 	require.NoError(t, err)
 
-	expectedUp := 7
-	expectedDown := 7
+	expectedUp := 13
+	expectedDown := 13
 
 	var upCount, downCount int
 	for _, e := range entries {
