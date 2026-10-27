@@ -144,6 +144,13 @@ services:
         reservations:
           memory: 128M
 
+  # ── Tool Gateway: close port 8030 in production-like mode ──
+  # The base compose.yml exposes port 8030 for debugging. In local-full
+  # (production-like) the port is not exposed; a reverse proxy handles
+  # external traffic (see README.md Trust model).
+  tool-gateway:
+    ports: []
+
 volumes:
   langfuse-clickhouse-data:
   langfuse-postgres-data:
