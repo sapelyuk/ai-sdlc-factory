@@ -256,7 +256,7 @@ Hybrid with RRF, filtered by sem_refs.
 
 ### 10.1 Execution isolation
 
-Each agent runs in an isolated sandbox (gVisor) with no network or secrets access. Secrets are injected by the Tool Gateway (credential brokering).
+Each agent runs in an isolated sandbox using gVisor (`runsc`) in production and CI; `runc` is permitted only in `local-dev` with an explicit warning. The Sandbox Manager MUST NOT mount `/var/run/docker.sock` and interacts with the Docker daemon exclusively via a restricted `docker-socket-proxy`. Sandboxes use an egress proxy for network access; no secrets are placed inside the sandbox, and credential brokering is handled by the Tool Gateway. See ADR-023.
 
 ### 10.2 Untrusted content and prompt injection
 
@@ -398,7 +398,7 @@ When aggregating budgets, use `total_cost_usd` (real money). When displaying "ta
 
 ## 13. ADR
 
-Full registry — `docs/architecture/ADR.md` (ADR-001…ADR-022).
+Full registry — `docs/architecture/ADR.md` (ADR-001…ADR-023).
 
 ## 14. Delivery plan
 
@@ -506,6 +506,7 @@ Before completing a stage (see §14.1), verify:
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.10 | 27.10.2026 | Added ADR-023 (Sandbox isolation boundary: docker-socket-proxy, egress allowlist, gVisor). |
 | 1.9 | 22.10.2026 | Added ADR-022 (selection of `mark3labs/mcp-go` for Tool Gateway). §4.2, §11.1, and §12.1 reference ADR-022. (#83) |
 | 1.8 | 22.10.2026 | Restored numbering: §1 (§1.1, §1.3), §5 (§5.1), §9 (§9.1), §16 (§16.2–§16.5). References to §1.4, §16.1, §16.6 preserved. Per review: removed ADR-015 reference from §1.3 (not about multitenancy), clarified KB hierarchy sources in §9.1, fixed coverage threshold source in §16.2 (`AGENTS.md`), removed unconfirmed historical names in §16.5 (#78) |
 
