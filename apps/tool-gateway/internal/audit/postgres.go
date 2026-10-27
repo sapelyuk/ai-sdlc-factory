@@ -76,3 +76,31 @@ func (s *PostgresStore) Append(ctx context.Context, workspaceID uuid.UUID, build
 	}
 	return rec, nil
 }
+
+// Query returns all records for a workspace ordered by created_at.
+func (s *PostgresStore) Query(ctx context.Context, workspaceID uuid.UUID) ([]Record, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, workspace_id, agent_id, tool_name, risk_level, result,
+		       COALESCE(error_message, ''), hash_chain, created_at
+		FROM tool_call_audit_log
+		WHERE workspace_id = $1
+		ORDER BY created_at, id`, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("audit: query: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Record
+	for rows.Next() {
+		var rec Record
+		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.AgentID, &rec.ToolName,
+			&rec.RiskLevel, &rec.Result, &rec.ErrorMessage, &rec.HashChain, &rec.CreatedAt); err != nil {
+			return nil, fmt.Errorf("audit: scan: %w", err)
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("audit: rows: %w", err)
+	}
+	return out, nil
+}

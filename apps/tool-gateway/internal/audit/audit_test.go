@@ -126,10 +126,45 @@ func TestStoreErrorIsPropagated(t *testing.T) {
 	}
 }
 
+func TestLoggerVerify(t *testing.T) {
+	store := &MemoryStore{}
+	logger := NewLogger(store)
+
+	// Empty store should verify OK.
+	if err := logger.Verify(context.Background(), uuid.MustParse("11111111-1111-1111-1111-111111111111")); err != nil {
+		t.Fatalf("Verify empty: %v", err)
+	}
+
+	// Add some records.
+	for _, tool := range []string{"git.push", "fs.read", "git.diff"} {
+		if _, err := logger.Record(context.Background(), entry(tool, ResultSuccess)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify should pass.
+	ws := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	if err := logger.Verify(context.Background(), ws); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+}
+
+func TestLoggerVerifyError(t *testing.T) {
+	logger := NewLogger(failingStore{})
+	err := logger.Verify(context.Background(), uuid.MustParse("11111111-1111-1111-1111-111111111111"))
+	if err == nil {
+		t.Fatal("expected an error from Query")
+	}
+}
+
 type failingStore struct{}
 
 func (failingStore) Append(context.Context, uuid.UUID, func(string) (Record, error)) (Record, error) {
 	return Record{}, errTest
+}
+
+func (failingStore) Query(context.Context, uuid.UUID) ([]Record, error) {
+	return nil, errTest
 }
 
 var errTest = &testError{}
