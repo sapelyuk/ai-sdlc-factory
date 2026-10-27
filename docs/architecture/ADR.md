@@ -331,6 +331,7 @@ Additionally, the sandbox containers must be able to fetch dependencies (Go, npm
      - `CONTAINERS=1` (create, start, stop, exec, remove)
      - `POST=1` (required for container creation)
      - `EXEC=1`
+     - `VERSION=1` (required by Docker API version negotiation)
      - All other endpoints (`IMAGES`, `VOLUMES`, `NETWORKS`, `BUILD`, `SYSTEM`, `SWARM`, `AUTH`) are **denied** (`0`).
 
 2. **Network Boundary (Egress):**
@@ -349,6 +350,10 @@ Additionally, the sandbox containers must be able to fetch dependencies (Go, npm
    - `ReadonlyRootfs: true` (with tmpfs for `/tmp` and `/workspace`).
    - Resource limits: CPU, Memory, Pids (to prevent fork bombs).
    - No secrets inside the container; credential brokering is handled by Tool Gateway upstream.
+
+**Implementation defaults (v1, subject to future revision):**
+- Disk limit per sandbox: 2 GB (`SANDBOX_DISK_LIMIT_BYTES` env override).
+- `sandbox.exec` requires `task_run_id` (uuid). Workspace path is resolved server-side from `task_runs.workspace_path` and validated against `X-Workspace-ID`. The agent never passes a host path.
 
 **Consequences.**
 - **Pros:** Defense in depth. A compromise of Sandbox Manager does not lead to host root access. Egress is auditable and restricted. gVisor provides a strong barrier against kernel exploits.
