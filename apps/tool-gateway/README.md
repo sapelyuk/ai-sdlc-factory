@@ -118,8 +118,9 @@ MCP_UPSTREAMS="git.clone=http://git-mcp:9000/mcp,git.push=http://git-mcp:9000/mc
 - Brokered credentials travel in the `_meta` field
   `ai-sdlc-factory/credentials` and never reach the agent.
 - Upstream errors (`isError`) and transport failures are audited as `error`.
-- With `MCP_UPSTREAMS` empty the gateway uses the stub executor, which is the
-  default for `make up-local`.
+- `sandbox.exec` is always sent to Sandbox Manager at `SANDBOX_MANAGER_URL`;
+  it is never routed through `MCP_UPSTREAMS` or the stub executor.
+- With `MCP_UPSTREAMS` empty, non-sandbox tools use the stub executor.
 
 ## Configuration
 
@@ -136,6 +137,7 @@ MCP_UPSTREAMS="git.clone=http://git-mcp:9000/mcp,git.push=http://git-mcp:9000/mc
 | `VAULT_SECRET_MOUNT` | `secret` | KV mount name |
 | `VAULT_CACHE_TTL` | `60s` | Secret cache TTL |
 | `MCP_UPSTREAMS` | — | Comma-separated `tool=url` upstream routes; empty uses the stub executor |
+| `SANDBOX_MANAGER_URL` | `http://localhost:8060` | Sandbox Manager API base URL |
 
 Schema loading is fail-fast: a malformed or missing schema file prevents the
 service from starting.

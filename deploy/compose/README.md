@@ -29,6 +29,7 @@ make ps-local
 | Platform API | http://localhost:8000 | http://localhost:8000 |
 | LLM Gateway | http://localhost:8040 | http://localhost:8040 |
 | Tool Gateway (MCP) | http://localhost:8030/mcp | http://localhost:8030/mcp |
+| Sandbox Manager | http://localhost:8060 | http://localhost:8060 |
 | Temporal UI | http://localhost:8080 | — |
 | Silo Console | http://localhost:9001 | http://localhost:9001 |
 | Jaeger UI | http://localhost:16686 | http://localhost:16686 |
@@ -47,6 +48,9 @@ make ps-local
 | Vault | 8200 | Secret management (dev mode) | always |
 | OPA | 8181 | Policy engine (Rego) | always |
 | Tool Gateway | 8030 | MCP proxy for agents | always |
+| Sandbox Manager | 8060 | Tenant-scoped isolated command execution | always |
+| Docker socket proxy | internal | Restricted Docker API access for Sandbox Manager | always |
+| Egress proxy | internal | Allowlisted, logged sandbox network access | always |
 | Temporal Server | 7233 | Durable execution for local-dev | local-dev |
 | Temporal UI | 8080 | Workflow viewer | local-dev |
 
@@ -288,5 +292,7 @@ Migrations are in `migrations/postgres/`:
 | 9 | `0009_init_users` | users, JWT auth, RBAC |
 | 10 | `0010_llm_gateway` | llm_model_profiles, model_health, llm_logical_calls, llm_attempts |
 | 11 | `0011_tool_gateway_audit` | tool_call_audit_log (hash-chained audit) |
+| 12 | `0012_audit_stub_result` | Adds the `stub` audit result |
+| 13 | `0013_task_runs_workspace_path` | Adds the TaskRun workspace path used by Sandbox Manager |
 
 Each migration has a paired `.up.sql` / `.down.sql` file for applying and rolling back.

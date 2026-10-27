@@ -193,6 +193,8 @@ services:
           memory: 64M
 
   sandbox-manager:
+    environment:
+      RUNTIME: ${SANDBOX_RUNTIME:-runc}
     deploy:
       resources:
         limits:
