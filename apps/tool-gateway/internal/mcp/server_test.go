@@ -148,7 +148,7 @@ func TestAllowedCallInjectsCredentialAndAudits(t *testing.T) {
 	if len(records) != 1 {
 		t.Fatalf("audit records = %d, want 1", len(records))
 	}
-	if records[0].Result != audit.ResultSuccess || records[0].RiskLevel != "R1" {
+	if records[0].Result != audit.ResultStub || records[0].RiskLevel != "R1" {
 		t.Fatalf("unexpected audit record: %+v", records[0])
 	}
 	if err := audit.Verify(records); err != nil {
@@ -214,7 +214,7 @@ func TestR3RequiresApprover(t *testing.T) {
 	if len(records) != 2 {
 		t.Fatalf("audit records = %d, want 2", len(records))
 	}
-	if records[0].Result != audit.ResultDenied || records[1].Result != audit.ResultSuccess {
+	if records[0].Result != audit.ResultDenied || records[1].Result != audit.ResultStub {
 		t.Fatalf("unexpected results: %+v", records)
 	}
 }
@@ -406,6 +406,35 @@ type failingStore struct{}
 
 func (failingStore) Append(context.Context, uuid.UUID, func(string) (audit.Record, error)) (audit.Record, error) {
 	return audit.Record{}, errors.New("audit store is down")
+}
+
+func (failingStore) Query(context.Context, uuid.UUID) ([]audit.Record, error) {
+	return nil, errors.New("audit store is down")
+}
+
+func TestStubResult_LoggedAsStub(t *testing.T) {
+	cat, err := catalog.Load(schemasDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, store := newTestServer(t, cat, &fakeBroker{}, StubExecutor{})
+
+	ctx := identity.With(context.Background(), testIdentity("developer", "R0"))
+	result, err := callTool(t, srv, ctx, "fs.read", map[string]any{"path": "/tmp/x"})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %s", resultText(t, result))
+	}
+
+	records := store.Records()
+	if len(records) != 1 {
+		t.Fatalf("audit records = %d, want 1", len(records))
+	}
+	if records[0].Result != audit.ResultStub {
+		t.Fatalf("expected result=%q, got %q", audit.ResultStub, records[0].Result)
+	}
 }
 
 func tempCatalog(t *testing.T, files map[string]string) *catalog.Catalog {

@@ -195,11 +195,21 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 			return nil, fmt.Errorf("sanitize tool result: %w", err)
 		}
 
-		if err := s.record(ctx, id, tool, decision.RiskLevel, audit.ResultSuccess, ""); err != nil {
+		if err := s.record(ctx, id, tool, decision.RiskLevel, s.auditResult(), ""); err != nil {
 			return nil, fmt.Errorf("write audit record: %w", err)
 		}
 		return mcpgo.NewToolResultJSON(clean)
 	}
+}
+
+// auditResult returns the appropriate audit result for the configured executor.
+// StubExecutor calls are logged as "stub" to distinguish them from real
+// upstream calls.
+func (s *Server) auditResult() string {
+	if _, ok := s.executor.(StubExecutor); ok {
+		return audit.ResultStub
+	}
+	return audit.ResultSuccess
 }
 
 func (s *Server) authorize(ctx context.Context, id identity.Identity, tool catalog.Tool) (policy.Decision, error) {

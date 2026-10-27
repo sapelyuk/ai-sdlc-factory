@@ -81,7 +81,7 @@ func TestHTTPStreamableEndpoint(t *testing.T) {
 	}
 
 	records := store.Records()
-	if len(records) != 1 || records[0].Result != audit.ResultSuccess {
+	if len(records) != 1 || records[0].Result != audit.ResultStub {
 		t.Fatalf("unexpected audit records: %+v", records)
 	}
 }

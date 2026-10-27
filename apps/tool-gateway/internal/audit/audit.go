@@ -22,6 +22,7 @@ const (
 	ResultSuccess = "success"
 	ResultDenied  = "denied"
 	ResultError   = "error"
+	ResultStub    = "stub"
 )
 
 // Entry is a tool call to be audited.
@@ -51,6 +52,8 @@ type Record struct {
 // for the workspace and pass the previous hash to build.
 type Store interface {
 	Append(ctx context.Context, workspaceID uuid.UUID, build func(prevHash string) (Record, error)) (Record, error)
+	// Query returns all records for a workspace, ordered by created_at.
+	Query(ctx context.Context, workspaceID uuid.UUID) ([]Record, error)
 }
 
 // Logger validates entries and computes the hash chain.
@@ -136,6 +139,15 @@ func Verify(records []Record) error {
 	return nil
 }
 
+// Verify queries all records for the given workspace and verifies the chain.
+func (l *Logger) Verify(ctx context.Context, workspaceID uuid.UUID) error {
+	records, err := l.store.Query(ctx, workspaceID)
+	if err != nil {
+		return fmt.Errorf("audit: query: %w", err)
+	}
+	return Verify(records)
+}
+
 // MemoryStore is an in-memory Store used by tests and local development.
 type MemoryStore struct {
 	mu      sync.Mutex
@@ -166,6 +178,14 @@ func (m *MemoryStore) Records() []Record {
 	return append([]Record(nil), m.records...)
 }
 
+// Query returns all records for the given workspace.
+// MemoryStore ignores workspaceID because all records are in-memory.
+func (m *MemoryStore) Query(_ context.Context, _ uuid.UUID) ([]Record, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]Record(nil), m.records...), nil
+}
+
 func validRiskLevel(level string) bool {
 	switch level {
 	case "R0", "R1", "R2", "R3":
@@ -177,7 +197,7 @@ func validRiskLevel(level string) bool {
 
 func validResult(result string) bool {
 	switch result {
-	case ResultSuccess, ResultDenied, ResultError:
+	case ResultSuccess, ResultDenied, ResultError, ResultStub:
 		return true
 	default:
 		return false

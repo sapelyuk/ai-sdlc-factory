@@ -31,9 +31,10 @@ import (
 )
 
 const (
-	schemasDir    = "../../../../packages/contracts/mcp-schemas"
-	policyDir     = "../../../../packages/policy"
-	migrationPath = "../../../../migrations/postgres/0011_tool_gateway_audit.up.sql"
+	schemasDir              = "../../../../packages/contracts/mcp-schemas"
+	policyDir               = "../../../../packages/policy"
+	migrationPath           = "../../../../migrations/postgres/0011_tool_gateway_audit.up.sql"
+	stubResultMigrationPath = "../../../../migrations/postgres/0012_audit_stub_result.up.sql"
 )
 
 var (
@@ -105,6 +106,21 @@ func newTestEnv(t *testing.T) *testEnv {
 	if _, err := conn.Conn().PgConn().Exec(ctx, string(migration)).ReadAll(); err != nil {
 		conn.Release()
 		t.Fatalf("apply migration: %v", err)
+	}
+	conn.Release()
+
+	// Apply migration 0012 for 'stub' result support.
+	stubMigration, err := os.ReadFile(filepath.Clean(stubResultMigrationPath))
+	if err != nil {
+		t.Fatalf("read stub migration: %v", err)
+	}
+	conn, err = pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Conn().PgConn().Exec(ctx, string(stubMigration)).ReadAll(); err != nil {
+		conn.Release()
+		t.Fatalf("apply stub migration: %v", err)
 	}
 	conn.Release()
 
@@ -277,17 +293,17 @@ func TestToolGatewayEndToEnd(t *testing.T) {
 		t.Fatalf("verify hash chain: %v", err)
 	}
 
-	var success, deniedCount int
+	var stub, deniedCount int
 	for _, rec := range records {
 		switch rec.Result {
-		case audit.ResultSuccess:
-			success++
+		case audit.ResultStub:
+			stub++
 		case audit.ResultDenied:
 			deniedCount++
 		}
 	}
-	if success != 2 {
-		t.Fatalf("success records = %d, want 2", success)
+	if stub != 2 {
+		t.Fatalf("stub records = %d, want 2", stub)
 	}
 	if deniedCount != 2 {
 		t.Fatalf("denied records = %d, want 2", deniedCount)
