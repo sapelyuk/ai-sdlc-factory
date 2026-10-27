@@ -6,6 +6,7 @@ package credentials
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -153,6 +154,9 @@ var tokenPatterns = []*regexp.Regexp{
 }
 
 // Redactor removes known secret values and token-shaped strings from text.
+// It operates on raw JSON: every string value containing a registered secret
+// is replaced with "[REDACTED]", then the JSON is re-serialized. This handles
+// escaped characters (e.g. \", \) correctly, unlike a naive string ReplaceAll.
 type Redactor struct {
 	mu      sync.RWMutex
 	secrets []string
@@ -189,11 +193,19 @@ func (r *Redactor) Add(values ...string) {
 }
 
 // Redact returns s with secrets and token-shaped strings replaced.
+// When s is valid JSON, Redact walks the value tree and replaces string
+// fields that match a registered secret with "[REDACTED]". This correctly
+// handles escaped characters (e.g. \" in JSON).
 func (r *Redactor) Redact(s string) string {
 	r.mu.RLock()
 	secrets := append([]string(nil), r.secrets...)
 	r.mu.RUnlock()
 
+	// Try JSON-aware redaction first.
+	if redacted := redactJSON(s, secrets); redacted != s {
+		return redacted
+	}
+	// Fallback: raw string replacement (for non-JSON text).
 	for _, secret := range secrets {
 		s = strings.ReplaceAll(s, secret, "[REDACTED]")
 	}
@@ -201,4 +213,49 @@ func (r *Redactor) Redact(s string) string {
 		s = pattern.ReplaceAllString(s, "[REDACTED]")
 	}
 	return s
+}
+
+// redactJSON walks a JSON document and replaces string values that match
+// any of the secrets with "[REDACTED]". It returns the redacted JSON or
+// the original string if parsing fails.
+func redactJSON(s string, secrets []string) string {
+	var raw any
+	if err := json.Unmarshal([]byte(s), &raw); err != nil {
+		return s
+	}
+	redactValue(&raw, secrets)
+	out, err := json.Marshal(raw)
+	if err != nil {
+		return s
+	}
+	return string(out)
+}
+
+// redactValue walks a parsed JSON value and replaces string fields.
+func redactValue(v *any, secrets []string) {
+	switch val := (*v).(type) {
+	case string:
+		for _, secret := range secrets {
+			if val == secret {
+				*v = "[REDACTED]"
+				return
+			}
+		}
+		// Also redact token-shaped patterns.
+		for _, pattern := range tokenPatterns {
+			if pattern.MatchString(val) {
+				*v = "[REDACTED]"
+				return
+			}
+		}
+	case map[string]any:
+		for key, v := range val {
+			redactValue(&v, secrets)
+			val[key] = v
+		}
+	case []any:
+		for i := range val {
+			redactValue(&val[i], secrets)
+		}
+	}
 }

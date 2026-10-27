@@ -2,6 +2,7 @@ package credentials
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -140,6 +141,44 @@ func TestRedactorOverlappingSecrets(t *testing.T) {
 	r.Add("secret", "secret-longer")
 	if got := r.Redact("secret-longer"); got != "[REDACTED]" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestRedactor_EscapedToken(t *testing.T) {
+	// A secret that contains characters which get escaped in JSON.
+	secret := `abc"def\ghi`
+	r := NewRedactor()
+	r.Add(secret)
+
+	// Build proper JSON with the secret using json.Marshal.
+	input := map[string]any{
+		"token": secret,
+		"other": "safe",
+	}
+	raw, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := r.Redact(string(raw))
+	if strings.Contains(got, secret) {
+		t.Fatalf("raw secret leaked: %s", got)
+	}
+	if !strings.Contains(got, "[REDACTED]") {
+		t.Fatalf("expected [REDACTED] marker, got: %s", got)
+	}
+}
+
+func TestRedactor_NonJSONText(t *testing.T) {
+	// Non-JSON text still gets raw replacement.
+	r := NewRedactor()
+	r.Add("my_secret_token")
+	got := r.Redact("prefix my_secret_token suffix")
+	if strings.Contains(got, "my_secret_token") {
+		t.Fatalf("secret leaked: %s", got)
+	}
+	if !strings.Contains(got, "[REDACTED]") {
+		t.Fatalf("expected [REDACTED], got: %s", got)
 	}
 }
 
