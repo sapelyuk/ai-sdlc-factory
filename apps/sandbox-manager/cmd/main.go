@@ -1,34 +1,78 @@
-// Command sandboxmanager is a build stub for the ai-sdlc-factory sandbox-manager service.
-//
-// It serves only GET /healthz so that the Docker Compose stack can build and
-// start. The real implementation lands in M1 (see issue #96).
+// Command sandboxmanager runs the ai-sdlc-factory sandbox manager.
 package main
 
 import (
-	"log"
-	"net/http"
+	"context"
+	"errors"
+	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/docker/docker/client"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/config"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/sandbox"
+	httptransport "github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/transport/http"
 )
 
 func main() {
-	addr := ":" + getenv("PORT", "8000")
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-
-	log.Printf("ai-sdlc-factory-sandbox-manager stub listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatal(err)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	if err := run(logger); err != nil {
+		logger.Error("sandbox-manager failed", "error", err)
+		os.Exit(1)
 	}
 }
 
-// getenv returns the value of key, or fallback when it is empty.
-func getenv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+func run(logger *slog.Logger) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
 	}
-	return fallback
+
+	dockerClient, err := client.NewClientWithOpts(
+		client.WithHost(cfg.DockerHost),
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := dockerClient.Close(); err != nil {
+			logger.Error("close Docker client", "error", err)
+		}
+	}()
+
+	dbPool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer dbPool.Close()
+	if err := dbPool.Ping(context.Background()); err != nil {
+		return err
+	}
+
+	manager := sandbox.NewManager(dockerClient, cfg, logger)
+	router := httptransport.NewRouter(httptransport.Options{
+		Manager: manager,
+		Tasks:   sandbox.NewPostgresTaskRunStore(dbPool),
+		Logger:  logger,
+	})
+	server := httptransport.NewServer(cfg.Port, router)
+	go func() {
+		logger.Info("ai-sdlc-factory-sandbox-manager listening", "port", cfg.Port)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, httptransport.ErrServerClosed) {
+			logger.Error("http server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return server.Shutdown(ctx)
 }
