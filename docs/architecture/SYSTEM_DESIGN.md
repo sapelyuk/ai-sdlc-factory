@@ -1,6 +1,6 @@
 # AI-SDLC Platform Architecture: ai-sdlc-factory
 
-**Version 1.9 · 22.10.2026**
+**Version 1.10 · 27.10.2026**
 
 ## 0. How to read this document
 

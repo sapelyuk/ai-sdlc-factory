@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADR) — ai-sdlc-factory
 
-**Version 1.6 · 22.10.2026**
+**Version 1.7 · 27.10.2026**
 
 Format: MADR. Statuses: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
 
