@@ -35,6 +35,16 @@ Short role names (`developer`, `qa`, `reviewer`, `devops`) are aliases for the
 schema roles `software-engineer`, `qa-engineer`, `code-reviewer` and
 `devops-engineer`.
 
+## Trust model
+
+Tool Gateway trusts the headers `X-Agent-Role`, `X-Agent-ID`, `X-Workspace-ID`,
+`X-Approver-ID` **only when the service is deployed behind a trusted reverse
+proxy (mTLS or JWT-based)**. The proxy is responsible for authenticating agents
+and stripping any client-supplied identity headers.
+
+In `local-dev`, the port `8030` is exposed for debugging; do not use this
+configuration in production.
+
 ## Policy enforcement (R0–R3)
 
 Before a `tools/call` reaches the MCP server, the gateway evaluates
