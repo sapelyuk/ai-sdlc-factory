@@ -41,8 +41,8 @@ type Call struct {
 // Executor runs a tool call.
 //
 // ProxyExecutor forwards calls to upstream MCP servers (configured through
-// MCP_UPSTREAMS). StubExecutor is the fallback for local runs without
-// upstreams; the sandbox-backed executor lands with issue #13.
+// MCP_UPSTREAMS). SandboxExecutor routes sandbox.exec to Sandbox Manager and
+// delegates other calls to an upstream or local stub.
 type Executor interface {
 	Execute(ctx context.Context, call Call) (map[string]any, error)
 }
@@ -195,7 +195,11 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 			return nil, fmt.Errorf("sanitize tool result: %w", err)
 		}
 
-		if err := s.record(ctx, id, tool, decision.RiskLevel, s.auditResult(), ""); err != nil {
+		auditResult := s.auditResult()
+		if status, ok := clean["status"].(string); ok && status == "error" {
+			auditResult = audit.ResultError
+		}
+		if err := s.record(ctx, id, tool, decision.RiskLevel, auditResult, ""); err != nil {
 			return nil, fmt.Errorf("write audit record: %w", err)
 		}
 		return mcpgo.NewToolResultJSON(clean)

@@ -44,8 +44,11 @@ type Config struct {
 
 	// MCPUpstreams routes tools to upstream MCP servers. The raw value is a
 	// comma-separated list of tool=url pairs; "*" is the fallback route.
-	// When empty, the gateway runs with the stub executor.
+	// When empty, non-sandbox tools use the stub executor.
 	MCPUpstreams string
+
+	// SandboxManagerURL is the base URL of the Sandbox Manager HTTP API.
+	SandboxManagerURL string
 }
 
 // Load reads configuration from environment variables.
@@ -71,17 +74,18 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Port:             port,
-		DatabaseURL:      env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/ai_sdlc_factory?sslmode=disable"),
-		OPAURL:           opaURL,
-		PolicyDir:        env("POLICY_DIR", "packages/policy"),
-		SchemaDir:        env("SCHEMA_DIR", "packages/contracts/mcp-schemas"),
-		VaultAddr:        env("VAULT_ADDR", "http://localhost:8200"),
-		VaultToken:       os.Getenv("VAULT_TOKEN"),
-		VaultSecretMount: env("VAULT_SECRET_MOUNT", "secret"),
-		VaultCacheTTL:    cacheTTL,
-		PolicyTimeout:    timeout,
-		MCPUpstreams:     os.Getenv("MCP_UPSTREAMS"),
+		Port:              port,
+		DatabaseURL:       env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/ai_sdlc_factory?sslmode=disable"),
+		OPAURL:            opaURL,
+		PolicyDir:         env("POLICY_DIR", "packages/policy"),
+		SchemaDir:         env("SCHEMA_DIR", "packages/contracts/mcp-schemas"),
+		VaultAddr:         env("VAULT_ADDR", "http://localhost:8200"),
+		VaultToken:        os.Getenv("VAULT_TOKEN"),
+		VaultSecretMount:  env("VAULT_SECRET_MOUNT", "secret"),
+		VaultCacheTTL:     cacheTTL,
+		PolicyTimeout:     timeout,
+		MCPUpstreams:      os.Getenv("MCP_UPSTREAMS"),
+		SandboxManagerURL: env("SANDBOX_MANAGER_URL", "http://localhost:8060"),
 	}, nil
 }
 

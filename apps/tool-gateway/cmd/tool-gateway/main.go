@@ -87,7 +87,11 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	if closer, ok := executor.(interface{ Close() error }); ok {
-		defer func() { _ = closer.Close() }()
+		defer func() {
+			if err := closer.Close(); err != nil {
+				logger.Error("close sandbox executor", "error", err)
+			}
+		}()
 	}
 
 	gateway, err := mcpserver.NewServer(mcpserver.Options{
@@ -174,19 +178,29 @@ func newAuthorizer(cfg *config.Config, logger *slog.Logger) (policy.Authorizer, 
 }
 
 func newExecutor(cfg *config.Config, logger *slog.Logger) (mcpserver.Executor, error) {
+	sandboxManagerURL := cfg.SandboxManagerURL
+	if sandboxManagerURL == "" {
+		sandboxManagerURL = "http://localhost:8060"
+	}
+	var fallback mcpserver.Executor = mcpserver.StubExecutor{}
 	if cfg.MCPUpstreams == "" {
-		logger.Warn("MCP_UPSTREAMS is empty; using the stub executor")
-		return mcpserver.StubExecutor{}, nil
+		logger.Warn("MCP_UPSTREAMS is empty; non-sandbox tools use the stub executor")
+	} else {
+		routes, err := mcpserver.ParseUpstreams(cfg.MCPUpstreams)
+		if err != nil {
+			return nil, err
+		}
+		proxy, err := mcpserver.NewProxyExecutor(routes, nil)
+		if err != nil {
+			return nil, err
+		}
+		fallback = proxy
+		logger.Info("proxying non-sandbox tools to MCP upstreams", "routes", proxy.Routes())
 	}
-
-	routes, err := mcpserver.ParseUpstreams(cfg.MCPUpstreams)
+	executor, err := mcpserver.NewSandboxExecutor(sandboxManagerURL, fallback)
 	if err != nil {
 		return nil, err
 	}
-	executor, err := mcpserver.NewProxyExecutor(routes, nil)
-	if err != nil {
-		return nil, err
-	}
-	logger.Info("proxying to upstream MCP servers", "routes", executor.Routes())
+	logger.Info("sandbox.exec routed to Sandbox Manager", "url", sandboxManagerURL)
 	return executor, nil
 }
