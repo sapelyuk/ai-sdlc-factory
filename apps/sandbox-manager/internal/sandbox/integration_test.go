@@ -17,9 +17,16 @@ import (
 )
 
 func TestSandboxDockerLifecycleIntegration(t *testing.T) {
+	// ADR-023: the integration test talks to the Docker daemon only through
+	// docker-socket-proxy. In CI a missing DOCKER_HOST means the harness is
+	// broken, so fail loudly instead of silently skipping and hiding it.
 	dockerHost := os.Getenv("DOCKER_HOST")
 	if dockerHost == "" {
-		t.Skip("DOCKER_HOST must point to docker-socket-proxy")
+		if os.Getenv("CI") == "true" {
+			t.Fatal("DOCKER_HOST is required in CI: integration test must not be skipped " +
+				"(start docker-socket-proxy and set DOCKER_HOST=tcp://127.0.0.1:2375)")
+		}
+		t.Skip("DOCKER_HOST not set (run locally: DOCKER_HOST=tcp://localhost:2375 make test-sandbox-integration)")
 	}
 	dockerClient, err := client.NewClientWithOpts(client.WithHost(dockerHost), client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -42,8 +49,14 @@ func TestSandboxDockerLifecycleIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// In CI the runtime must be declared explicitly (runc on plain GitHub
+	// runners without gVisor is acceptable: NewManager logs a WARN).
+	// Locally the default stays runsc, matching production behavior.
 	runtime := os.Getenv("SANDBOX_TEST_RUNTIME")
 	if runtime == "" {
+		if os.Getenv("CI") == "true" {
+			t.Fatal("SANDBOX_TEST_RUNTIME is required in CI: integration test must not pick a runtime implicitly")
+		}
 		runtime = "runsc"
 	}
 	manager := NewManager(dockerClient, &config.Config{

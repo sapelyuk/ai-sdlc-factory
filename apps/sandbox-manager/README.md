@@ -102,7 +102,9 @@ Migration `0013_task_runs_workspace_path` adds the nullable workspace path.
 Until Agent Runtime creates and records a workspace, requests for that TaskRun
 fail closed with HTTP 400.
 
-## Tests
+## Testing
+
+### Unit tests
 
 ```bash
 cd apps/sandbox-manager
@@ -110,12 +112,34 @@ go test -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 ```
 
-The opt-in Docker integration test exercises create, `echo hello`, and destroy
-through the configured Docker API endpoint. It requires the sandbox image,
-`sandbox-net`, the selected runtime, and a Docker daemon that can bind-mount the
-test workspace:
+### Integration test (real Docker)
+
+`TestSandboxDockerLifecycleIntegration` (build tag `integration`) exercises
+create, `echo hello`, and destroy through the configured Docker API endpoint.
+Per ADR-023 it requires a running `docker-socket-proxy` on `localhost:2375`
+(the only component allowed to see `/var/run/docker.sock`), the internal
+`sandbox-net` network, and the `ai-sdlc-factory/sandbox-go-node:latest` image:
 
 ```bash
-cd apps/sandbox-manager
-DOCKER_HOST=tcp://docker-socket-proxy:2375 go test -tags=integration -run TestSandboxDockerLifecycleIntegration ./internal/sandbox/
+# One-time setup (same pinned image digest as deploy/compose/docker-compose.yml;
+# tag 0.2 does not proxy the exec-attach connection hijack)
+docker run -d --name docker-socket-proxy \
+  -p 127.0.0.1:2375:2375 \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -e CONTAINERS=1 -e POST=1 -e EXEC=1 \
+  -e IMAGES=0 -e VOLUMES=0 -e NETWORKS=0 -e BUILD=0 -e SYSTEM=0 \
+  'tecnativa/docker-socket-proxy:master@sha256:e0afed6a302dafe6fc5ef2a93358660502795177136accfd42cfdab08e7ca6c0'
+docker network create --internal sandbox-net
+
+# Run (from the repository root)
+make test-sandbox-integration
 ```
+
+The target builds the sandbox image, then runs the test with
+`SANDBOX_TEST_RUNTIME=runc` because GitHub runners and local Docker Desktop
+usually have no gVisor; the manager logs a WARN when falling back to `runc`.
+
+In CI (`ubuntu-latest`, `Sandbox Integration (Docker)` job) this test runs
+automatically and must pass. Without `DOCKER_HOST` it is skipped locally, but
+fails loudly when `CI=true` is set — a skipped integration test in CI is
+treated as a broken harness, not as green.

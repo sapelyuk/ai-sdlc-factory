@@ -170,6 +170,92 @@ jobs:
           print("OK: no Cyrillic characters found.")
           PY
 
+  # Sandbox Manager integration test against a real Docker daemon (ADR-023).
+  # The only place where /var/run/docker.sock is mounted is the
+  # docker-socket-proxy container; the test reaches the daemon exclusively
+  # through the proxy on 127.0.0.1:2375 with a default-deny endpoint policy.
+  # The proxy image is pinned to the same digest as deploy/compose/docker-compose.yml;
+  # tag 0.2 is not used because it does not proxy the exec-attach connection hijack.
+  sandbox-integration:
+    name: Sandbox Integration (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+          cache-dependency-path: apps/sandbox-manager/go.sum
+
+      - name: Verify Docker is available
+        run: |
+          docker version
+          docker info
+
+      - name: Start docker-socket-proxy
+        run: |
+          docker run -d --name docker-socket-proxy \
+            -p 127.0.0.1:2375:2375 \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -e CONTAINERS=1 \
+            -e POST=1 \
+            -e EXEC=1 \
+            -e IMAGES=0 \
+            -e VOLUMES=0 \
+            -e NETWORKS=0 \
+            -e BUILD=0 \
+            -e SYSTEM=0 \
+            'tecnativa/docker-socket-proxy:master@sha256:e0afed6a302dafe6fc5ef2a93358660502795177136accfd42cfdab08e7ca6c0'
+
+      - name: Wait for docker-socket-proxy
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:2375/_ping >/dev/null 2>&1; then
+              echo "docker-socket-proxy is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "docker-socket-proxy did not start"
+          docker logs docker-socket-proxy
+          exit 1
+
+      - name: Create sandbox-net (internal)
+        run: |
+          docker network create --internal sandbox-net
+
+      - name: Build sandbox-go-node image
+        run: |
+          docker build -t ai-sdlc-factory/sandbox-go-node:latest \
+            -f deploy/sandboxes/Dockerfile \
+            deploy/sandboxes/
+
+      - name: Run sandbox integration tests
+        working-directory: apps/sandbox-manager
+        env:
+          DOCKER_HOST: tcp://127.0.0.1:2375
+          SANDBOX_TEST_RUNTIME: runc
+          CI: 'true'
+        run: |
+          go test -tags=integration \
+            -run TestSandboxDockerLifecycleIntegration \
+            -count=1 -v -timeout 10m \
+            ./internal/sandbox/
+
+      - name: Dump docker-socket-proxy logs on failure
+        if: failure()
+        run: docker logs docker-socket-proxy || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f docker-socket-proxy || true
+          docker network rm sandbox-net || true
+
   # Aggregate job so the branch-protection "ci" context is satisfied.
   # It runs after all other jobs and succeeds only if they all succeed.
   ci:
@@ -181,6 +267,7 @@ jobs:
       - build
       - frontend-lint
       - cyrillic-check
+      - sandbox-integration
     if: always()
     steps:
       - name: Verify all required checks passed

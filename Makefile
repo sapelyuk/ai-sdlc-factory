@@ -28,7 +28,7 @@ API_SERVICE = api
 WORKER_SERVICE = worker
 WEB_SERVICE = web
 
-.PHONY: up-local up-full down-local down-full ps-local ps-full logs-local logs-full rebuild-local rebuild-full clean volumes migrate-up migrate-down health dev-api dev-worker dev-web temporal-create-namespace temporal-smoke-test
+.PHONY: up-local up-full down-local down-full ps-local ps-full logs-local logs-full rebuild-local rebuild-full clean volumes migrate-up migrate-down health dev-api dev-worker dev-web temporal-create-namespace temporal-smoke-test test-sandbox-integration
 
 TEMPORAL_NAMESPACE ?= ai-sdlc-factory
 TEMPORAL_COMPOSE = docker compose $(COMPOSE_FILES)
@@ -174,5 +174,19 @@ else
 seed-slp:
 	@bash scripts/seed-slp.sh
 endif
+
+# ── Sandbox integration tests ──────────────────────────────
+# Requires: Docker Desktop (or any Docker daemon).
+# ADR-023: only docker-socket-proxy may see /var/run/docker.sock.
+test-sandbox-integration:
+	@echo "Running Sandbox Manager integration tests (requires Docker)..."
+	@docker network create --internal sandbox-net 2>/dev/null || true
+	@docker build -t ai-sdlc-factory/sandbox-go-node:latest \
+		-f deploy/sandboxes/Dockerfile deploy/sandboxes/
+	@cd apps/sandbox-manager && \
+		DOCKER_HOST=tcp://localhost:2375 \
+		SANDBOX_TEST_RUNTIME=runc \
+		CI=true \
+		go test -tags=integration -run TestSandboxDockerLifecycleIntegration -v -timeout 10m ./internal/sandbox/
 
 
