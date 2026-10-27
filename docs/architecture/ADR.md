@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADR) — ai-sdlc-factory
 
-**Version 1.6 · 22.10.2026**
+**Version 1.7 · 27.10.2026**
 
 Format: MADR. Statuses: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
 
@@ -313,10 +313,61 @@ Library version is pinned in `go.mod` (at time of writing — `v1.1.1` or later 
 
 ---
 
+## ADR-023. Sandbox isolation boundary: docker-socket-proxy, egress allowlist, and gVisor
+
+**Status:** accepted.
+
+**Context.**
+Implementing the Sandbox Manager (Issue #13) requires a secure boundary between the service and the host's container runtime. If the Sandbox Manager mounts `/var/run/docker.sock` directly, a compromise of the service (e.g., via a malicious payload in `sandbox.exec`) grants the attacker full control over the host's Docker daemon, violating NFR-1 (isolation) and NFR-5 (security).
+
+Additionally, the sandbox containers must be able to fetch dependencies (Go, npm, pip, git) while remaining protected from exfiltration. Using `network_mode: none` breaks normal build workflows, while leaving them on an unrestricted network creates a prompt-injection exfiltration risk.
+
+**Decision.**
+
+1. **Docker Socket Boundary:**
+   - The Sandbox Manager **MUST NOT** mount `/var/run/docker.sock`.
+   - The Sandbox Manager interacts with the Docker daemon exclusively via `docker-socket-proxy` (e.g., `tecnativa/docker-socket-proxy`).
+   - The proxy operates with a **default-deny** policy. Only specific endpoints are allowed:
+     - `CONTAINERS=1` (create, start, stop, exec, remove)
+     - `POST=1` (required for container creation)
+     - `EXEC=1`
+     - All other endpoints (`IMAGES`, `VOLUMES`, `NETWORKS`, `BUILD`, `SYSTEM`, `SWARM`, `AUTH`) are **denied** (`0`).
+
+2. **Network Boundary (Egress):**
+   - Sandbox containers are attached to a dedicated bridge network, not `none`.
+   - Containers are injected with `HTTP_PROXY` and `HTTPS_PROXY` environment variables pointing to an `egress-proxy` (Squid or Envoy).
+   - The egress proxy enforces an allowlist of destinations (e.g., `proxy.golang.org`, `registry.npmjs.org`, `pypi.org`, `github.com`).
+   - All requests through the egress proxy are logged for audit.
+   - *Note:* In `local-dev`, if the egress proxy is not deployed, `network_mode: none` is permitted for strict isolation, but this must be explicitly documented as a dev-only limitation.
+
+3. **Runtime Isolation:**
+   - In production (and CI), sandbox containers **MUST** use the `runsc` (gVisor) runtime to prevent kernel escapes.
+   - In `local-dev` (especially on Windows/macOS where `runsc` is unavailable), the system MAY fall back to `runc`, but **MUST** log a loud warning: `WARN: gVisor (runsc) not available. Falling back to runc. Do not use with untrusted code.`
+
+4. **Container Constraints:**
+   - Non-root user (`1000:1000`).
+   - `ReadonlyRootfs: true` (with tmpfs for `/tmp` and `/workspace`).
+   - Resource limits: CPU, Memory, Pids (to prevent fork bombs).
+   - No secrets inside the container; credential brokering is handled by Tool Gateway upstream.
+
+**Consequences.**
+- **Pros:** Defense in depth. A compromise of Sandbox Manager does not lead to host root access. Egress is auditable and restricted. gVisor provides a strong barrier against kernel exploits.
+- **Cons:** Additional infrastructure (`docker-socket-proxy`, `egress-proxy`). Slightly more complex `docker-compose.yml`. Local development on Windows/macOS runs with weaker isolation (`runc`).
+- **Rejected alternatives:**
+  - *Direct `/var/run/docker.sock` mount:* Too risky (root compromise).
+  - *`network_mode: none`:* Breaks package installation and git clone.
+  - *Podman rootless:* Incompatible with the existing `docker compose` stack.
+  - *Runner on host (systemd):* Over-engineering for v1; breaks Docker Compose portability.
+
+**References:** Issue #13, NFR-1, NFR-5, ADR-009 (Sandbox gVisor), ADR-010 (Plane isolation).
+
+---
+
 ## Document changes
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.7 | 27.10.2026 | Added ADR-023 (Sandbox isolation boundary) (#101) |
 | 1.6 | 22.10.2026 | Added ADR-022 (selection of `mark3labs/mcp-go` for Tool Gateway) (#83) |
 | 1.5 | 22.10.2026 | Added ADR-021 (LLM Gateway: routing, fallback, cost attribution) (#73) |
 | 1.4 | 19.10.2026 | Added ADR-020 (MinIO → Silo) |
