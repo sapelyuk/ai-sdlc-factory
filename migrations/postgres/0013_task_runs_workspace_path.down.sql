@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE task_runs DROP COLUMN IF EXISTS workspace_path;
+
+COMMIT;
