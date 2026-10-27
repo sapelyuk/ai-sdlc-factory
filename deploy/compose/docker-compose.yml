@@ -120,6 +120,27 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:master@sha256:e0afed6a302dafe6fc5ef2a93358660502795177136accfd42cfdab08e7ca6c0
+    container_name: ai-sdlc-factory-docker-socket-proxy
+    environment:
+      CONTAINERS: "1"
+      POST: "1"
+      EXEC: "1"
+      VERSION: "1"
+      IMAGES: "0"
+      VOLUMES: "0"
+      NETWORKS: "0"
+      BUILD: "0"
+      SYSTEM: "0"
+      AUTH: "0"
+      SWARM: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - sandbox-control
+    restart: unless-stopped
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.110.0
     container_name: ai-sdlc-factory-otel-collector
@@ -313,7 +334,8 @@ services:
       POLICY_DIR: /app/packages/policy
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: ${VAULT_TOKEN:-root}
-      # Optional tool=url routes to upstream MCP servers; empty uses the stub executor.
+      SANDBOX_MANAGER_URL: http://sandbox-manager:8060
+      # Optional tool=url routes to upstream MCP servers; sandbox.exec always uses Sandbox Manager.
       MCP_UPSTREAMS: ${MCP_UPSTREAMS:-}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8030/healthz"]
@@ -328,14 +350,68 @@ services:
         condition: service_healthy
       opa:
         condition: service_healthy
+      sandbox-manager:
+        condition: service_healthy
+
+  egress-proxy:
+    image: ubuntu/squid:7.2-26.04_edge@sha256:d11db6479501aa4618b3253f95a88b2547229e2d081726b6fb20dc75a98cc61b
+    container_name: ai-sdlc-factory-egress-proxy
+    expose:
+      - "3128"
+    volumes:
+      - ../sandboxes/squid.conf:/etc/squid/squid.conf:ro
+    networks:
+      - default
+      - sandbox-net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  sandbox-base-image:
+    image: ai-sdlc-factory/sandbox-go-node:latest
+    build:
+      context: ../..
+      dockerfile: deploy/sandboxes/Dockerfile
+    command: ["/bin/true"]
+    restart: "no"
 
   sandbox-manager:
     build:
       context: ../..
       dockerfile: apps/sandbox-manager/Dockerfile
     container_name: ai-sdlc-factory-sandbox-manager
+    environment:
+      PORT: "8060"
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+      RUNTIME: ${SANDBOX_RUNTIME:-runsc}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ai_sdlc_factory}:${POSTGRES_PASSWORD:-ai_sdlc_dev_password}@postgres:5432/${POSTGRES_DB:-ai_sdlc_factory}?sslmode=disable
+      SANDBOX_DISK_LIMIT_BYTES: ${SANDBOX_DISK_LIMIT_BYTES:-2147483648}
+      SANDBOX_NETWORK: sandbox-net
+      SANDBOX_IMAGE: ai-sdlc-factory/sandbox-go-node:latest
+    ports:
+      - "8060:8060"
+    volumes:
+      - "${SANDBOX_WORKSPACE_ROOT:-/tmp/ai-sdlc-factory-workspaces}:${SANDBOX_WORKSPACE_ROOT:-/tmp/ai-sdlc-factory-workspaces}"
+    networks:
+      - default
+      - sandbox-control
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8060/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
-      - api
+      docker-socket-proxy:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      sandbox-base-image:
+        condition: service_completed_successfully
+
 
   web:
     build:
@@ -360,3 +436,10 @@ volumes:
   minio-data:
   nats-data:
   vault-data:
+
+networks:
+  sandbox-control:
+    name: sandbox-control
+  sandbox-net:
+    name: sandbox-net
+    internal: true
