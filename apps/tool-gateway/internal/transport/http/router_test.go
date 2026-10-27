@@ -411,8 +411,50 @@ func (s *sequenceAuthorizer) Authorize(context.Context, policy.Request) (policy.
 	return d, nil
 }
 
+func TestVerifyAuditEndpoint(t *testing.T) {
+	t.Run("missing workspace_id", func(t *testing.T) {
+		router := newRouter(t, &fakeAuthorizer{}, &nextHandler{}, nil, fakePinger{})
+		req := httptest.NewRequest(http.MethodGet, "/admin/audit/verify", nil)
+		setIdentity(req, "admin", "R0", "")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", rec.Code)
+		}
+	})
+
+	t.Run("non-admin denied", func(t *testing.T) {
+		router := newRouter(t, &fakeAuthorizer{}, &nextHandler{}, nil, fakePinger{})
+		req := httptest.NewRequest(http.MethodGet, "/admin/audit/verify?workspace_id=11111111-1111-1111-1111-111111111111", nil)
+		setIdentity(req, "developer", "R0", "")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403", rec.Code)
+		}
+	})
+
+	t.Run("admin gets ok", func(t *testing.T) {
+		router := newRouter(t, &fakeAuthorizer{}, &nextHandler{}, nil, fakePinger{})
+		req := httptest.NewRequest(http.MethodGet, "/admin/audit/verify?workspace_id=11111111-1111-1111-1111-111111111111", nil)
+		setIdentity(req, "admin", "R0", "")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "ok") {
+			t.Fatalf("body = %s", rec.Body.String())
+		}
+	})
+}
+
 type failingStore struct{}
 
 func (failingStore) Append(context.Context, uuid.UUID, func(string) (audit.Record, error)) (audit.Record, error) {
 	return audit.Record{}, errors.New("store down")
+}
+
+func (failingStore) Query(context.Context, uuid.UUID) ([]audit.Record, error) {
+	return nil, errors.New("store down")
 }

@@ -78,6 +78,8 @@ func NewRouter(opts Options) *Router {
 	mux.Handle("GET /mcp", identityMiddleware(opts.MCP))
 	mux.Handle("DELETE /mcp", identityMiddleware(opts.MCP))
 
+	mux.HandleFunc("GET /admin/audit/verify", verifyAuditHandler(opts))
+
 	return &Router{handler: mux}
 }
 
@@ -269,4 +271,43 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// verifyAuditHandler verifies the hash chain for a given workspace.
+// Only accessible by admin role.
+func verifyAuditHandler(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		workspaceID := r.URL.Query().Get("workspace_id")
+		if workspaceID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "workspace_id is required"})
+			return
+		}
+
+		wsUUID, err := uuid.Parse(workspaceID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid workspace_id"})
+			return
+		}
+
+		// Check admin role from identity headers
+		id, err := identity.FromHeaders(r.Header)
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", `ToolGateway realm="tool-gateway"`)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			return
+		}
+		if id.Role != "admin" {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin role required"})
+			return
+		}
+
+		if err := opts.Auditor.Verify(r.Context(), wsUUID); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"status": "broken",
+				"error":  err.Error(),
+			})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
 }
