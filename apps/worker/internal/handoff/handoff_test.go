@@ -63,9 +63,9 @@ func TestValidator_Validate_Valid(t *testing.T) {
 	}
 
 	pkg := &HandoffPackage{
-		Goal:               "Build feature X",
-		ContextRefs:        []string{"https://example.com/sem/node/1"},
-		AcceptanceCriteria: []string{"Given X, when Y, then Z"},
+		Goal:                 "Build feature X",
+		ContextRefs:          []string{"https://example.com/sem/node/1"},
+		AcceptanceCriteria:   []string{"Given X, when Y, then Z"},
 		ExpectedOutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 
@@ -81,9 +81,9 @@ func TestValidator_Validate_MissingGoal(t *testing.T) {
 	}
 
 	pkg := &HandoffPackage{
-		Goal:               "",
-		ContextRefs:        []string{"https://example.com/sem/node/1"},
-		AcceptanceCriteria: []string{"criterion"},
+		Goal:                 "",
+		ContextRefs:          []string{"https://example.com/sem/node/1"},
+		AcceptanceCriteria:   []string{"criterion"},
 		ExpectedOutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 
@@ -100,9 +100,9 @@ func TestValidator_Validate_MissingContextRefs(t *testing.T) {
 	}
 
 	pkg := &HandoffPackage{
-		Goal:               "Goal",
-		ContextRefs:        []string{},
-		AcceptanceCriteria: []string{"criterion"},
+		Goal:                 "Goal",
+		ContextRefs:          []string{},
+		AcceptanceCriteria:   []string{"criterion"},
 		ExpectedOutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 

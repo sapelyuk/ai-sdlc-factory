@@ -59,7 +59,7 @@ func (c *KnowledgeClient) Search(ctx context.Context, query string, topK int) ([
 	if err != nil {
 		return nil, fmt.Errorf("call Knowledge Service: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
@@ -67,7 +67,7 @@ func (c *KnowledgeClient) Search(ctx context.Context, query string, topK int) ([
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Knowledge Service returned %d: %s", resp.StatusCode, string(data))
+		return nil, fmt.Errorf("knowledge service returned %d: %s", resp.StatusCode, string(data))
 	}
 
 	var fragments []KBFragment

@@ -9,13 +9,13 @@ import (
 // HandoffPackage is the structured package for agent-to-agent handoff.
 // Matches packages/contracts/schemas/handoff.schema.json.
 type HandoffPackage struct {
-	Goal                 string            `json:"goal"`
-	ContextRefs          []string          `json:"context_refs"`
-	AcceptanceCriteria   []string          `json:"acceptance_criteria"`
-	Constraints          []string          `json:"constraints,omitempty"`
-	DecisionsMade        []string          `json:"decisions_made,omitempty"`
-	OpenQuestions        []string          `json:"open_questions,omitempty"`
-	ExpectedOutputSchema json.RawMessage   `json:"expected_output_schema"`
+	Goal                 string          `json:"goal"`
+	ContextRefs          []string        `json:"context_refs"`
+	AcceptanceCriteria   []string        `json:"acceptance_criteria"`
+	Constraints          []string        `json:"constraints,omitempty"`
+	DecisionsMade        []string        `json:"decisions_made,omitempty"`
+	OpenQuestions        []string        `json:"open_questions,omitempty"`
+	ExpectedOutputSchema json.RawMessage `json:"expected_output_schema"`
 }
 
 // Builder creates handoff packages from the LLM final answer.

@@ -20,7 +20,7 @@ type BudgetGuard struct {
 	MaxCostUSD float64
 	MaxSteps   int
 
-	steps    int
+	steps     int
 	totalCost float64
 }
 
