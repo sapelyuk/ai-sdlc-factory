@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package ai_sdlc_factory.agent_stream.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Emitted by Agent Runtime for each ReAct step.
+message AgentStepEvent {
+  string run_id = 1;
+  string task_run_id = 2;
+  string agent_id = 3;
+  int32 step_index = 4;
+  EventType event_type = 5;
+  google.protobuf.Struct payload = 6;
+  google.protobuf.Timestamp timestamp = 7;
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_LLM_CALL = 1;
+  EVENT_TYPE_TOOL_CALL = 2;
+  EVENT_TYPE_OBSERVATION = 3;
+  EVENT_TYPE_HANDOFF = 4;
+  EVENT_TYPE_ERROR = 5;
+}

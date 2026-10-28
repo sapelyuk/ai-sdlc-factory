@@ -16,6 +16,7 @@ paths:
     post:
       operationId: login
       summary: Authenticate user and return JWT
+      description: Authenticates a user with email and password and returns a JWT and user identity.
       security: []
       requestBody:
         required: true
@@ -45,12 +46,26 @@ paths:
                 $ref: "#/components/schemas/Error"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
   # ── Health ────────────────────────────────────────────────────────
   /healthz:
     get:
+      servers:
+        - url: http://localhost:8000
+          description: Platform API
+        - url: http://localhost:8010
+          description: Semantic Service
+        - url: http://localhost:8030
+          description: Tool Gateway
+        - url: http://localhost:8040
+          description: LLM Gateway
+        - url: http://localhost:8060
+          description: Sandbox Manager
       operationId: healthz
       summary: Liveness probe
+      description: Reports whether the service process is alive.
       security: []
       responses:
         "200":
@@ -66,8 +81,20 @@ paths:
 
   /readyz:
     get:
+      servers:
+        - url: http://localhost:8000
+          description: Platform API
+        - url: http://localhost:8010
+          description: Semantic Service
+        - url: http://localhost:8030
+          description: Tool Gateway
+        - url: http://localhost:8040
+          description: LLM Gateway
+        - url: http://localhost:8060
+          description: Sandbox Manager
       operationId: readyz
       summary: Readiness probe
+      description: Reports whether the service can accept requests and reach its required dependencies.
       security: []
       responses:
         "200":
@@ -92,6 +119,7 @@ paths:
     get:
       operationId: metrics
       summary: Prometheus metrics endpoint
+      description: Exposes service metrics in Prometheus text format.
       security: []
       responses:
         "200":
@@ -105,7 +133,8 @@ paths:
   /api/v1/registry/roles:
     get:
       operationId: listRoles
-      summary: List roles (viewer+)
+      summary: List roles
+      description: Returns roles in the active workspace, optionally filtered by category and status. Requires viewer role or higher.
       parameters:
         - name: category
           in: query
@@ -126,9 +155,12 @@ paths:
                   $ref: "#/components/schemas/Role"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       operationId: createRole
       summary: Create a new role (admin+)
+      description: Creates a draft role in the active workspace.
       requestBody:
         required: true
         content:
@@ -152,13 +184,19 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/roles/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
       operationId: getRole
+      summary: Get a role by ID
+      description: Returns a role by its identifier in the active workspace.
       responses:
         "200":
           description: Role version.
@@ -166,13 +204,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     patch:
       operationId: updateRoleSpec
       summary: Update role spec (admin+)
+      description: Replaces the specification of a role in the active workspace.
       requestBody:
         required: true
         content:
@@ -186,16 +229,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/roles/{name}/{version}:
     parameters:
       - $ref: "#/components/parameters/Name"
       - $ref: "#/components/parameters/Version"
     get:
       operationId: getRoleByNameAndVersion
+      summary: Get a role by name and version
+      description: Returns a role by its name and semantic version in the active workspace.
       responses:
         "200":
           description: Role version.
@@ -207,12 +260,15 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/roles/{id}/status:
     parameters:
       - $ref: "#/components/parameters/ID"
     patch:
       operationId: updateRoleStatus
       summary: Update role status (admin+); approver from JWT sub
+      description: Changes a role status subject to the registry transition and approval rules.
       requestBody:
         required: true
         content:
@@ -226,6 +282,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -234,12 +292,17 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/roles/{id}/clone:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
       operationId: cloneRole
       summary: Clone role to next minor version (admin+)
+      description: Creates a draft role as the next minor version of the specified role.
       responses:
         "201":
           description: New draft role.
@@ -253,12 +316,17 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/roles/{id}/revert:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
       operationId: revertRole
       summary: Revert role to previous version (admin+)
+      description: Creates a draft role based on the previous version of the specified role.
       responses:
         "201":
           description: New draft role.
@@ -272,11 +340,17 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
   # ── Registry: Teams ───────────────────────────────────────────────
   /api/v1/registry/teams:
     get:
       operationId: listTeams
+      summary: List teams
+      description: Returns teams in the active workspace, optionally filtered by status.
       parameters:
         - name: status
           in: query
@@ -293,9 +367,12 @@ paths:
                   $ref: "#/components/schemas/Team"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       operationId: createTeam
       summary: Create a new team (admin+)
+      description: Creates a draft team in the active workspace.
       requestBody:
         required: true
         content:
@@ -315,13 +392,19 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/teams/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
       operationId: getTeam
+      summary: Get a team by ID
+      description: Returns a team by its identifier in the active workspace.
       responses:
         "200":
           description: Team version.
@@ -329,12 +412,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     patch:
       operationId: updateTeamSpec
+      summary: Update team specification
+      description: Replaces the specification of a team in the active workspace.
       requestBody:
         required: true
         content:
@@ -348,16 +437,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/teams/{name}/{version}:
     parameters:
       - $ref: "#/components/parameters/Name"
       - $ref: "#/components/parameters/Version"
     get:
       operationId: getTeamByNameAndVersion
+      summary: Get a team by name and version
+      description: Returns a team by its name and semantic version in the active workspace.
       responses:
         "200":
           description: Team version.
@@ -369,11 +468,15 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/teams/{id}/status:
     parameters:
       - $ref: "#/components/parameters/ID"
     patch:
       operationId: updateTeamStatus
+      summary: Update team status
+      description: Changes a team status subject to the registry transition and approval rules.
       requestBody:
         required: true
         content:
@@ -387,6 +490,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Team"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -395,11 +500,17 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/teams/{id}/clone:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
       operationId: cloneTeam
+      summary: Clone team
+      description: Creates a draft team as the next minor version of the specified team.
       responses:
         "201":
           description: New draft team.
@@ -413,11 +524,17 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/teams/{id}/revert:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
       operationId: revertTeam
+      summary: Revert team
+      description: Creates a draft team based on the previous version of the specified team.
       responses:
         "201":
           description: New draft team.
@@ -431,11 +548,17 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
   # ── Registry: Processes ───────────────────────────────────────────
   /api/v1/registry/processes:
     get:
       operationId: listProcesses
+      summary: List processes
+      description: Returns processes in the active workspace, optionally filtered by status.
       parameters:
         - name: status
           in: query
@@ -452,9 +575,12 @@ paths:
                   $ref: "#/components/schemas/Process"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       operationId: createProcess
       summary: Create a new process (admin+)
+      description: Creates a draft process in the active workspace.
       requestBody:
         required: true
         content:
@@ -474,13 +600,19 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/processes/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
     get:
       operationId: getProcess
+      summary: Get a process by ID
+      description: Returns a process by its identifier in the active workspace.
       responses:
         "200":
           description: Process version.
@@ -488,12 +620,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Process"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     patch:
       operationId: updateProcessSpec
+      summary: Update process specification
+      description: Replaces the specification of a process in the active workspace.
       requestBody:
         required: true
         content:
@@ -507,16 +645,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Process"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/processes/{name}/{version}:
     parameters:
       - $ref: "#/components/parameters/Name"
       - $ref: "#/components/parameters/Version"
     get:
       operationId: getProcessByNameAndVersion
+      summary: Get a process by name and version
+      description: Returns a process by its name and semantic version in the active workspace.
       responses:
         "200":
           description: Process version.
@@ -528,11 +676,15 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/processes/{id}/status:
     parameters:
       - $ref: "#/components/parameters/ID"
     patch:
       operationId: updateProcessStatus
+      summary: Update process status
+      description: Changes a process status subject to the registry transition and approval rules.
       requestBody:
         required: true
         content:
@@ -546,6 +698,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Process"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -554,11 +708,17 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/processes/{id}/clone:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
       operationId: cloneProcess
+      summary: Clone process
+      description: Creates a draft process as the next minor version of the specified process.
       responses:
         "201":
           description: New draft process.
@@ -572,11 +732,17 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/v1/registry/processes/{id}/revert:
     parameters:
       - $ref: "#/components/parameters/ID"
     post:
       operationId: revertProcess
+      summary: Revert process
+      description: Creates a draft process based on the previous version of the specified process.
       responses:
         "201":
           description: New draft process.
@@ -590,6 +756,410 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ── LLM Gateway ───────────────────────────────────────────────────
+  /v1/llm/chat:
+    post:
+      servers:
+        - url: http://localhost:8040
+          description: LLM Gateway
+      operationId: createChatCompletion
+      summary: Create a chat completion
+      description: Sends a chat request to the configured model profile and returns the selected provider response and usage.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AuthorHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LLMChatRequest"
+      responses:
+        "200":
+          description: Chat completion and token and cost usage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMChatResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "502":
+          description: All provider attempts failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMChatResponse"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  # ── Tool Gateway (MCP) ────────────────────────────────────────────
+  /mcp:
+    post:
+      servers:
+        - url: http://localhost:8030
+          description: Tool Gateway
+      operationId: handleMCPRequest
+      summary: Handle an MCP JSON-RPC request
+      description: Handles an MCP request, applying policy authorization to tool calls.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AgentHeader"
+        - $ref: "#/components/parameters/AgentRoleHeader"
+        - $ref: "#/components/parameters/AuthorHeaderOptional"
+        - $ref: "#/components/parameters/ApproverHeader"
+        - $ref: "#/components/parameters/AutonomyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MCPRequest"
+      responses:
+        "200":
+          description: MCP JSON-RPC response or event stream.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MCPResponse"
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: Request body exceeds the accepted size limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    get:
+      servers:
+        - url: http://localhost:8030
+          description: Tool Gateway
+      operationId: openMCPEventStream
+      summary: Open an MCP event stream
+      description: Opens the MCP server-to-client event stream for the caller.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AgentHeader"
+        - $ref: "#/components/parameters/AgentRoleHeader"
+        - $ref: "#/components/parameters/AuthorHeaderOptional"
+        - $ref: "#/components/parameters/ApproverHeader"
+        - $ref: "#/components/parameters/AutonomyHeader"
+      responses:
+        "200":
+          description: MCP server-to-client event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      servers:
+        - url: http://localhost:8030
+          description: Tool Gateway
+      operationId: closeMCPSession
+      summary: Close an MCP session
+      description: Closes the caller's MCP transport session.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AgentHeader"
+        - $ref: "#/components/parameters/AgentRoleHeader"
+        - $ref: "#/components/parameters/AuthorHeaderOptional"
+        - $ref: "#/components/parameters/ApproverHeader"
+        - $ref: "#/components/parameters/AutonomyHeader"
+      responses:
+        "200":
+          description: MCP session closed.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /admin/audit/verify:
+    get:
+      servers:
+        - url: http://localhost:8030
+          description: Tool Gateway
+      operationId: verifyAuditChain
+      summary: Verify the audit chain
+      description: Verifies the hash chain for the specified workspace; requires an admin caller identity.
+      security: []
+      parameters:
+        - name: workspace_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AgentHeader"
+        - $ref: "#/components/parameters/AgentRoleHeader"
+        - $ref: "#/components/parameters/AuthorHeaderOptional"
+        - $ref: "#/components/parameters/ApproverHeader"
+        - $ref: "#/components/parameters/AutonomyHeader"
+      responses:
+        "200":
+          description: Audit chain verification result; a broken chain is reported in the response body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditVerification"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ── Sandbox Manager ───────────────────────────────────────────────
+  /v1/sandboxes/exec:
+    post:
+      servers:
+        - url: http://localhost:8060
+          description: Sandbox Manager
+      operationId: executeSandboxCommand
+      summary: Execute a command in a sandbox
+      description: Creates an isolated sandbox for a task run, executes the command, and destroys the sandbox.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AuthorHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxExecutionRequest"
+      responses:
+        "200":
+          description: Command execution result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxExecutionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "504":
+          description: Sandbox command timed out.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Semantic Service ──────────────────────────────────────────────
+  /v1/nodes:
+    post:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
+      operationId: createSemanticNode
+      summary: Create a semantic node
+      description: Creates a semantic graph node in the caller's workspace.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AuthorHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSemanticNodeRequest"
+      responses:
+        "201":
+          description: Created semantic node.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticNode"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    get:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
+      operationId: listSemanticNodes
+      summary: List semantic nodes
+      description: Lists semantic nodes, optionally filtering by layer or traversing a subgraph from a root node.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AuthorHeader"
+        - name: layer
+          in: query
+          schema:
+            type: string
+            enum: [SLP, SLPr, AM]
+        - name: root
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: depth
+          in: query
+          description: Non-negative traversal depth used when root is supplied.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Semantic nodes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SemanticNode"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/nodes/{id}:
+    patch:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
+      operationId: updateSemanticNode
+      summary: Update a semantic node
+      description: Updates the mutable fields of a semantic node by identifier.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AuthorHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSemanticNodeRequest"
+      responses:
+        "200":
+          description: Updated semantic node.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticNode"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/edges:
+    post:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
+      operationId: createSemanticEdge
+      summary: Create a semantic edge
+      description: Creates an edge between semantic graph nodes in the caller's workspace.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AuthorHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSemanticEdgeRequest"
+      responses:
+        "201":
+          description: Semantic edge created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/edges/{id}:
+    delete:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
+      operationId: deleteSemanticEdge
+      summary: Delete a semantic edge
+      description: Deletes a semantic graph edge by identifier.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ID"
+        - $ref: "#/components/parameters/WorkspaceHeader"
+        - $ref: "#/components/parameters/AuthorHeader"
+      responses:
+        "200":
+          description: Semantic edge deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
 components:
   securitySchemes:
@@ -618,6 +1188,56 @@ components:
       schema:
         type: string
         pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    WorkspaceHeader:
+      name: X-Workspace-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AuthorHeader:
+      name: X-Author-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AuthorHeaderOptional:
+      name: X-Author-ID
+      in: header
+      required: false
+      description: Defaults to the caller's agent ID when omitted.
+      schema:
+        type: string
+        format: uuid
+    AgentHeader:
+      name: X-Agent-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AgentRoleHeader:
+      name: X-Agent-Role
+      in: header
+      required: true
+      schema:
+        type: string
+    ApproverHeader:
+      name: X-Approver-ID
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+    AutonomyHeader:
+      name: X-Autonomy-Level
+      in: header
+      required: false
+      description: Defaults to R0 when omitted.
+      schema:
+        type: string
+        enum: [R0, R1, R2, R3]
   responses:
     BadRequest:
       description: Invalid request body or parameters.
@@ -626,7 +1246,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     Unauthorized:
-      description: Missing or invalid JWT token.
+      description: Missing or invalid authentication token or caller identity.
       content:
         application/json:
           schema:
@@ -655,6 +1275,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ValidationError"
+    InternalServerError:
+      description: An unexpected server error occurred.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: A required dependency is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     Status:
       type: string
@@ -904,3 +1536,271 @@ components:
         updated_at:
           type: string
           format: date-time
+    LLMChatRequest:
+      type: object
+      required: [profile, messages]
+      properties:
+        profile:
+          type: string
+          minLength: 1
+        messages:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/LLMToolDefinition"
+        run_id:
+          type: [string, "null"]
+          format: uuid
+        task_id:
+          type: [string, "null"]
+          format: uuid
+        agent_id:
+          type: [string, "null"]
+          format: uuid
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+        content:
+          type: string
+    LLMToolDefinition:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+          additionalProperties: true
+    LLMChatResponse:
+      type: object
+      required: [logical_call_id, status, model_used, provider_used, content, usage]
+      properties:
+        logical_call_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [succeeded, failed, partial]
+        model_used:
+          type: string
+        provider_used:
+          type: string
+        content:
+          type: string
+        usage:
+          $ref: "#/components/schemas/LLMUsage"
+    LLMUsage:
+      type: object
+      required: [tokens_in, tokens_out, cost_usd, total_tokens_in, total_tokens_out, total_cost_usd]
+      properties:
+        tokens_in:
+          type: integer
+        tokens_out:
+          type: integer
+        cost_usd:
+          type: number
+        total_tokens_in:
+          type: integer
+        total_tokens_out:
+          type: integer
+        total_cost_usd:
+          type: number
+    MCPRequest:
+      description: A JSON-RPC 2.0 request or a batch of requests handled by the MCP transport.
+      oneOf:
+        - $ref: "#/components/schemas/JSONRPCRequest"
+        - type: array
+          items:
+            $ref: "#/components/schemas/JSONRPCRequest"
+    JSONRPCRequest:
+      type: object
+      required: [jsonrpc, method]
+      properties:
+        jsonrpc:
+          type: string
+          const: "2.0"
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+        method:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+    MCPResponse:
+      description: A JSON-RPC 2.0 response, batch, or notification acknowledgement.
+      oneOf:
+        - $ref: "#/components/schemas/JSONRPCResponse"
+        - type: array
+          items:
+            $ref: "#/components/schemas/JSONRPCResponse"
+    JSONRPCResponse:
+      type: object
+      required: [jsonrpc, id]
+      properties:
+        jsonrpc:
+          type: string
+          const: "2.0"
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+            - type: "null"
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+            data:
+              type: object
+              additionalProperties: true
+      additionalProperties: true
+    AuditVerification:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, broken]
+        error:
+          type: string
+    SandboxExecutionRequest:
+      type: object
+      required: [task_run_id, command]
+      properties:
+        task_run_id:
+          type: string
+          format: uuid
+        command:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 3600
+          default: 300
+        stdout_limit_bytes:
+          type: integer
+          minimum: 1
+          maximum: 16777216
+          default: 1048576
+    SandboxExecutionResponse:
+      type: object
+      required: [status, stdout, stderr, exit_code, stdout_truncated, stderr_truncated]
+      properties:
+        status:
+          type: string
+          enum: [success, error]
+        stdout:
+          type: string
+        stderr:
+          type: string
+        exit_code:
+          type: integer
+        stdout_truncated:
+          type: boolean
+        stderr_truncated:
+          type: boolean
+    CreateSemanticNodeRequest:
+      type: object
+      required: [layer, kind, label]
+      properties:
+        layer:
+          type: string
+          enum: [SLP, SLPr, AM]
+        kind:
+          type: string
+          minLength: 1
+        label:
+          type: string
+          minLength: 1
+        props:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [draft, active, deprecated, deleted]
+    UpdateSemanticNodeRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          maxLength: 128
+        label:
+          type: string
+          maxLength: 512
+        props:
+          type: object
+          additionalProperties: true
+    SemanticNode:
+      type: object
+      required: [id, workspace_id, layer, kind, label, props, version, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        layer:
+          type: string
+          enum: [SLP, SLPr, AM]
+        kind:
+          type: string
+        label:
+          type: string
+        props:
+          type: object
+          additionalProperties: true
+        version:
+          type: integer
+        status:
+          type: string
+          enum: [draft, active, deprecated, deleted]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateSemanticEdgeRequest:
+      type: object
+      required: [src_id, dst_id, kind]
+      properties:
+        src_id:
+          type: string
+          format: uuid
+        dst_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        props:
+          type: object
+          additionalProperties: true
+    SemanticMutationResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [created, deleted]

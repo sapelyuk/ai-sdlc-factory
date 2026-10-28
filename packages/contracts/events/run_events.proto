@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package ai_sdlc_factory.run_events.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+message RunEvent {
+  string run_id = 1;
+  RunEventType event_type = 2;
+  google.protobuf.Struct payload = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+enum RunEventType {
+  RUN_EVENT_TYPE_UNSPECIFIED = 0;
+  RUN_EVENT_TYPE_RUN_STARTED = 1;
+  RUN_EVENT_TYPE_RUN_COMPLETED = 2;
+  RUN_EVENT_TYPE_RUN_FAILED = 3;
+  RUN_EVENT_TYPE_STAGE_TRANSITION = 4; // Reserved for #40.
+}
