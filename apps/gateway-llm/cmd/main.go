@@ -23,6 +23,7 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/repository"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/routing"
 	httptransport "github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/transport/http"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 func main() {
@@ -60,9 +61,12 @@ func main() {
 	}
 	log.Printf("providers registered: %v", listKeys(prov))
 
-	// Wire routing and HTTP.
+	// Wire routing, audit and HTTP.
 	repo := repository.New(pool)
 	rtr := routing.New(cat, repo, prov)
+	// Every finished logical call is appended to the global tamper-evident
+	// audit log (issue #14).
+	rtr.WithAuditor(sdkaudit.NewLogger(pool))
 	httpRouter := httptransport.NewRouter(rtr, pool)
 
 	// Start server.
