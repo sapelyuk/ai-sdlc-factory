@@ -1,34 +1,88 @@
-// Command worker is a build stub for the ai-sdlc-factory worker service.
+// Command worker starts the ai-sdlc-factory Temporal worker.
 //
-// It serves only GET /healthz so that the Docker Compose stack can build and
-// start. The real implementation lands in M1 (see issue #96).
+// It registers TaskRunWorkflow, SDLCWorkflow, and AgentStepActivity on the
+// ai-sdlc-factory task queue. See issue #104.
 package main
 
 import (
 	"log"
 	"net/http"
-	"os"
+
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/activity"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/agent"
+	httpproto "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/config"
+	agentctx "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/context"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/handoff"
+	wf "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/workflow"
 )
 
 func main() {
-	addr := ":" + getenv("PORT", "8000")
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config: %v", err)
+	}
 
+	// Connect to Temporal server.
+	tClient, err := client.Dial(client.Options{
+		HostPort: cfg.TemporalHost,
+	})
+	if err != nil {
+		log.Fatalf("temporal client: %v", err)
+	}
+	defer tClient.Close()
+
+	// Build HTTP clients.
+	llmClient := httpproto.NewLLMClient(cfg.LLMGatewayURL)
+	toolClient := httpproto.NewToolClient(cfg.ToolGatewayURL)
+	semClient := httpproto.NewSemanticClient(cfg.SemanticURL)
+	kbClient := httpproto.NewKnowledgeClient(cfg.KnowledgeURL)
+
+	// Build context builder and handoff components.
+	ctxBuilder := agentctx.NewBuilder(semClient, kbClient)
+	hb := handoff.NewBuilder()
+	hv, err := handoff.NewValidator()
+	if err != nil {
+		log.Fatalf("handoff validator: %v", err)
+	}
+
+	// Build agent executor.
+	executor := agent.NewExecutor(llmClient, toolClient, ctxBuilder, hb, hv)
+
+	// Create Temporal worker.
+	w := worker.New(tClient, cfg.TaskQueue, worker.Options{})
+
+	// Register workflows.
+	w.RegisterWorkflow(wf.TaskRunWorkflow)
+	w.RegisterWorkflow(wf.SDLCWorkflow)
+
+	// Register activities.
+	stepActivity := activity.NewAgentStepActivity(executor)
+	w.RegisterActivity(stepActivity.Execute)
+
+	// Start health-check server in background.
+	go startHealthz()
+
+	log.Printf("ai-sdlc-factory-worker starting on task queue %q", cfg.TaskQueue)
+	if err := w.Start(); err != nil {
+		log.Fatalf("worker start: %v", err)
+	}
+
+	// Block forever.
+	select {}
+}
+
+// startHealthz serves GET /healthz for Docker Compose health checks.
+func startHealthz() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-
-	log.Printf("ai-sdlc-factory-worker stub listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatal(err)
+	if err := http.ListenAndServe(":8000", mux); err != nil {
+		log.Printf("healthz server: %v", err)
 	}
-}
-
-// getenv returns the value of key, or fallback when it is empty.
-func getenv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

@@ -71,18 +71,57 @@ func (r *NodeRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Sem
 }
 
 // List returns nodes, optionally filtered by layer.
-func (r *NodeRepository) List(ctx context.Context, layer string) ([]*domain.SemNode, error) {
+//
+// When root is empty it lists all nodes in the tenant. Otherwise it returns the
+// subgraph reachable from root within depth hops, traversing edges in both
+// directions and skipping expired edges (valid_to IS NOT NULL).
+func (r *NodeRepository) List(ctx context.Context, layer, root string, depth int) ([]*domain.SemNode, error) {
 	var nodes []*domain.SemNode
 	err := inTenantTx(ctx, r.pool, func(tx pgx.Tx, workspaceID uuid.UUID) error {
-		query := `SELECT id, workspace_id, layer, kind, label, props, version, status, created_at, updated_at
-			FROM sem_nodes WHERE workspace_id = $1`
-		args := []any{workspaceID}
-		argIdx := 2
-		if layer != "" {
-			query += fmt.Sprintf(" AND layer = $%d", argIdx)
-			args = append(args, layer)
+		var (
+			query string
+			args  []any
+		)
+		if root == "" {
+			query = `SELECT id, workspace_id, layer, kind, label, props, version, status, created_at, updated_at
+				FROM sem_nodes WHERE workspace_id = $1`
+			args = []any{workspaceID}
+			argIdx := 2
+			if layer != "" {
+				query += fmt.Sprintf(" AND layer = $%d", argIdx)
+				args = append(args, layer)
+			}
+			query += ` ORDER BY kind`
+		} else {
+			rootID, err := uuid.Parse(root)
+			if err != nil {
+				return fmt.Errorf("%w: root must be a valid UUID", domain.ErrInvalidInput)
+			}
+			query = `
+				WITH RECURSIVE subgraph(id, depth) AS (
+					SELECT $2::uuid, 0
+					UNION
+					SELECT CASE WHEN e.src_id = sg.id THEN e.dst_id ELSE e.src_id END,
+					       sg.depth + 1
+					FROM sem_edges e
+					JOIN subgraph sg ON e.src_id = sg.id OR e.dst_id = sg.id
+					WHERE sg.depth < $3
+					  AND e.workspace_id = $1
+					  AND e.valid_to IS NULL
+				)
+				SELECT n.id, n.workspace_id, n.layer, n.kind, n.label, n.props,
+				       n.version, n.status, n.created_at, n.updated_at
+				FROM sem_nodes n
+				JOIN (SELECT id, MIN(depth) AS depth FROM subgraph GROUP BY id) sg ON sg.id = n.id
+				WHERE n.workspace_id = $1`
+			args = []any{workspaceID, rootID, depth}
+			if layer != "" {
+				query += ` AND n.layer = $4`
+				args = append(args, layer)
+			}
+			query += ` ORDER BY sg.depth, n.kind`
 		}
-		query += ` ORDER BY kind`
+
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("list nodes: %w", err)

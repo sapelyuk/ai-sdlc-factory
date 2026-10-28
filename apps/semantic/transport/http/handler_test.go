@@ -39,6 +39,10 @@ type mockNodeRepo struct {
 	listErr   error
 	updateErr error
 	getErr    error
+
+	lastLayer string
+	lastRoot  string
+	lastDepth int
 }
 
 func newMockNodeRepo() *mockNodeRepo {
@@ -71,7 +75,8 @@ func (m *mockNodeRepo) Create(ctx context.Context, node *domain.SemNode) error {
 	return nil
 }
 
-func (m *mockNodeRepo) List(ctx context.Context, layer string) ([]*domain.SemNode, error) {
+func (m *mockNodeRepo) List(ctx context.Context, layer, root string, depth int) ([]*domain.SemNode, error) {
+	m.lastLayer, m.lastRoot, m.lastDepth = layer, root, depth
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -453,6 +458,55 @@ func TestListNodesHandler_RepositoryFailure_Returns500(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	errResp := decodeJSON[map[string]string](t, rec)
 	assert.Equal(t, "internal error", errResp["error"])
+}
+
+func TestListNodesHandler_SubgraphParamsForwarded(t *testing.T) {
+	svc, repo := newTestNodeService()
+	workspaceID := uuid.New()
+	root := uuid.New()
+	seedNode(repo, workspaceID, "SLP", "Role", "active")
+
+	router := newTestRouter(svc, nil, nil)
+	target := "/v1/nodes?root=" + root.String() + "&depth=2&layer=SLP"
+	rec := serve(router, newTenantRequest(http.MethodGet, target, "", workspaceID))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, root.String(), repo.lastRoot, "root must be forwarded to the repository")
+	assert.Equal(t, 2, repo.lastDepth, "depth must be forwarded to the repository")
+	assert.Equal(t, "SLP", repo.lastLayer)
+}
+
+func TestListNodesHandler_SubgraphDefaultsDepthToOne(t *testing.T) {
+	svc, repo := newTestNodeService()
+	root := uuid.New()
+
+	router := newTestRouter(svc, nil, nil)
+	rec := serve(router, newTenantRequest(http.MethodGet, "/v1/nodes?root="+root.String(), "", uuid.New()))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, 1, repo.lastDepth, "depth must default to direct neighbours")
+}
+
+func TestListNodesHandler_InvalidRoot_Returns422(t *testing.T) {
+	svc, _ := newTestNodeService()
+	router := newTestRouter(svc, nil, nil)
+
+	rec := serve(router, newTenantRequest(http.MethodGet, "/v1/nodes?root=not-a-uuid", "", uuid.New()))
+
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	errResp := decodeJSON[map[string]string](t, rec)
+	assert.Contains(t, errResp["error"], "root must be a valid UUID")
+}
+
+func TestListNodesHandler_InvalidDepth_Returns422(t *testing.T) {
+	svc, _ := newTestNodeService()
+	router := newTestRouter(svc, nil, nil)
+
+	rec := serve(router, newTenantRequest(http.MethodGet, "/v1/nodes?root="+uuid.New().String()+"&depth=abc", "", uuid.New()))
+
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	errResp := decodeJSON[map[string]string](t, rec)
+	assert.Contains(t, errResp["error"], "depth must be a non-negative integer")
 }
 
 // ── PATCH /v1/nodes/{id} ──────────────────────────────────────

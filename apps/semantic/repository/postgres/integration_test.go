@@ -117,7 +117,7 @@ func TestNodeRepository_CRUDAndRLS(t *testing.T) {
 	}
 
 	// ── List ────────────────────────────────────────────────────
-	allNodes, err := repo.List(tenantCtx, "")
+	allNodes, err := repo.List(tenantCtx, "", "", 0)
 	if err != nil {
 		t.Fatalf("list nodes: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestNodeRepository_CRUDAndRLS(t *testing.T) {
 		t.Fatalf("list returned %d nodes, want 1", len(allNodes))
 	}
 
-	slpNodes, err := repo.List(tenantCtx, "SLP")
+	slpNodes, err := repo.List(tenantCtx, "SLP", "", 0)
 	if err != nil {
 		t.Fatalf("list SLP nodes: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestNodeRepository_CRUDAndRLS(t *testing.T) {
 		t.Errorf("cross-workspace lookup: expected ErrNotFound, got %v", err)
 	}
 
-	listOther, err := repo.List(otherCtx, "")
+	listOther, err := repo.List(otherCtx, "", "", 0)
 	if err != nil {
 		t.Fatalf("list other workspace: %v", err)
 	}
@@ -224,6 +224,18 @@ func TestNodeRepository_CRUDAndRLS(t *testing.T) {
 	}
 	if err := edgeRepo.Create(tenantCtx, edgeInput); err != nil {
 		t.Fatalf("create edge: %v", err)
+	}
+
+	// ── Subgraph traversal (root + depth) ──────────────────────
+	subgraph, err := repo.List(tenantCtx, "", srcNode.ID.String(), 1)
+	if err != nil {
+		t.Fatalf("list subgraph: %v", err)
+	}
+	if len(subgraph) != 2 {
+		t.Fatalf("subgraph returned %d nodes, want 2 (src + dst)", len(subgraph))
+	}
+	if subgraph[0].ID != srcNode.ID {
+		t.Errorf("subgraph root = %s, want %s", subgraph[0].ID, srcNode.ID)
 	}
 
 	// Delete the edge.

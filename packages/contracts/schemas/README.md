@@ -9,6 +9,7 @@ This directory contains JSON-Schema files (Draft 2020-12) for validating Registr
 | `role.schema.json` | Role specification (agent template) |
 | `team.schema.json` | Team specification (agent collection) |
 | `process.schema.json` | Process specification (SDLC workflow) |
+| `handoff.schema.json` | Handoff package between agents (Issue #104, SYSTEM_DESIGN.md §8.4) |
 
 ## Validation
 

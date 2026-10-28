@@ -26,7 +26,7 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-EXPOSE 8000
+# Worker does not expose HTTP ports — healthz is internal only.
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8000/healthz || exit 1
