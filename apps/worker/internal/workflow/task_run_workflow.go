@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/google/uuid"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/agent"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/handoff"
@@ -17,6 +18,12 @@ import (
 type TaskRunInput struct {
 	// TaskRunID uniquely identifies this task run instance.
 	TaskRunID string `json:"task_run_id"`
+	// RunID is the SDLC run that owns this task run (LLM attribution).
+	RunID string `json:"run_id,omitempty"`
+	// TaskID is the task being executed (LLM attribution).
+	TaskID string `json:"task_id,omitempty"`
+	// AgentID is the agent executing the task (LLM attribution).
+	AgentID string `json:"agent_id,omitempty"`
 	// Profile is the LLM capability profile to use.
 	Profile string `json:"profile"`
 	// ProjectID is the semantic-layer project scope (optional).
@@ -60,23 +67,28 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 		maxSteps = input.MaxSteps
 	}
 
-	// Generate a stable idempotency key once via SideEffect.
-	// On activity retries, Temporal reuses the same activity input.
-	idempotencyKey := ""
-	err := workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-		return fmt.Sprintf("%s-agent-step", input.TaskRunID)
-	}).Get(&idempotencyKey)
-	if err != nil {
-		return nil, fmt.Errorf("workflow: side effect: %w", err)
-	}
-
+	// Idempotency keys are generated per step via SideEffect. Temporal records
+	// the result in the workflow history, so an activity retry reuses the same
+	// key while every step gets a distinct one.
 	var messages []client.ChatMessage
+	var recentCalls agent.RecentCallHashes
 	budgetSnap := agent.BudgetSnapshot{}
 
 	for stepIndex := 0; stepIndex < maxSteps; stepIndex++ {
+		var idempotencyKey string
+		if err := workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			return uuid.NewString()
+		}).Get(&idempotencyKey); err != nil {
+			return nil, fmt.Errorf("workflow: side effect: %w", err)
+		}
+
 		activityInput := agent.StepInput{
 			TaskRunID:      input.TaskRunID,
+			RunID:          input.RunID,
+			TaskID:         input.TaskID,
+			AgentID:        input.AgentID,
 			StepIndex:      stepIndex,
+			IdempotencyKey: idempotencyKey,
 			Messages:       messages,
 			Profile:        input.Profile,
 			ProjectID:      input.ProjectID,
@@ -85,6 +97,7 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 			BudgetSnapshot: budgetSnap,
 			MaxCostUSD:     maxCost,
 			MaxSteps:       maxSteps,
+			RecentCalls:    recentCalls,
 		}
 
 		var result agent.StepResult
@@ -93,6 +106,7 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 		}
 
 		messages = result.Messages
+		recentCalls = result.RecentCalls
 		budgetSnap.Steps++
 		budgetSnap.TotalCost += result.Usage.TotalCostUSD
 

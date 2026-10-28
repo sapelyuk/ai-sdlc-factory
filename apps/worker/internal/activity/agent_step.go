@@ -3,6 +3,9 @@ package activity
 
 import (
 	"context"
+	"errors"
+
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/agent"
 )
@@ -20,6 +23,14 @@ func NewAgentStepActivity(executor *agent.Executor) *AgentStepActivity {
 }
 
 // Execute runs one agent step.
+//
+// A detected tool-call loop is not retryable: repeating the same call cannot
+// produce a different result, so the activity fails immediately instead of
+// consuming the retry budget.
 func (a *AgentStepActivity) Execute(ctx context.Context, input agent.StepInput) (*agent.StepResult, error) {
-	return a.executor.ExecuteStep(ctx, input)
+	result, err := a.executor.ExecuteStep(ctx, input)
+	if err != nil && errors.Is(err, agent.ErrToolLoopDetected) {
+		return nil, temporal.NewNonRetryableApplicationError(err.Error(), "ToolLoopDetected", err)
+	}
+	return result, err
 }
