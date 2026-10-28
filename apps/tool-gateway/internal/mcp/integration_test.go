@@ -31,10 +31,11 @@ import (
 )
 
 const (
-	schemasDir              = "../../../../packages/contracts/mcp-schemas"
-	policyDir               = "../../../../packages/policy"
-	migrationPath           = "../../../../migrations/postgres/0011_tool_gateway_audit.up.sql"
-	stubResultMigrationPath = "../../../../migrations/postgres/0012_audit_stub_result.up.sql"
+	schemasDir = "../../../../packages/contracts/mcp-schemas"
+	policyDir  = "../../../../packages/policy"
+	// migrations build the global audit_log table of issue #14:
+	// workspaces, task_runs, the generic audit_log and its hash chain.
+	auditMigrations = "0001_init_squads_and_agents.up.sql,0002_init_tasks_and_sdlc.up.sql,0007_init_audit_and_cost.up.sql,0014_global_audit_log.up.sql"
 )
 
 var (
@@ -95,34 +96,17 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	t.Cleanup(pool.Close)
 
-	migration, err := os.ReadFile(filepath.Clean(migrationPath))
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
+	// Apply the four global audit log migrations (issue #14).
+	migrationsDir := "../../../../migrations/postgres"
+	for _, name := range strings.Split(auditMigrations, ",") {
+		migration, err := os.ReadFile(filepath.Join(migrationsDir, strings.TrimSpace(name)))
+		if err != nil {
+			t.Fatalf("read migration %s: %v", strings.TrimSpace(name), err)
+		}
+		if _, err := pool.Exec(ctx, string(migration)); err != nil {
+			t.Fatalf("apply migration %s: %v", strings.TrimSpace(name), err)
+		}
 	}
-	conn, err := pool.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.Conn().PgConn().Exec(ctx, string(migration)).ReadAll(); err != nil {
-		conn.Release()
-		t.Fatalf("apply migration: %v", err)
-	}
-	conn.Release()
-
-	// Apply migration 0012 for 'stub' result support.
-	stubMigration, err := os.ReadFile(filepath.Clean(stubResultMigrationPath))
-	if err != nil {
-		t.Fatalf("read stub migration: %v", err)
-	}
-	conn, err = pool.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.Conn().PgConn().Exec(ctx, string(stubMigration)).ReadAll(); err != nil {
-		conn.Release()
-		t.Fatalf("apply stub migration: %v", err)
-	}
-	conn.Release()
 
 	// The container owner bypasses RLS. The gateway connects through a
 	// dedicated NOBYPASSRLS role, so the workspace policy is exercised.
@@ -130,7 +114,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	if _, err := pool.Exec(ctx, "CREATE ROLE "+appRole+" NOLOGIN NOBYPASSRLS"); err != nil {
 		t.Fatalf("create app role: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "GRANT SELECT, INSERT ON tool_call_audit_log TO "+appRole); err != nil {
+	// UPDATE is required for the `SELECT ... FOR UPDATE` chain-head lock, not
+	// for editing rows: any real UPDATE would break the hash chain, which the
+	// test verifies below.
+	if _, err := pool.Exec(ctx, "GRANT SELECT, INSERT, UPDATE ON audit_log TO "+appRole); err != nil {
 		t.Fatalf("grant app role: %v", err)
 	}
 
@@ -338,29 +325,13 @@ func rawToolCall(t *testing.T, baseURL, role, autonomy, tool string) int {
 	return resp.StatusCode
 }
 
+// readAudit reads the workspace chain through the production store, so the test
+// exercises the same tool_call -> global event mapping that the gateway uses.
 func readAudit(t *testing.T, pool *pgxpool.Pool, ctx context.Context) []audit.Record {
 	t.Helper()
-	rows, err := pool.Query(ctx, `
-		SELECT id, workspace_id, agent_id, tool_name, risk_level, result,
-		       COALESCE(error_message, ''), hash_chain, created_at
-		FROM tool_call_audit_log
-		ORDER BY created_at, id`)
+	records, err := audit.NewPostgresStore(pool).Query(ctx, workspaceID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
-
-	var out []audit.Record
-	for rows.Next() {
-		var rec audit.Record
-		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.AgentID, &rec.ToolName,
-			&rec.RiskLevel, &rec.Result, &rec.ErrorMessage, &rec.HashChain, &rec.CreatedAt); err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, rec)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	return out
+	return records
 }
