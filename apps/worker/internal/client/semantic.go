@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -25,25 +27,27 @@ func NewSemanticClient(baseURL string) *SemanticClient {
 
 // SemNode represents a semantic layer node.
 type SemNode struct {
-	ID       string          `json:"id"`
-	Kind     string          `json:"kind"`
-	Name     string          `json:"name"`
-	Props    json.RawMessage `json:"props,omitempty"`
-	Layer    string          `json:"layer,omitempty"`
+	ID    string          `json:"id"`
+	Kind  string          `json:"kind"`
+	Name  string          `json:"name,omitempty"`
+	Label string          `json:"label,omitempty"`
+	Props json.RawMessage `json:"props,omitempty"`
+	Layer string          `json:"layer,omitempty"`
 }
 
-// GetSubgraph retrieves nodes from the semantic layer using list endpoint.
-// The Semantic Service currently supports GET /v1/nodes with query params.
+// GetSubgraph retrieves the semantic subgraph around rootID.
+// The Semantic Service exposes GET /v1/nodes?root=<uuid>&depth=<n>, which
+// returns the root node and all nodes reachable within depth hops.
 func (c *SemanticClient) GetSubgraph(ctx context.Context, rootID string, depth int) ([]SemNode, error) {
-	// The semantic service does not yet support root/depth traversal;
-	// fall back to listing all nodes filtered by kind.
-	// This is a minimal implementation; full traversal is tracked under #40.
-	url := fmt.Sprintf("%s/v1/nodes", c.baseURL)
+	u := c.baseURL + "/v1/nodes"
 	if rootID != "" {
-		url = fmt.Sprintf("%s/v1/nodes?root=%s&depth=%d", c.baseURL, rootID, depth)
+		query := url.Values{}
+		query.Set("root", rootID)
+		query.Set("depth", strconv.Itoa(depth))
+		u += "?" + query.Encode()
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create semantic request: %w", err)
 	}
@@ -52,7 +56,7 @@ func (c *SemanticClient) GetSubgraph(ctx context.Context, rootID string, depth i
 	if err != nil {
 		return nil, fmt.Errorf("call Semantic Service: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
@@ -60,7 +64,7 @@ func (c *SemanticClient) GetSubgraph(ctx context.Context, rootID string, depth i
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Semantic Service returned %d: %s", resp.StatusCode, string(data))
+		return nil, fmt.Errorf("semantic service returned %d: %s", resp.StatusCode, string(data))
 	}
 
 	var nodes []SemNode

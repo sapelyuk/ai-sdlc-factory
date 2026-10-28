@@ -46,6 +46,11 @@ type ChatRequest struct {
 	RunID    *string       `json:"run_id,omitempty"`
 	TaskID   *string       `json:"task_id,omitempty"`
 	AgentID  *string       `json:"agent_id,omitempty"`
+
+	// IdempotencyKey is sent as the X-Idempotency-Key header. It is not part
+	// of the JSON payload: the LLM Gateway treats it as transport metadata and
+	// uses it to deduplicate retried logical calls (PR #99).
+	IdempotencyKey string `json:"-"`
 }
 
 // LLMUsage carries cost and token information from the LLM Gateway.
@@ -88,12 +93,15 @@ func (c *LLMClient) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, 
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	if req.IdempotencyKey != "" {
+		httpReq.Header.Set("X-Idempotency-Key", req.IdempotencyKey)
+	}
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("call LLM Gateway: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {

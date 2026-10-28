@@ -49,7 +49,16 @@ type rpcError struct {
 type ToolCallParams struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
+	// Meta carries transport-level call metadata (_meta in MCP).
+	Meta map[string]any `json:"_meta,omitempty"`
 }
+
+// IdempotencyMetaKey is the _meta field the Tool Gateway uses to deduplicate
+// retried tool calls.
+const IdempotencyMetaKey = "idempotency_key"
+
+// TaskRunMetaKey is the _meta field carrying the task run attribution.
+const TaskRunMetaKey = "task_run_id"
 
 // ToolResult is the result of a tool call.
 type ToolResult struct {
@@ -63,9 +72,32 @@ type ToolContent struct {
 	Text string `json:"text"`
 }
 
-// CallTool invokes a tool on the Tool Gateway.
-func (c *ToolClient) CallTool(ctx context.Context, toolName string, args json.RawMessage) (*ToolResult, error) {
-	params, err := json.Marshal(ToolCallParams{Name: toolName, Arguments: args})
+// Call invokes a tool on the Tool Gateway.
+//
+// taskRunID and idempotencyKey are forwarded in the MCP _meta field. The
+// workflow derives idempotencyKey deterministically per step, so a retried
+// activity reuses the same key and the gateway can return the cached result
+// instead of executing the tool twice.
+func (c *ToolClient) Call(
+	ctx context.Context,
+	toolName string,
+	args json.RawMessage,
+	taskRunID string,
+	idempotencyKey string,
+) (*ToolResult, error) {
+	params := ToolCallParams{Name: toolName, Arguments: args}
+	meta := map[string]any{}
+	if taskRunID != "" {
+		meta[TaskRunMetaKey] = taskRunID
+	}
+	if idempotencyKey != "" {
+		meta[IdempotencyMetaKey] = idempotencyKey
+	}
+	if len(meta) > 0 {
+		params.Meta = meta
+	}
+
+	paramsJSON, err := json.Marshal(params)
 	if err != nil {
 		return nil, fmt.Errorf("marshal tool params: %w", err)
 	}
@@ -74,7 +106,7 @@ func (c *ToolClient) CallTool(ctx context.Context, toolName string, args json.Ra
 		JSONRPC: "2.0",
 		ID:      1,
 		Method:  "tools/call",
-		Params:  params,
+		Params:  paramsJSON,
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -92,7 +124,7 @@ func (c *ToolClient) CallTool(ctx context.Context, toolName string, args json.Ra
 	if err != nil {
 		return nil, fmt.Errorf("call Tool Gateway: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {

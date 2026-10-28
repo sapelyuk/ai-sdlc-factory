@@ -9,6 +9,11 @@ Temporal-based agent runtime for `ai-sdlc-factory`.
 - **Context Builder** — semantic subgraph + KB search.
 - **Tool Executor** — via Tool Gateway (MCP).
 - **Budget Guard** — hard stop on cost/steps.
+- **Idempotency** — a per-step key (`workflow.SideEffect`) is forwarded to the
+  LLM Gateway (`X-Idempotency-Key`) and Tool Gateway (`_meta.idempotency_key`),
+  so activity retries do not duplicate side effects.
+- **Loop detection** — the last 3 tool calls are hashed; a repeated call with
+  identical arguments fails the step as non-retryable.
 - **Handoff Builder** — validates LLM output against JSON schema.
 - **SDLCWorkflow** — minimal: single `TaskRunWorkflow` child call.
 
@@ -35,8 +40,8 @@ SDLCWorkflow (child)
 | `TOOL_GATEWAY_URL` | `http://tool-gateway:8030` | Tool Gateway base URL |
 | `SEMANTIC_URL` | `http://semantic:8010` | Semantic Service URL |
 | `KNOWLEDGE_URL` | `http://knowledge:8020` | Knowledge Service URL |
-| `DEFAULT_MAX_COST_USD` | `10.0` | Default cost budget |
-| `DEFAULT_MAX_STEPS` | `50` | Default step budget |
+| `DEFAULT_MAX_COST_USD` | `3.0` | Default cost budget (Role.limits.max_cost_usd) |
+| `DEFAULT_MAX_STEPS` | `60` | Default step budget (Role.limits.max_steps) |
 
 ## Structure
 

@@ -18,6 +18,8 @@ type StepResult struct {
 	Usage client.LLMUsage `json:"usage"`
 	// Handoff is set when the agent is ready to hand off (tool_calls empty).
 	Handoff *handoff.HandoffPackage `json:"handoff,omitempty"`
+	// RecentCalls carries tool-call hashes to the next step for loop detection.
+	RecentCalls RecentCallHashes `json:"recent_calls,omitempty"`
 	// BudgetExceeded indicates the agent must stop immediately.
 	BudgetExceeded bool `json:"budget_exceeded,omitempty"`
 	// BudgetExceededReason carries the error message when BudgetExceeded is true.
@@ -26,32 +28,56 @@ type StepResult struct {
 
 // StepInput is the input to a single AgentStep.
 type StepInput struct {
-	TaskRunID     string              `json:"task_run_id"`
-	StepIndex     int                 `json:"step_index"`
-	Messages      []client.ChatMessage `json:"messages"`
-	Profile       string              `json:"profile"`
-	ProjectID     string              `json:"project_id,omitempty"`
-	TaskDesc      string              `json:"task_description"`
-	Tools         []client.ToolDef    `json:"tools,omitempty"`
-	BudgetSnapshot BudgetSnapshot     `json:"budget_snapshot"`
-	MaxCostUSD    float64             `json:"max_cost_usd"`
-	MaxSteps      int                 `json:"max_steps"`
+	TaskRunID string `json:"task_run_id"`
+	// RunID, TaskID and AgentID are forwarded to the LLM Gateway for
+	// attribution (llm_logical_calls.run_id/task_id/agent_id).
+	RunID          string               `json:"run_id,omitempty"`
+	TaskID         string               `json:"task_id,omitempty"`
+	AgentID        string               `json:"agent_id,omitempty"`
+	StepIndex      int                  `json:"step_index"`
+	IdempotencyKey string               `json:"idempotency_key"`
+	Messages       []client.ChatMessage `json:"messages"`
+	Profile        string               `json:"profile"`
+	ProjectID      string               `json:"project_id,omitempty"`
+	TaskDesc       string               `json:"task_description"`
+	Tools          []client.ToolDef     `json:"tools,omitempty"`
+	BudgetSnapshot BudgetSnapshot       `json:"budget_snapshot"`
+	MaxCostUSD     float64              `json:"max_cost_usd"`
+	MaxSteps       int                  `json:"max_steps"`
+	RecentCalls    RecentCallHashes     `json:"recent_calls,omitempty"`
+}
+
+// LLM is the subset of the LLM Gateway client used by the ReAct loop.
+// The interface keeps the loop testable with in-process fakes.
+type LLM interface {
+	Chat(ctx context.Context, req *client.ChatRequest) (*client.ChatResponse, error)
+}
+
+// Tool is the subset of the Tool Gateway client used by the ReAct loop.
+type Tool interface {
+	Call(
+		ctx context.Context,
+		name string,
+		args json.RawMessage,
+		taskRunID string,
+		idempotencyKey string,
+	) (*client.ToolResult, error)
 }
 
 // Executor runs one ReAct iteration.
 // It is wired by the activity layer with real HTTP clients.
 type Executor struct {
-	llm       *client.LLMClient
-	tool      *client.ToolClient
-	ctxBuilder *agentctx.Builder
-	handoffBuilder *handoff.Builder
+	llm              LLM
+	tool             Tool
+	ctxBuilder       *agentctx.Builder
+	handoffBuilder   *handoff.Builder
 	handoffValidator *handoff.Validator
 }
 
 // NewExecutor creates a new agent executor.
 func NewExecutor(
-	llm *client.LLMClient,
-	tool *client.ToolClient,
+	llm LLM,
+	tool Tool,
 	ctxBuilder *agentctx.Builder,
 	hb *handoff.Builder,
 	hv *handoff.Validator,
@@ -81,11 +107,21 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 		msgs = []client.ChatMessage{sysMsg, userMsg}
 	}
 
-	// Call LLM.
+	// Call LLM with attribution and the per-step idempotency key.
 	llmReq := &client.ChatRequest{
-		Profile:  input.Profile,
-		Messages: msgs,
-		Tools:    input.Tools,
+		Profile:        input.Profile,
+		Messages:       msgs,
+		Tools:          input.Tools,
+		IdempotencyKey: input.IdempotencyKey,
+	}
+	if input.RunID != "" {
+		llmReq.RunID = &input.RunID
+	}
+	if input.TaskID != "" {
+		llmReq.TaskID = &input.TaskID
+	}
+	if input.AgentID != "" {
+		llmReq.AgentID = &input.AgentID
 	}
 	llmResp, err := e.llm.Chat(ctx, llmReq)
 	if err != nil {
@@ -98,6 +134,7 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 		return &StepResult{
 			Messages:             msgs,
 			Usage:                llmResp.Usage,
+			RecentCalls:          input.RecentCalls,
 			BudgetExceeded:       true,
 			BudgetExceededReason: err.Error(),
 		}, nil
@@ -111,8 +148,9 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 			// Append assistant message and continue; the agent must regenerate.
 			msgs = append(msgs, client.ChatMessage{Role: "assistant", Content: llmResp.Content})
 			return &StepResult{
-				Messages: msgs,
-				Usage:    llmResp.Usage,
+				Messages:    msgs,
+				Usage:       llmResp.Usage,
+				RecentCalls: input.RecentCalls,
 			}, nil
 		}
 		// Validate the handoff package.
@@ -120,21 +158,30 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 			// Invalid handoff: return error so the agent regenerates.
 			msgs = append(msgs, client.ChatMessage{Role: "assistant", Content: llmResp.Content})
 			return &StepResult{
-				Messages: msgs,
-				Usage:    llmResp.Usage,
+				Messages:    msgs,
+				Usage:       llmResp.Usage,
+				RecentCalls: input.RecentCalls,
 			}, nil
 		}
 		return &StepResult{
-			Messages: msgs,
-			Usage:    llmResp.Usage,
-			Handoff:  pkg,
+			Messages:    msgs,
+			Usage:       llmResp.Usage,
+			RecentCalls: input.RecentCalls,
+			Handoff:     pkg,
 		}, nil
 	}
 
-	// Tool calls present: execute each and append results.
+	// Tool calls present: detect loops, execute each and append results.
 	msgs = append(msgs, client.ChatMessage{Role: "assistant", Content: llmResp.Content})
+	recent := input.RecentCalls
 	for _, tc := range llmResp.ToolCalls {
-		result, err := e.tool.CallTool(ctx, tc.Name, tc.Arguments)
+		updated, err := recordToolCall(recent, tc.Name, tc.Arguments)
+		if err != nil {
+			return nil, err
+		}
+		recent = updated
+
+		result, err := e.tool.Call(ctx, tc.Name, tc.Arguments, input.TaskRunID, input.IdempotencyKey)
 		if err != nil {
 			// Append error as tool result so LLM can recover.
 			msgs = append(msgs, client.ChatMessage{
@@ -151,7 +198,8 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 	}
 
 	return &StepResult{
-		Messages: msgs,
-		Usage:    llmResp.Usage,
+		Messages:    msgs,
+		Usage:       llmResp.Usage,
+		RecentCalls: recent,
 	}, nil
 }
