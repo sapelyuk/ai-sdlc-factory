@@ -303,8 +303,8 @@ func TestMigrationNumbering(t *testing.T) {
 	entries, err := os.ReadDir(migrationsDir)
 	require.NoError(t, err)
 
-	expectedUp := 13
-	expectedDown := 13
+	expectedUp := 14
+	expectedDown := 14
 
 	var upCount, downCount int
 	for _, e := range entries {
