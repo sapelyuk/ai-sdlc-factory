@@ -3,6 +3,7 @@ package httptransport
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -108,10 +109,29 @@ func createNodeHandler(svc *service.NodeService, schema *jsonschema.Schema) http
 	}
 }
 
+// listNodesHandler returns nodes, optionally scoped to a subgraph.
+//
+// Query parameters:
+//   - layer: filter by semantic layer (SLP, SLPr, AM);
+//   - root: node UUID; when set, only nodes reachable within depth hops are returned;
+//   - depth: traversal depth for root (default 1, capped by the service).
 func listNodesHandler(svc *service.NodeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		layer := r.URL.Query().Get("layer")
-		nodes, err := svc.List(r.Context(), layer)
+		query := r.URL.Query()
+		layer := query.Get("layer")
+		root := query.Get("root")
+
+		depth := 0
+		if raw := query.Get("depth"); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 0 {
+				writeError(w, http.StatusUnprocessableEntity, "depth must be a non-negative integer")
+				return
+			}
+			depth = parsed
+		}
+
+		nodes, err := svc.List(r.Context(), layer, root, depth)
 		if err != nil {
 			writeRepositoryError(w, err)
 			return
