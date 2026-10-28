@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	temporalactivity "go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
@@ -160,6 +161,7 @@ func TestTaskRunWorkflow_Integration(t *testing.T) {
 
 	input := workflow.TaskRunInput{
 		TaskRunID:         "0190f0e0-0000-7000-8000-000000000001",
+		WorkspaceID:       uuid.MustParse("0190f0e0-0000-7000-8000-000000000004"),
 		RunID:             "0190f0e0-0000-7000-8000-000000000002",
 		TaskID:            "0190f0e0-0000-7000-8000-000000000003",
 		AgentID:           "0190f0e0-0000-7000-8000-000000000004",

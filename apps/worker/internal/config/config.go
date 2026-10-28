@@ -15,6 +15,9 @@ type Config struct {
 	// TaskQueue is the Temporal task queue the worker polls.
 	TaskQueue string
 
+	// DatabaseURL connects to PostgreSQL for the audit log (issue #14).
+	DatabaseURL string
+
 	// LLMGatewayURL is the base URL of the LLM Gateway service.
 	LLMGatewayURL string
 
@@ -56,6 +59,7 @@ func Load() (*Config, error) {
 	return &Config{
 		TemporalHost:      env("TEMPORAL_HOST", "temporal:7233"),
 		TaskQueue:         env("AI_TEMPORAL_TASK_QUEUE", "ai-sdlc-factory"),
+		DatabaseURL:       env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/ai_sdlc_factory?sslmode=disable"),
 		LLMGatewayURL:     env("LLM_GATEWAY_URL", "http://gateway-llm:8040"),
 		ToolGatewayURL:    env("TOOL_GATEWAY_URL", "http://tool-gateway:8030"),
 		SemanticURL:       env("SEMANTIC_URL", "http://semantic:8010"),

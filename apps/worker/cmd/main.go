@@ -5,9 +5,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	temporalactivity "go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
@@ -18,12 +21,23 @@ import (
 	agentctx "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/context"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/handoff"
 	wf "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/workflow"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)
+	}
+
+	// Connect to PostgreSQL for the global audit log (issue #14).
+	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("database: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(context.Background()); err != nil {
+		log.Fatalf("database ping: %v", err)
 	}
 
 	// Connect to Temporal server.
@@ -62,6 +76,12 @@ func main() {
 	// Register activities.
 	stepActivity := activity.NewAgentStepActivity(executor)
 	w.RegisterActivity(stepActivity.Execute)
+	// Every audit-worthy step of a run is appended to the global tamper-evident
+	// audit log through this activity (issue #14).
+	auditActivity := activity.NewAuditActivity(sdkaudit.NewLogger(pool))
+	w.RegisterActivityWithOptions(auditActivity.Execute, temporalactivity.RegisterOptions{
+		Name: wf.AuditRecordActivityName,
+	})
 
 	// Start health-check server in background.
 	go startHealthz()
