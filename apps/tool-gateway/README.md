@@ -15,6 +15,8 @@ credentials from Vault/OpenBao. The MCP protocol itself is implemented by
 | POST | `/mcp` | Identity headers | MCP Streamable HTTP endpoint |
 | GET | `/mcp` | Identity headers | MCP server-initiated stream |
 | DELETE | `/mcp` | Identity headers | MCP session termination |
+| GET | `/audit?run_id=<id>` | Admin identity headers | Audit records for the caller's workspace and run |
+| GET | `/audit/verify` | Admin identity headers | Verify the caller's workspace hash chain |
 
 The service listens on port **8030** by default.
 
@@ -67,24 +69,16 @@ If OPA is unreachable the gateway fails closed with HTTP 503.
 
 ## Audit log
 
-Every call (allowed, denied or failed) is written to
-`tool_call_audit_log` with a SHA-256 hash chain:
+Every call (allowed, denied or failed) is recorded as a `tool_call` event in the
+global, workspace-scoped audit chain. The shared implementation, including
+PostgreSQL locking, RLS scoping, secret redaction, and chain verification, lives
+in [`packages/sdk-go/audit`](../../packages/sdk-go/audit). Tool Gateway maps its
+tool-call fields onto that event contract.
 
-```
-hash_n = SHA256(hash_{n-1} || id || agent_id || tool_name || result || timestamp)
-```
-
-- The first record chains from an empty string.
-- Appends take a PostgreSQL advisory lock, so the chain stays linear across
-  gateway replicas.
-- Each workspace has its own chain; RLS scopes both the chain-head read and
-  the insert.
-- `audit.Verify` recomputes the chain and detects modified or deleted rows.
-
-Migration `0011_tool_gateway_audit` creates the table. It is separate from the
-generic `audit_log` from migration 0007 because the Tool Gateway needs a
-different shape (`tool_name`, `agent_id`, `hash_chain`) and a `result` CHECK
-that allows `denied` and `error`; released migrations are not rewritten.
+The audit endpoints require an authenticated `admin` identity. Both endpoints
+use `X-Workspace-ID` as the tenant scope; the run query matches `run_id`,
+`task_run_id`, or the record's `resource_id`. The legacy
+`GET /admin/audit/verify?workspace_id=<id>` endpoint remains available.
 
 If the audit write fails, the tool call fails: an unaudited call is not
 allowed.

@@ -319,6 +319,10 @@ Integration rules:
 4. **Every call is in the audit log.** Audit log and run costs — FR-OPS; cost accounting — §11.4.
 5. **VCS contract is indistinguishable from human work.** The agent opens a PR, not a push to a protected branch: `git.push_protected` is forbidden, merge is protected (FR-GIT, `CONTRIBUTING.md`).
 
+The audit log is implemented in `packages/sdk-go/audit` with a SHA-256 hash
+chain and is used by Tool Gateway, LLM Gateway, Agent Runtime, and Sandbox
+Manager.
+
 ### 11.2 Testing, build, deploy
 
 **CI is the quality standard.** Checks in `.github/workflows/ci.yml` (lint → test → build per `apps/*` modules, plus frontend lint and build) are required before review: the `ci_green` gate moves `InDev → CodeReview` (`SDLC_STATE_MACHINE.md` §3.9, §4). New code coverage ≥ 80% is a condition of the same gate (`SDLC_STATE_MACHINE.md` §3.9, `CONTRIBUTING.md`). Weakening tests, coverage thresholds, or CI config for a green build is forbidden (AGENTS.md, R3).
