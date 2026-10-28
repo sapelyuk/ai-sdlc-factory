@@ -165,6 +165,57 @@ func TestPostgresChainLinksRecords(t *testing.T) {
 	}
 }
 
+func TestPostgresIdempotencyKeyReturnsExistingRecord(t *testing.T) {
+	owner, role := setupPostgres(t)
+	pool := newServicePool(t, owner, role)
+	logger := NewLogger(pool)
+
+	ws := uuid.New()
+	ev := sdkEvent(ws, SystemActor("agent-runtime"), ActionRunStarted, "run-1")
+	ev.IdempotencyKey = "run-started-1"
+	first, err := logger.Append(context.Background(), ev)
+	if err != nil {
+		t.Fatalf("Append first: %v", err)
+	}
+	ev.Details = map[string]any{"retried": true}
+	retry, err := logger.Append(context.Background(), ev)
+	if err != nil {
+		t.Fatalf("Append retry: %v", err)
+	}
+	if retry.ID != first.ID || retry.Hash != first.Hash {
+		t.Fatalf("retry returned a different record: first=%+v retry=%+v", first, retry)
+	}
+	records, err := logger.Records(context.Background(), ws)
+	if err != nil {
+		t.Fatalf("Records: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("records = %d, want 1", len(records))
+	}
+	if err := VerifyChain(records); err != nil {
+		t.Fatalf("VerifyChain: %v", err)
+	}
+}
+
+func TestPostgresGlobalAuditMigrationRollsBack(t *testing.T) {
+	owner, _ := setupPostgres(t)
+	ctx := context.Background()
+	downSQL, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "postgres", "0014_global_audit_log.down.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.Exec(ctx, string(downSQL)); err != nil {
+		t.Fatalf("apply down migration: %v", err)
+	}
+	var tableName *string
+	if err := owner.QueryRow(ctx, `SELECT to_regclass('public.audit_log')::text`).Scan(&tableName); err != nil {
+		t.Fatalf("check audit_log after rollback: %v", err)
+	}
+	if tableName != nil {
+		t.Fatalf("audit_log still exists after rollback: %q", *tableName)
+	}
+}
+
 // TestPostgresTamperDetection edits a stored row directly in SQL and asserts
 // that verification fails, which is the acceptance criterion of issue #14.
 func TestPostgresTamperDetection(t *testing.T) {
@@ -345,7 +396,7 @@ func TestPostgresRLSScopesTheChain(t *testing.T) {
 // TestPostgresStoreRejectsNilPool covers the defensive check in the store.
 func TestPostgresStoreRejectsNilPool(t *testing.T) {
 	store := NewPostgresStore(nil)
-	_, err := store.Append(context.Background(), uuid.New(), func(*string) (Record, error) {
+	_, err := store.Append(context.Background(), uuid.New(), "", func(*string) (Record, error) {
 		return Record{}, nil
 	})
 	if err == nil {
@@ -364,7 +415,7 @@ func TestPostgresStorePropagatesBuildErrors(t *testing.T) {
 	store := NewPostgresStore(pool)
 
 	sentinel := errors.New("builder failed")
-	_, err := store.Append(context.Background(), uuid.New(), func(*string) (Record, error) {
+	_, err := store.Append(context.Background(), uuid.New(), "", func(*string) (Record, error) {
 		return Record{}, sentinel
 	})
 	if !errors.Is(err, sentinel) {

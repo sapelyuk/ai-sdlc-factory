@@ -66,6 +66,9 @@ type Event struct {
 	WorkspaceID uuid.UUID
 	ActorID     string
 	Action      string
+	// IdempotencyKey deduplicates retries of the same logical event. It is
+	// scoped to a workspace and is included in the hash chain.
+	IdempotencyKey string
 	// ResourceID is a free-form identifier of the affected resource: run id,
 	// task id, container id, tool name.
 	ResourceID string
@@ -77,11 +80,12 @@ type Event struct {
 
 // Record is a persisted audit event.
 type Record struct {
-	ID          uuid.UUID
-	WorkspaceID uuid.UUID
-	ActorID     string
-	Action      string
-	ResourceID  string
+	ID             uuid.UUID
+	WorkspaceID    uuid.UUID
+	ActorID        string
+	Action         string
+	IdempotencyKey string
+	ResourceID     string
 	// Details holds the exact JSON bytes that were hashed. It is never
 	// re-encoded after persistence, so verification is byte-exact.
 	Details  json.RawMessage
@@ -109,7 +113,7 @@ func (r Record) DetailsMap() map[string]any {
 // of the given workspace and pass the previous chain hash (nil for the first
 // record) to build.
 type Store interface {
-	Append(ctx context.Context, workspaceID uuid.UUID, build func(prevHash *string) (Record, error)) (Record, error)
+	Append(ctx context.Context, workspaceID uuid.UUID, idempotencyKey string, build func(prevHash *string) (Record, error)) (Record, error)
 	// Query returns all records of a workspace ordered by the chain position.
 	Query(ctx context.Context, workspaceID uuid.UUID) ([]Record, error)
 }
@@ -150,7 +154,7 @@ func (l *Logger) Append(ctx context.Context, ev Event) (Record, error) {
 	if err := Validate(ev); err != nil {
 		return Record{}, err
 	}
-	return l.store.Append(ctx, ev.WorkspaceID, func(prevHash *string) (Record, error) {
+	return l.store.Append(ctx, ev.WorkspaceID, ev.IdempotencyKey, func(prevHash *string) (Record, error) {
 		return l.build(ev, prevHash)
 	})
 }
@@ -167,14 +171,15 @@ func (l *Logger) build(ev Event, prevHash *string) (Record, error) {
 		return Record{}, fmt.Errorf("audit: encode details: %w", err)
 	}
 	rec := Record{
-		ID:          id,
-		WorkspaceID: ev.WorkspaceID,
-		ActorID:     ev.ActorID,
-		Action:      ev.Action,
-		ResourceID:  ev.ResourceID,
-		Details:     details,
-		PrevHash:    prevHash,
-		CreatedAt:   l.now().UTC().Truncate(time.Microsecond),
+		ID:             id,
+		WorkspaceID:    ev.WorkspaceID,
+		ActorID:        ev.ActorID,
+		Action:         ev.Action,
+		IdempotencyKey: ev.IdempotencyKey,
+		ResourceID:     ev.ResourceID,
+		Details:        details,
+		PrevHash:       prevHash,
+		CreatedAt:      l.now().UTC().Truncate(time.Microsecond),
 	}
 	rec.Hash = Hash(prevHash, rec)
 	return rec, nil
@@ -231,6 +236,7 @@ func Hash(prev *string, rec Record) string {
 	write(rec.WorkspaceID.String())
 	write(rec.ActorID)
 	write(rec.Action)
+	write(rec.IdempotencyKey)
 	write(rec.ResourceID)
 	write(string(rec.Details))
 	write(rec.CreatedAt.UTC().Format(time.RFC3339Nano))

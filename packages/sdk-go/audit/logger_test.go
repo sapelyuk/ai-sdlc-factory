@@ -72,6 +72,32 @@ func TestChainLinksTwoRecords(t *testing.T) {
 	}
 }
 
+func TestIdempotencyKeyReturnsExistingRecord(t *testing.T) {
+	logger, store := fixedClock(t)
+	ctx := context.Background()
+	ev := testEvent(ActionRunStarted)
+	ev.IdempotencyKey = "run-started-1"
+
+	first, err := logger.Append(ctx, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev.Details = map[string]any{"different": "payload"}
+	retry, err := logger.Append(ctx, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry.ID != first.ID || retry.Hash != first.Hash {
+		t.Fatalf("retry returned a different record: first=%+v retry=%+v", first, retry)
+	}
+	if store.Count() != 1 {
+		t.Fatalf("append count = %d, want 1", store.Count())
+	}
+	if err := logger.Verify(ctx, testWorkspace); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+}
+
 // TestVerifyDetectsTamperedDetails proves tamper evidence: rewriting the
 // details payload of a persisted record breaks the chain.
 func TestVerifyDetectsTamperedDetails(t *testing.T) {

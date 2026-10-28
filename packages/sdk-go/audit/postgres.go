@@ -39,7 +39,7 @@ const chainLockName = "ai-sdlc-factory:audit-chain:"
 //
 // The lock is always taken in the same order (advisory, then row), so
 // concurrent writers queue instead of deadlocking.
-func (s *PostgresStore) Append(ctx context.Context, workspaceID uuid.UUID, build func(prevHash *string) (Record, error)) (Record, error) {
+func (s *PostgresStore) Append(ctx context.Context, workspaceID uuid.UUID, idempotencyKey string, build func(prevHash *string) (Record, error)) (Record, error) {
 	if s.pool == nil {
 		return Record{}, errors.New("audit: postgres store requires a connection pool")
 	}
@@ -60,6 +60,24 @@ func (s *PostgresStore) Append(ctx context.Context, workspaceID uuid.UUID, build
 		return Record{}, fmt.Errorf("audit: acquire chain lock: %w", err)
 	}
 
+	if idempotencyKey != "" {
+		rec, err := scanRecord(tx.QueryRow(ctx, `
+			SELECT id, workspace_id, actor_id, action, COALESCE(resource_id, ''),
+			       COALESCE(idempotency_key, ''), details, prev_hash, hash, created_at
+			FROM audit_log
+			WHERE workspace_id = $1 AND idempotency_key = $2
+			FOR UPDATE`, workspaceID, idempotencyKey))
+		if err == nil {
+			if err := tx.Commit(ctx); err != nil {
+				return Record{}, fmt.Errorf("audit: commit duplicate lookup: %w", err)
+			}
+			return rec, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return Record{}, fmt.Errorf("audit: look up idempotency key: %w", err)
+		}
+	}
+
 	var prev *string
 	err = tx.QueryRow(ctx, `
 		SELECT hash FROM audit_log
@@ -78,9 +96,9 @@ func (s *PostgresStore) Append(ctx context.Context, workspaceID uuid.UUID, build
 
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO audit_log
-			(id, workspace_id, actor_id, action, resource_id, details, prev_hash, hash, created_at)
-		VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $9)`,
-		rec.ID, rec.WorkspaceID, rec.ActorID, rec.Action, rec.ResourceID,
+			(id, workspace_id, actor_id, action, resource_id, idempotency_key, details, prev_hash, hash, created_at)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, $8, $9, $10)`,
+		rec.ID, rec.WorkspaceID, rec.ActorID, rec.Action, rec.ResourceID, rec.IdempotencyKey,
 		rec.Details, rec.PrevHash, rec.Hash, rec.CreatedAt); err != nil {
 		return Record{}, fmt.Errorf("audit: insert record: %w", err)
 	}
@@ -111,7 +129,7 @@ func (s *PostgresStore) Query(ctx context.Context, workspaceID uuid.UUID) ([]Rec
 
 	rows, err := tx.Query(ctx, `
 		SELECT id, workspace_id, actor_id, action, COALESCE(resource_id, ''),
-		       details, prev_hash, hash, created_at
+		       COALESCE(idempotency_key, ''), details, prev_hash, hash, created_at
 		FROM audit_log
 		WHERE workspace_id = $1
 		ORDER BY created_at, id`, workspaceID)
@@ -124,9 +142,10 @@ func (s *PostgresStore) Query(ctx context.Context, workspaceID uuid.UUID) ([]Rec
 	for rows.Next() {
 		var rec Record
 		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.ActorID, &rec.Action,
-			&rec.ResourceID, &rec.Details, &rec.PrevHash, &rec.Hash, &rec.CreatedAt); err != nil {
+			&rec.ResourceID, &rec.IdempotencyKey, &rec.Details, &rec.PrevHash, &rec.Hash, &rec.CreatedAt); err != nil {
 			return nil, fmt.Errorf("audit: scan: %w", err)
 		}
+
 		// PostgreSQL jsonb re-serializes the payload (key order and spacing
 		// differ from encoding/json), so the stored bytes must be brought back
 		// to the canonical form that was hashed at insert time. Without this,
@@ -145,4 +164,28 @@ func (s *PostgresStore) Query(ctx context.Context, workspaceID uuid.UUID) ([]Rec
 		return nil, fmt.Errorf("audit: commit read transaction: %w", err)
 	}
 	return out, nil
+}
+
+func scanRecord(row pgx.Row) (Record, error) {
+	var rec Record
+	if err := row.Scan(
+		&rec.ID,
+		&rec.WorkspaceID,
+		&rec.ActorID,
+		&rec.Action,
+		&rec.ResourceID,
+		&rec.IdempotencyKey,
+		&rec.Details,
+		&rec.PrevHash,
+		&rec.Hash,
+		&rec.CreatedAt,
+	); err != nil {
+		return Record{}, err
+	}
+	canonical, err := CanonicalizeJSON(rec.Details)
+	if err != nil {
+		return Record{}, fmt.Errorf("audit: canonicalize details of %s: %w", rec.ID, err)
+	}
+	rec.Details = canonical
+	return rec, nil
 }

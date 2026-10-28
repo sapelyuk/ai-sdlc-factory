@@ -53,15 +53,21 @@ type Entry struct {
 
 // Record is a persisted audit entry.
 type Record struct {
-	ID           uuid.UUID
-	WorkspaceID  uuid.UUID
-	AgentID      uuid.UUID
-	ToolName     string
-	RiskLevel    string
-	Result       string
-	ErrorMessage string
-	HashChain    string
-	CreatedAt    time.Time
+	ID             uuid.UUID       `json:"id"`
+	WorkspaceID    uuid.UUID       `json:"workspace_id"`
+	ActorID        string          `json:"actor_id"`
+	Action         string          `json:"action"`
+	IdempotencyKey string          `json:"idempotency_key,omitempty"`
+	ResourceID     string          `json:"resource_id,omitempty"`
+	Details        json.RawMessage `json:"details"`
+	PrevHash       *string         `json:"prev_hash"`
+	HashChain      string          `json:"hash"`
+	CreatedAt      time.Time       `json:"created_at"`
+	AgentID        uuid.UUID       `json:"-"`
+	ToolName       string          `json:"-"`
+	RiskLevel      string          `json:"-"`
+	Result         string          `json:"-"`
+	ErrorMessage   string          `json:"-"`
 }
 
 // Store appends records atomically. Append must serialize concurrent writers
@@ -85,39 +91,59 @@ func (r Record) details() map[string]any {
 // toSDK renders a tool record as a shared record so the chain can be recomputed
 // by the shared package. prevHash is empty for the head of a chain.
 func (r Record) toSDK(prevHash string) sdkaudit.Record {
+	actorID := r.ActorID
+	if actorID == "" {
+		actorID = sdkaudit.AgentActor(r.AgentID)
+	}
+	action := r.Action
+	if action == "" {
+		action = sdkaudit.ActionToolCall
+	}
+	resourceID := r.ResourceID
+	if resourceID == "" {
+		resourceID = r.ToolName
+	}
+	details := r.Details
+	if len(details) == 0 {
+		var err error
+		details, err = sdkaudit.CanonicalJSON(r.details())
+		if err != nil {
+			details = json.RawMessage("{}")
+		}
+	}
+	prev := r.PrevHash
+	if prev == nil && prevHash != "" {
+		value := prevHash
+		prev = &value
+	}
 	rec := sdkaudit.Record{
-		ID:          r.ID,
-		WorkspaceID: r.WorkspaceID,
-		ActorID:     sdkaudit.AgentActor(r.AgentID),
-		Action:      sdkaudit.ActionToolCall,
-		ResourceID:  r.ToolName,
-		Hash:        r.HashChain,
-		CreatedAt:   r.CreatedAt,
+		ID:             r.ID,
+		WorkspaceID:    r.WorkspaceID,
+		ActorID:        actorID,
+		Action:         action,
+		IdempotencyKey: r.IdempotencyKey,
+		ResourceID:     resourceID,
+		Details:        details,
+		PrevHash:       prev,
+		Hash:           r.HashChain,
+		CreatedAt:      r.CreatedAt,
 	}
-	if prevHash != "" {
-		prev := prevHash
-		rec.PrevHash = &prev
-	}
-	// The payload is re-encoded rather than copied, because the gateway record
-	// keeps the decoded fields. CanonicalJSON sorts keys, which is the exact
-	// form hashed on insert.
-	details, err := sdkaudit.CanonicalJSON(r.details())
-	if err != nil {
-		// Every field is a string, so encoding cannot fail. Fall back to an
-		// empty object instead of panicking inside the audit path.
-		details = json.RawMessage("{}")
-	}
-	rec.Details = details
 	return rec
 }
 
 // fromSDK decodes a shared record back into the tool-call view.
 func fromSDK(rec sdkaudit.Record) Record {
 	out := Record{
-		ID:          rec.ID,
-		WorkspaceID: rec.WorkspaceID,
-		CreatedAt:   rec.CreatedAt,
-		HashChain:   rec.Hash,
+		ID:             rec.ID,
+		WorkspaceID:    rec.WorkspaceID,
+		ActorID:        rec.ActorID,
+		Action:         rec.Action,
+		IdempotencyKey: rec.IdempotencyKey,
+		ResourceID:     rec.ResourceID,
+		Details:        append(json.RawMessage(nil), rec.Details...),
+		PrevHash:       rec.PrevHash,
+		CreatedAt:      rec.CreatedAt,
+		HashChain:      rec.Hash,
 		// The tool name is the resource id of a tool_call event; the payload
 		// stays the source of truth and the column is the fallback.
 		ToolName: rec.ResourceID,
@@ -129,8 +155,10 @@ func fromSDK(rec sdkaudit.Record) Record {
 		out.Result = stringField(payload, detailResult, "")
 		out.ErrorMessage = stringField(payload, detailErrorMessage, "")
 	}
-	if agent, err := parseAgentActor(rec.ActorID); err == nil {
-		out.AgentID = agent
+	if rec.Action == sdkaudit.ActionToolCall {
+		if agent, err := parseAgentActor(rec.ActorID); err == nil {
+			out.AgentID = agent
+		}
 	}
 	return out
 }
@@ -187,8 +215,11 @@ func (l *Logger) Record(ctx context.Context, e Entry) (Record, error) {
 		rec := Record{
 			ID:           id,
 			WorkspaceID:  e.WorkspaceID,
+			ActorID:      sdkaudit.AgentActor(e.AgentID),
+			Action:       sdkaudit.ActionToolCall,
 			AgentID:      e.AgentID,
 			ToolName:     e.ToolName,
+			ResourceID:   e.ToolName,
 			RiskLevel:    e.RiskLevel,
 			Result:       e.Result,
 			ErrorMessage: e.ErrorMessage,
@@ -196,6 +227,11 @@ func (l *Logger) Record(ctx context.Context, e Entry) (Record, error) {
 			// before hashing so a record read back from the database
 			// verifies against the same timestamp.
 			CreatedAt: l.now().UTC().Truncate(time.Microsecond),
+		}
+		rec.PrevHash = hashPointer(prevHash)
+		rec.Details, err = sdkaudit.CanonicalJSON(rec.details())
+		if err != nil {
+			return Record{}, fmt.Errorf("audit: encode tool call details: %w", err)
 		}
 		rec.HashChain = Hash(prevHash, rec)
 		return rec, nil
@@ -219,10 +255,8 @@ func Verify(records []Record) error {
 // predecessor's hash.
 func toSDKChain(records []Record) []sdkaudit.Record {
 	out := make([]sdkaudit.Record, 0, len(records))
-	prev := ""
 	for _, rec := range records {
-		out = append(out, rec.toSDK(prev))
-		prev = rec.HashChain
+		out = append(out, rec.toSDK(""))
 	}
 	return out
 }
@@ -237,11 +271,20 @@ func hashPointer(prevHash string) *string {
 
 // Verify queries all records for the given workspace and verifies the chain.
 func (l *Logger) Verify(ctx context.Context, workspaceID uuid.UUID) error {
-	records, err := l.store.Query(ctx, workspaceID)
+	records, err := l.Records(ctx, workspaceID)
 	if err != nil {
-		return fmt.Errorf("audit: query: %w", err)
+		return err
 	}
 	return Verify(records)
+}
+
+// Records returns the complete global audit records for one workspace.
+func (l *Logger) Records(ctx context.Context, workspaceID uuid.UUID) ([]Record, error) {
+	records, err := l.store.Query(ctx, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("audit: query: %w", err)
+	}
+	return records, nil
 }
 
 // MemoryStore is an in-memory Store used by tests and local development. It
@@ -267,7 +310,7 @@ func (m *MemoryStore) Append(ctx context.Context, workspaceID uuid.UUID, build f
 	if m.inner == nil {
 		m.inner = &sdkaudit.MemoryStore{}
 	}
-	rec, err := m.inner.Append(ctx, workspaceID, func(prev *string) (sdkaudit.Record, error) {
+	rec, err := m.inner.Append(ctx, workspaceID, "", func(prev *string) (sdkaudit.Record, error) {
 		tool, err := build(derefHash(prev))
 		if err != nil {
 			return sdkaudit.Record{}, err

@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,6 +79,8 @@ func NewRouter(opts Options) *Router {
 	mux.Handle("GET /mcp", identityMiddleware(opts.MCP))
 	mux.Handle("DELETE /mcp", identityMiddleware(opts.MCP))
 
+	mux.HandleFunc("GET /audit", runAuditHandler(opts))
+	mux.HandleFunc("GET /audit/verify", verifyWorkspaceAuditHandler(opts))
 	mux.HandleFunc("GET /admin/audit/verify", verifyAuditHandler(opts))
 
 	return &Router{handler: mux}
@@ -289,25 +292,100 @@ func verifyAuditHandler(opts Options) http.HandlerFunc {
 			return
 		}
 
-		// Check admin role from identity headers
-		id, err := identity.FromHeaders(r.Header)
-		if err != nil {
-			w.Header().Set("WWW-Authenticate", `ToolGateway realm="tool-gateway"`)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
-			return
-		}
-		if id.Role != "admin" {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin role required"})
+		if _, ok := requireAuditAdmin(w, r); !ok {
 			return
 		}
 
-		if err := opts.Auditor.Verify(r.Context(), wsUUID); err != nil {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"status": "broken",
-				"error":  err.Error(),
-			})
+		verifyWorkspaceAudit(w, r, opts, wsUUID)
+	}
+}
+
+func verifyWorkspaceAuditHandler(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := requireAuditAdmin(w, r)
+		if !ok {
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		verifyWorkspaceAudit(w, r, opts, id.WorkspaceID)
 	}
+}
+
+func verifyWorkspaceAudit(w http.ResponseWriter, r *http.Request, opts Options, workspaceID uuid.UUID) {
+	if opts.Auditor == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "audit log unavailable"})
+		return
+	}
+	if err := opts.Auditor.Verify(r.Context(), workspaceID); err != nil {
+		opts.Logger.Error("verify audit chain", "workspace_id", workspaceID, "error", err)
+		writeJSON(w, http.StatusOK, map[string]any{"status": "broken", "error": "audit chain verification failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func runAuditHandler(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := requireAuditAdmin(w, r)
+		if !ok {
+			return
+		}
+		runID := strings.TrimSpace(r.URL.Query().Get("run_id"))
+		if runID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "run_id is required"})
+			return
+		}
+		if opts.Auditor == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "audit log unavailable"})
+			return
+		}
+		records, err := opts.Auditor.Records(r.Context(), id.WorkspaceID)
+		if err != nil {
+			opts.Logger.Error("query audit records", "workspace_id", id.WorkspaceID, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to query audit log"})
+			return
+		}
+		matches := make([]audit.Record, 0)
+		for _, record := range records {
+			matchesRun, err := recordReferencesRun(record, runID)
+			if err != nil {
+				opts.Logger.Error("decode audit record details", "record_id", record.ID, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "invalid audit record"})
+				return
+			}
+			if matchesRun {
+				matches = append(matches, record)
+			}
+		}
+		writeJSON(w, http.StatusOK, matches)
+	}
+}
+
+func requireAuditAdmin(w http.ResponseWriter, r *http.Request) (identity.Identity, bool) {
+	id, err := identity.FromHeaders(r.Header)
+	if err != nil {
+		w.Header().Set("WWW-Authenticate", `ToolGateway realm="tool-gateway"`)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+		return identity.Identity{}, false
+	}
+	if id.Role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin role required"})
+		return identity.Identity{}, false
+	}
+	return id, true
+}
+
+func recordReferencesRun(record audit.Record, runID string) (bool, error) {
+	if record.ResourceID == runID {
+		return true, nil
+	}
+	var details map[string]any
+	if err := json.Unmarshal(record.Details, &details); err != nil {
+		return false, fmt.Errorf("decode details: %w", err)
+	}
+	for _, field := range []string{"run_id", "task_run_id"} {
+		if value, ok := details[field].(string); ok && value == runID {
+			return true, nil
+		}
+	}
+	return false, nil
 }

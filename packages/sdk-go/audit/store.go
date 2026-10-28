@@ -10,19 +10,25 @@ import (
 // MemoryStore is an in-memory Store for tests and local development. Each
 // workspace keeps its own linear chain, mirroring the PostgreSQL behaviour.
 type MemoryStore struct {
-	mu       sync.Mutex
-	bySpace  map[uuid.UUID][]Record
-	failErr  error
-	appendOK int
+	mu            sync.Mutex
+	bySpace       map[uuid.UUID][]Record
+	byIdempotency map[uuid.UUID]map[string]Record
+	failErr       error
+	appendOK      int
 }
 
 // Append implements Store.
-func (m *MemoryStore) Append(_ context.Context, workspaceID uuid.UUID, build func(prevHash *string) (Record, error)) (Record, error) {
+func (m *MemoryStore) Append(_ context.Context, workspaceID uuid.UUID, idempotencyKey string, build func(prevHash *string) (Record, error)) (Record, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.failErr != nil {
 		return Record{}, m.failErr
+	}
+	if idempotencyKey != "" {
+		if rec, ok := m.byIdempotency[workspaceID][idempotencyKey]; ok {
+			return rec, nil
+		}
 	}
 
 	var prev *string
@@ -38,6 +44,15 @@ func (m *MemoryStore) Append(_ context.Context, workspaceID uuid.UUID, build fun
 		m.bySpace = make(map[uuid.UUID][]Record)
 	}
 	m.bySpace[workspaceID] = append(m.bySpace[workspaceID], rec)
+	if idempotencyKey != "" {
+		if m.byIdempotency == nil {
+			m.byIdempotency = make(map[uuid.UUID]map[string]Record)
+		}
+		if m.byIdempotency[workspaceID] == nil {
+			m.byIdempotency[workspaceID] = make(map[string]Record)
+		}
+		m.byIdempotency[workspaceID][idempotencyKey] = rec
+	}
 	m.appendOK++
 	return rec, nil
 }

@@ -28,6 +28,7 @@ ALTER TABLE audit_log DROP CONSTRAINT audit_log_workspace_id_fkey;
 -- 4. Hash chain columns (added on top of existing columns).
 ALTER TABLE audit_log
     ADD COLUMN prev_hash TEXT,
+    ADD COLUMN idempotency_key TEXT,
     ADD COLUMN hash TEXT NOT NULL;
 
 -- 5. Query paths required by the run console.
@@ -36,6 +37,9 @@ CREATE INDEX idx_audit_log_resource ON audit_log (resource_id) WHERE resource_id
 
 -- 6. Tamper-evidence: unique hash prevents any rewritten or duplicate row.
 CREATE UNIQUE INDEX idx_audit_log_hash ON audit_log (hash);
+CREATE UNIQUE INDEX idx_audit_log_idempotency
+    ON audit_log (workspace_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
 
 -- 7. RLS policy renamed to match the issue contract.
 DROP POLICY workspace_isolation_policy ON audit_log;

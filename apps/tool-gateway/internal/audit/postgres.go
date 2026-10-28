@@ -25,7 +25,7 @@ func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
 
 // Append writes one record of the workspace chain.
 func (s *PostgresStore) Append(ctx context.Context, workspaceID uuid.UUID, build func(prevHash string) (Record, error)) (Record, error) {
-	rec, err := s.inner.Append(ctx, workspaceID, func(prev *string) (sdkaudit.Record, error) {
+	rec, err := s.inner.Append(ctx, workspaceID, "", func(prev *string) (sdkaudit.Record, error) {
 		tool, err := build(derefHash(prev))
 		if err != nil {
 			return sdkaudit.Record{}, err

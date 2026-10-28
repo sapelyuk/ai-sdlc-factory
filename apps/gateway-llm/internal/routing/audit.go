@@ -43,11 +43,12 @@ func (r *Router) auditLLMCall(ctx context.Context, call *domain.LogicalCall, cau
 	}
 
 	ev := sdkaudit.Event{
-		WorkspaceID: call.WorkspaceID,
-		ActorID:     actor,
-		Action:      sdkaudit.ActionLLMCall,
-		ResourceID:  call.ID.String(),
-		Details:     llmCallDetails(call, cause),
+		WorkspaceID:    call.WorkspaceID,
+		ActorID:        actor,
+		Action:         sdkaudit.ActionLLMCall,
+		IdempotencyKey: "llm_call:" + call.ID.String(),
+		ResourceID:     call.ID.String(),
+		Details:        llmCallDetails(call, cause),
 	}
 
 	// The event is written on a context detached from the caller: the call
