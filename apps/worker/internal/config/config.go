@@ -34,14 +34,21 @@ type Config struct {
 	DefaultMaxSteps int
 }
 
+// Default budget limits match Role.limits for backend-developer
+// (SYSTEM_DESIGN.md §7.2): max_cost_usd = 3, max_steps = 60.
+const (
+	defaultMaxSteps   = 60
+	defaultMaxCostUSD = 3.0
+)
+
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {
-	maxSteps, err := envInt("DEFAULT_MAX_STEPS", 50)
+	maxSteps, err := envInt("DEFAULT_MAX_STEPS", defaultMaxSteps)
 	if err != nil {
 		return nil, err
 	}
 
-	maxCost, err := envFloat("DEFAULT_MAX_COST_USD", 10.0)
+	maxCost, err := envFloat("DEFAULT_MAX_COST_USD", defaultMaxCostUSD)
 	if err != nil {
 		return nil, err
 	}
