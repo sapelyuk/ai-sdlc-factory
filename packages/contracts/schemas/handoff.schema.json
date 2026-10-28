@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-sdlc-factory/schemas/handoff",
+  "title": "HandoffPackage",
+  "description": "Structured package for agent-to-agent handoff. The receiver MUST validate against this schema before processing.",
+  "type": "object",
+  "required": ["goal", "context_refs", "acceptance_criteria", "expected_output_schema"],
+  "additionalProperties": false,
+  "properties": {
+    "goal": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Clear task objective in natural language."
+    },
+    "context_refs": {
+      "type": "array",
+      "description": "URIs or links to artifacts and semantic layer entities (not text copies).",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "minItems": 1
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "description": "Acceptance criteria in Given/When/Then format.",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "constraints": {
+      "type": "array",
+      "description": "Limitations (stack, rules, prohibitions).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "decisions_made": {
+      "type": "array",
+      "description": "Prior decisions (ADR) that must not be violated.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "description": "Questions requiring resolution by the receiving agent.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expected_output_schema": {
+      "type": "object",
+      "description": "JSON Schema for the expected result.",
+      "additionalProperties": true
+    }
+  }
+}
