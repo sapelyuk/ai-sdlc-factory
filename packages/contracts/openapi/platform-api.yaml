@@ -51,18 +51,18 @@ paths:
 
   # ── Health ────────────────────────────────────────────────────────
   /healthz:
-    servers:
-      - url: http://localhost:8000
-        description: Platform API
-      - url: http://localhost:8010
-        description: Semantic Service
-      - url: http://localhost:8030
-        description: Tool Gateway
-      - url: http://localhost:8040
-        description: LLM Gateway
-      - url: http://localhost:8060
-        description: Sandbox Manager
     get:
+      servers:
+        - url: http://localhost:8000
+          description: Platform API
+        - url: http://localhost:8010
+          description: Semantic Service
+        - url: http://localhost:8030
+          description: Tool Gateway
+        - url: http://localhost:8040
+          description: LLM Gateway
+        - url: http://localhost:8060
+          description: Sandbox Manager
       operationId: healthz
       summary: Liveness probe
       description: Reports whether the service process is alive.
@@ -80,18 +80,18 @@ paths:
                     example: ok
 
   /readyz:
-    servers:
-      - url: http://localhost:8000
-        description: Platform API
-      - url: http://localhost:8010
-        description: Semantic Service
-      - url: http://localhost:8030
-        description: Tool Gateway
-      - url: http://localhost:8040
-        description: LLM Gateway
-      - url: http://localhost:8060
-        description: Sandbox Manager
     get:
+      servers:
+        - url: http://localhost:8000
+          description: Platform API
+        - url: http://localhost:8010
+          description: Semantic Service
+        - url: http://localhost:8030
+          description: Tool Gateway
+        - url: http://localhost:8040
+          description: LLM Gateway
+        - url: http://localhost:8060
+          description: Sandbox Manager
       operationId: readyz
       summary: Readiness probe
       description: Reports whether the service can accept requests and reach its required dependencies.
@@ -763,10 +763,10 @@ paths:
 
   # ── LLM Gateway ───────────────────────────────────────────────────
   /v1/llm/chat:
-    servers:
-      - url: http://localhost:8040
-        description: LLM Gateway
     post:
+      servers:
+        - url: http://localhost:8040
+          description: LLM Gateway
       operationId: createChatCompletion
       summary: Create a chat completion
       description: Sends a chat request to the configured model profile and returns the selected provider response and usage.
@@ -806,10 +806,10 @@ paths:
 
   # ── Tool Gateway (MCP) ────────────────────────────────────────────
   /mcp:
-    servers:
-      - url: http://localhost:8030
-        description: Tool Gateway
     post:
+      servers:
+        - url: http://localhost:8030
+          description: Tool Gateway
       operationId: handleMCPRequest
       summary: Handle an MCP JSON-RPC request
       description: Handles an MCP request, applying policy authorization to tool calls.
@@ -854,6 +854,9 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
     get:
+      servers:
+        - url: http://localhost:8030
+          description: Tool Gateway
       operationId: openMCPEventStream
       summary: Open an MCP event stream
       description: Opens the MCP server-to-client event stream for the caller.
@@ -877,6 +880,9 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
     delete:
+      servers:
+        - url: http://localhost:8030
+          description: Tool Gateway
       operationId: closeMCPSession
       summary: Close an MCP session
       description: Closes the caller's MCP transport session.
@@ -897,10 +903,10 @@ paths:
           $ref: "#/components/responses/InternalServerError"
 
   /admin/audit/verify:
-    servers:
-      - url: http://localhost:8030
-        description: Tool Gateway
     get:
+      servers:
+        - url: http://localhost:8030
+          description: Tool Gateway
       operationId: verifyAuditChain
       summary: Verify the audit chain
       description: Verifies the hash chain for the specified workspace; requires an admin caller identity.
@@ -934,10 +940,10 @@ paths:
 
   # ── Sandbox Manager ───────────────────────────────────────────────
   /v1/sandboxes/exec:
-    servers:
-      - url: http://localhost:8060
-        description: Sandbox Manager
     post:
+      servers:
+        - url: http://localhost:8060
+          description: Sandbox Manager
       operationId: executeSandboxCommand
       summary: Execute a command in a sandbox
       description: Creates an isolated sandbox for a task run, executes the command, and destroys the sandbox.
@@ -973,10 +979,10 @@ paths:
 
   # ── Semantic Service ──────────────────────────────────────────────
   /v1/nodes:
-    servers:
-      - url: http://localhost:8010
-        description: Semantic Service
     post:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
       operationId: createSemanticNode
       summary: Create a semantic node
       description: Creates a semantic graph node in the caller's workspace.
@@ -1008,6 +1014,9 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
     get:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
       operationId: listSemanticNodes
       summary: List semantic nodes
       description: Lists semantic nodes, optionally filtering by layer or traversing a subgraph from a root node.
@@ -1049,10 +1058,10 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/nodes/{id}:
-    servers:
-      - url: http://localhost:8010
-        description: Semantic Service
     patch:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
       operationId: updateSemanticNode
       summary: Update a semantic node
       description: Updates the mutable fields of a semantic node by identifier.
@@ -1087,10 +1096,10 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/edges:
-    servers:
-      - url: http://localhost:8010
-        description: Semantic Service
     post:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
       operationId: createSemanticEdge
       summary: Create a semantic edge
       description: Creates an edge between semantic graph nodes in the caller's workspace.
@@ -1124,10 +1133,10 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/edges/{id}:
-    servers:
-      - url: http://localhost:8010
-        description: Semantic Service
     delete:
+      servers:
+        - url: http://localhost:8010
+          description: Semantic Service
       operationId: deleteSemanticEdge
       summary: Delete a semantic edge
       description: Deletes a semantic graph edge by identifier.
