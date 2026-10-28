@@ -174,7 +174,7 @@ func execute(w http.ResponseWriter, r *http.Request, opts Options) {
 		return
 	}
 
-	containerID, err := opts.Manager.Create(r.Context(), taskRunID, workspacePath)
+	containerID, err := opts.Manager.Create(r.Context(), currentTenant.workspaceID, taskRunID, workspacePath)
 	if err != nil {
 		opts.Logger.Error("create sandbox", "error", err, "task_run_id", taskRunID)
 		writeError(w, http.StatusInternalServerError, "failed to create sandbox")
@@ -189,7 +189,13 @@ func execute(w http.ResponseWriter, r *http.Request, opts Options) {
 	)
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
 	defer cancel()
-	destroyErr := opts.Manager.Destroy(cleanupCtx, containerID)
+	destroyReason := "exec_completed"
+	if execErr != nil {
+		destroyReason = "exec_failed"
+	} else if exitCode != 0 {
+		destroyReason = "exec_nonzero_exit"
+	}
+	destroyErr := opts.Manager.Destroy(cleanupCtx, currentTenant.workspaceID, containerID, destroyReason)
 	if execErr != nil {
 		opts.Logger.Error("execute sandbox command", "error", execErr, "task_run_id", taskRunID)
 		if destroyErr != nil {

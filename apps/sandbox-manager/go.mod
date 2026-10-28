@@ -7,7 +7,10 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/opencontainers/image-spec v1.1.1
+	github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go v0.0.0
 )
+
+replace github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go => ../../packages/sdk-go
 
 require (
 	github.com/Microsoft/go-winio v0.6.4 // indirect
@@ -26,7 +29,6 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
-	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

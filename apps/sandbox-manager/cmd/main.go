@@ -15,6 +15,7 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/config"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/sandbox"
 	httptransport "github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/transport/http"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 func main() {
@@ -53,7 +54,7 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	manager := sandbox.NewManager(dockerClient, cfg, logger)
+	manager := sandbox.NewManager(dockerClient, cfg, logger, sdkaudit.NewLogger(dbPool))
 	router := httptransport.NewRouter(httptransport.Options{
 		Manager: manager,
 		Tasks:   sandbox.NewPostgresTaskRunStore(dbPool),

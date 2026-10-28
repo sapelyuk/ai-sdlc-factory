@@ -1,11 +1,13 @@
 FROM golang:1.26-alpine AS builder
 
-WORKDIR /app
+WORKDIR /app/apps/sandbox-manager
 
 COPY apps/sandbox-manager/go.mod apps/sandbox-manager/go.sum ./
+COPY packages/sdk-go/go.mod packages/sdk-go/go.sum /app/packages/sdk-go/
 RUN go mod download
 
 COPY apps/sandbox-manager/ .
+COPY packages/sdk-go/ /app/packages/sdk-go/
 
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /sandboxmanager ./cmd/
 
