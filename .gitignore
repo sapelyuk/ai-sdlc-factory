@@ -91,6 +91,9 @@ apps/semantic/coverage
 apps/semantic/coverage.*
 apps/api/coverage
 apps/api/coverage.*
+packages/sdk-go/coverage
+packages/sdk-go/coverage.*
+packages/sdk-go/audit/coverage.txt
 
 # Semantic indexer artifacts
 .semantic-indexer/
