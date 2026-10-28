@@ -27,6 +27,46 @@ func TestIsSensitiveKey(t *testing.T) {
 	}
 }
 
+// TestIsSensitiveKeyKeepsUsageCounters guards the billing contract: token usage
+// and cost figures must survive redaction, while any other key that merely
+// contains the word "token" must not.
+func TestIsSensitiveKeyKeepsUsageCounters(t *testing.T) {
+	usage := []string{
+		"tokens_in", "tokens_out", "total_tokens", "total_tokens_in", "total_tokens_out",
+		"final_tokens", "final_tokens_in", "final_tokens_out", "prompt_tokens",
+		"completion_tokens", "cached_tokens", "reasoning_tokens", "max_tokens",
+		"token_count", "tokens_used", "tokens_charged", "Total_Tokens_In", "total tokens in",
+	}
+	for _, key := range usage {
+		if IsSensitiveKey(key) {
+			t.Errorf("IsSensitiveKey(%q) = true, usage counters must reach the audit log", key)
+		}
+	}
+
+	out := Redact(map[string]any{
+		"total_tokens_in": float64(10),
+		"final_tokens_in": 5,
+		"total_cost_usd":  "0.0042",
+		"tokens":          "ghp_abcdefghijklmnopqrstuv",
+		"token_usage_uri": "https://api.example.com/u?key=abcdef0123456789",
+	})
+	if out["total_tokens_in"] != float64(10) {
+		t.Errorf("total_tokens_in = %v, want 10", out["total_tokens_in"])
+	}
+	if out["final_tokens_in"] != 5 {
+		t.Errorf("final_tokens_in = %v, want 5", out["final_tokens_in"])
+	}
+	if out["total_cost_usd"] != "0.0042" {
+		t.Errorf("total_cost_usd = %v, want the cost to be preserved", out["total_cost_usd"])
+	}
+	if out["tokens"] != RedactedValue {
+		t.Errorf("tokens = %v, an unknown token-shaped key must stay redacted", out["tokens"])
+	}
+	if out["token_usage_uri"] != RedactedValue {
+		t.Errorf("token_usage_uri = %v, an unknown token-shaped key must stay redacted", out["token_usage_uri"])
+	}
+}
+
 func TestRedactReplacesSecretKeys(t *testing.T) {
 	out := Redact(map[string]any{
 		"tool_name":    "git.push",

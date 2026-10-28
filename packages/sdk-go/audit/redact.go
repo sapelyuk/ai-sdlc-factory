@@ -50,11 +50,35 @@ var secretValuePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(?:password|passwd|secret|token|api_key|apikey)\b\s*[=:]\s*\S+`),
 }
 
+// safeKeys are normalized key names that contain a word of the sensitive set
+// but hold observability counters rather than secret material. Token usage and
+// cost figures are the attribution contract of ADR-021, so redacting them would
+// make the audit log useless for billing. The list is exact-match on purpose: an
+// unknown key that merely contains "token" stays redacted.
+var safeKeys = map[string]struct{}{
+	"tokensin":         {},
+	"tokensout":        {},
+	"totaltokens":      {},
+	"totaltokensin":    {},
+	"totaltokensout":   {},
+	"finaltokens":      {},
+	"finaltokensin":    {},
+	"finaltokensout":   {},
+	"prompttokens":     {},
+	"completiontokens": {},
+	"cachedtokens":     {},
+	"reasoningtokens":  {},
+	"maxtokens":        {},
+	"tokencount":       {},
+	"tokensused":       {},
+	"tokenscharged":    {},
+}
+
 // IsSensitiveKey reports whether a details key name denotes secret material.
 func IsSensitiveKey(key string) bool {
-	normalized := strings.ToLower(key)
-	for _, sep := range []string{"_", "-", ".", " "} {
-		normalized = strings.ReplaceAll(normalized, sep, "")
+	normalized := normalizeKey(key)
+	if _, ok := safeKeys[normalized]; ok {
+		return false
 	}
 	for _, part := range sensitiveKeyParts {
 		if strings.Contains(normalized, part) {
@@ -62,6 +86,16 @@ func IsSensitiveKey(key string) bool {
 		}
 	}
 	return false
+}
+
+// normalizeKey lower-cases a key and drops the separators used by the naming
+// conventions of the services that write audit events.
+func normalizeKey(key string) string {
+	normalized := strings.ToLower(key)
+	for _, sep := range []string{"_", "-", ".", " "} {
+		normalized = strings.ReplaceAll(normalized, sep, "")
+	}
+	return normalized
 }
 
 // RedactString replaces known credential formats inside a string.
