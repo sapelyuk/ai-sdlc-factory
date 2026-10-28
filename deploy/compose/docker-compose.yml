@@ -217,21 +217,50 @@ services:
       dockerfile: apps/worker/Dockerfile
     container_name: ai-sdlc-factory-worker
     environment:
-      AI_DB_HOST: postgres
-      AI_DB_PORT: "5432"
-      # App DSN is assembled from the standard POSTGRES_* variables.
-      AI_DB_NAME: ${POSTGRES_DB:-ai_sdlc_factory}
-      AI_DB_USER: ${POSTGRES_USER:-ai_sdlc_factory}
-      AI_DB_PASSWORD: ${POSTGRES_PASSWORD:-ai_sdlc_dev_password}
-      AI_NATS_URL: nats://nats:4222
+      TEMPORAL_HOST: temporal:7233
+      AI_TEMPORAL_TASK_QUEUE: ai-sdlc-factory
+      LLM_GATEWAY_URL: http://gateway-llm:8040
+      TOOL_GATEWAY_URL: http://tool-gateway:8030
+      SEMANTIC_URL: http://semantic:8010
+      KNOWLEDGE_URL: http://knowledge:8020
+      DEFAULT_MAX_COST_USD: "10.0"
+      DEFAULT_MAX_STEPS: "50"
+    depends_on:
+      temporal:
+        condition: service_healthy
+      gateway-llm:
+        condition: service_healthy
+      tool-gateway:
+        condition: service_healthy
+      semantic:
+        condition: service_healthy
+      knowledge:
+        condition: service_healthy
+
+  temporal:
+    image: temporalio/auto-setup:1.26.0
+    container_name: ai-sdlc-factory-temporal
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - DYNAMODB_ENDPOINT=http://silo:9000
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-ai_sdlc_factory}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ai_sdlc_dev_password}
+      - POSTGRES_DB=${POSTGRES_DB:-ai_sdlc_factory}
+      - TEMPORAL_DEFAULT_NAMESPACE=ai-sdlc-factory
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
     depends_on:
       postgres:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-      vault:
-        condition: service_healthy
-      opa:
         condition: service_healthy
   semantic:
     build:
