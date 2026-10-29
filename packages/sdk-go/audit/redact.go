@@ -39,15 +39,21 @@ var sensitiveKeyParts = []string{
 
 // secretValuePatterns match well-known credential formats wherever they appear
 // inside a string value: AWS access key IDs, GitHub tokens, Slack tokens,
-// JWTs, PEM headers and DSN passwords.
+// JWTs, PEM headers, DSN passwords, and OpenAI/Anthropic API keys.
 var secretValuePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
 	regexp.MustCompile(`gh[pousr]_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`), // GitHub fine-grained PATs
+	regexp.MustCompile(`glpat-[A-Za-z0-9_-]{20,}`),     // GitLab PATs
 	regexp.MustCompile(`xox[baprs]-[0-9A-Za-z-]{10,}`),
 	regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`),
 	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`),
 	regexp.MustCompile(`(?i)[a-z0-9+.-]+://[^\s:@/]+:[^\s@/]+@`),
 	regexp.MustCompile(`(?i)\b(?:password|passwd|secret|token|api_key|apikey)\b\s*[=:]\s*\S+`),
+	// OpenAI / Anthropic API keys: more-specific prefixes first.
+	regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_-]{20,}`),  // Anthropic
+	regexp.MustCompile(`\bsk-proj-[A-Za-z0-9_-]{20,}`), // OpenAI project
+	regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{20,}`),      // OpenAI, Anthropic
 }
 
 // safeKeys are normalized key names that contain a word of the sensitive set

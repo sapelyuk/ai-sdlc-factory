@@ -2,6 +2,7 @@ package audit
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -119,6 +120,74 @@ func TestRedactScansStringValues(t *testing.T) {
 			if strings.Contains(got, leak) {
 				t.Errorf("%s: leaked %q in %q", name, leak, got)
 			}
+		}
+	}
+}
+
+// TestRedactSkCredentials guards the blocker reported in the review of PR #108:
+// OpenAI and Anthropic API keys must never reach the audit log. The first
+// assertion keeps the key name redacted; the second one proves that the value
+// patterns also catch the same credential under a neutral key and inside a
+// free-form message, which is where a leaked key actually shows up.
+func TestRedactSkCredentials(t *testing.T) {
+	cases := []string{
+		"sk-1234567890abcdefghijklmnopqrstuvwxyz",
+		"sk-ant-api03-abcdefghijklmnopqrstuvwxyz12345",
+		"sk-proj-abcdefghijklmnopqrstuvwxyz1234567890",
+	}
+	for _, c := range cases {
+		input := map[string]any{"api_key": c}
+		out := Redact(input)
+		if strings.Contains(fmt.Sprint(out), c) {
+			t.Errorf("sk- credential leaked: %s -> %v", c, out)
+		}
+
+		details := Redact(map[string]any{
+			"model": "gpt-4o",
+			"error": "upstream rejected the request with " + c,
+		})
+		encoded := fmt.Sprint(details)
+		if strings.Contains(encoded, c) {
+			t.Errorf("sk- credential leaked inside a value: %s -> %s", c, encoded)
+		}
+		if !strings.Contains(encoded, RedactedValue) {
+			t.Errorf("expected %s in %s for %s", RedactedValue, encoded, c)
+		}
+	}
+}
+
+// TestRedactProviderTokens covers the GitHub fine-grained and GitLab personal
+// access token formats that were absent from the value patterns.
+func TestRedactProviderTokens(t *testing.T) {
+	cases := map[string]string{
+		"github fine-grained": "github_pat_11ABCDEFG0abcdef_ABCDEFGHijklmnopqrstuvwxyz1234",
+		"gitlab pat":          "glpat-abcdefghijklmnopqrstuvwx",
+	}
+	for name, token := range cases {
+		got := RedactString("auth failed, credential " + token + " rejected")
+		if strings.Contains(got, token) {
+			t.Errorf("%s: token leaked: %q", name, got)
+		}
+		if !strings.Contains(got, RedactedValue) {
+			t.Errorf("%s: expected %s in %q", name, RedactedValue, got)
+		}
+	}
+}
+
+// TestRedactSkPatternsRespectWordBoundaries keeps legitimate identifiers intact.
+// "sk-" only marks a credential at the start of a word, so words that merely
+// contain the sequence must survive redaction untouched.
+func TestRedactSkPatternsRespectWordBoundaries(t *testing.T) {
+	safe := []string{
+		"sk-learn",
+		"task-run-workflow-execution",
+		"risk-level-assessment-and-remediation",
+		"flask-routing-configuration-guide",
+		"resource task-run-workflow-execution-01 created",
+	}
+	for _, s := range safe {
+		if got := RedactString(s); got != s {
+			t.Errorf("legitimate string was rewritten: %q -> %q", s, got)
 		}
 	}
 }
