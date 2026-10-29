@@ -40,3 +40,22 @@ if err := logger.Verify(ctx, workspaceID); err != nil {
 PostgreSQL appends run in a transaction, scope RLS to the workspace, acquire a
 per-workspace advisory lock, and lock the current chain head with `FOR UPDATE`.
 Migration `0014_global_audit_log` adds the hash-chain and idempotency columns.
+
+## Migration guard
+
+`audit_log` is created by migration `0007`, and `0014` adds the `NOT NULL`
+`hash` column on top of it. The hash chain can only start from an empty table,
+so `0014` aborts when `audit_log` already contains rows instead of backfilling
+hashes that would not belong to a verifiable chain. On a fresh database the
+migration applies cleanly; to re-apply it after a partial run, remove the
+existing rows first.
+
+## Redaction
+
+`Details` are passed through `Redact` before they are hashed and stored, so a
+secret never reaches the log. Keys whose name denotes secret material are
+replaced wholesale, and string values are screened for known credential
+formats: AWS access key IDs, GitHub (`ghp_…`, `github_pat_…`), GitLab
+(`glpat-…`), Slack, JWT, PEM private keys, DSN passwords, and OpenAI/Anthropic
+API keys (`sk-…`, `sk-proj-…`, `sk-ant-…`).
+
