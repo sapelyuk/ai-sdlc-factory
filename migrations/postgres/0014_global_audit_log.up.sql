@@ -9,6 +9,26 @@
 
 BEGIN;
 
+-- Guard: audit_log is created by migration 0007. Issue #14 transforms it into a
+-- tamper-evident log whose hash chain can only start from an empty table.
+-- Adding a NOT NULL column to an existing row set would either fail
+-- (PostgreSQL rejects ADD COLUMN ... NOT NULL on non-empty tables) or
+-- require a non-deterministic backfill that breaks chain integrity.
+-- Fail fast instead of silently corrupting history.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'audit_log'
+    ) THEN
+        IF EXISTS (SELECT 1 FROM public.audit_log LIMIT 1) THEN
+            RAISE EXCEPTION
+                'Migration 0014 requires empty audit_log: found % existing rows. Remove the rows manually before re-running.',
+                (SELECT COUNT(*) FROM public.audit_log);
+        END IF;
+    END IF;
+END $$;
+
 -- 1. resource_id identifies heterogeneous resources (run id, task id,
 --    container id), so it becomes free-form text.
 ALTER TABLE audit_log

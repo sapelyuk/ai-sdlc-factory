@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -361,4 +362,112 @@ func TestMigrationPrefixes(t *testing.T) {
 		_, err := strconv.Atoi(prefix)
 		require.NoError(t, err, "Migration file %s should start with numeric prefix", name)
 	}
+}
+
+// TestMigration0014GuardsExistingRows verifies that migration 0014 refuses to run
+// when audit_log already holds rows. The table is created empty by migration
+// 0007, and 0014 adds a NOT NULL hash column: PostgreSQL cannot satisfy that for
+// pre-existing rows, and any backfilled hash would not belong to a verifiable
+// chain, so the migration must fail fast instead of corrupting evidence.
+func TestMigration0014GuardsExistingRows(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := startTestPostgres(t)
+	defer db.Close()
+
+	files := loadSQLFiles(t, getMigrationsDir(t))
+
+	upNames := make([]string, 0, len(files))
+	for name := range files {
+		if len(name) >= 3 && name[len(name)-3:] == ".up" {
+			upNames = append(upNames, name)
+		}
+	}
+	sort.Strings(upNames)
+
+	// Apply every migration except 0014, so audit_log exists in its 0007 shape.
+	for _, name := range upNames {
+		if strings.HasPrefix(name, "0014_") {
+			continue
+		}
+		applySQL(t, ctx, db, files[name])
+	}
+
+	// A fresh schema leaves the log empty, and that is the state 0014 accepts.
+	var rows int
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT count(*) FROM audit_log").Scan(&rows))
+	require.Equal(t, 0, rows, "audit_log must start empty")
+
+	// Seed a workspace, then add one legacy audit row (resource_type is part of
+	// the pre-0014 shape).
+	_, err := db.ExecContext(ctx,
+		"INSERT INTO workspaces (name, owner_id) VALUES ('guard-test', 'human:guard-test')")
+	require.NoError(t, err, "seed workspace")
+
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO audit_log (workspace_id, actor_id, action, resource_type, resource_id)
+		 SELECT id, 'system:test', 'tool_call', 'tool', NULL FROM workspaces WHERE name = 'guard-test'`)
+	require.NoError(t, err, "seed audit row")
+
+	// Re-running 0014 against the non-empty table must fail with the guard error.
+	//
+	// The migration opens an explicit BEGIN;, and PostgreSQL stops the batch at
+	// the first error, so the session is left in an aborted transaction. A
+	// dedicated connection makes the rollback deterministic.
+	conn, err := db.Conn(ctx)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	_, err = conn.ExecContext(ctx, files["0014_global_audit_log.up"])
+	require.Error(t, err, "migration 0014 must reject a non-empty audit_log")
+	assert.Contains(t, err.Error(), "requires empty audit_log",
+		"the failure must name the guard requirement")
+
+	_, err = conn.ExecContext(ctx, "ROLLBACK")
+	require.NoError(t, err, "reset the transaction aborted by the guard")
+
+	// The whole migration is one transaction: it must have rolled back, leaving
+	// both the data and the old column shape untouched.
+	var rowsAfter int
+	require.NoError(t, conn.QueryRowContext(ctx, "SELECT count(*) FROM audit_log").Scan(&rowsAfter))
+	assert.Equal(t, 1, rowsAfter, "the failed migration must not delete evidence")
+
+	var hashColumn int
+	require.NoError(t, conn.QueryRowContext(ctx,
+		"SELECT count(*) FROM information_schema.columns WHERE table_name = 'audit_log' AND column_name = 'hash'").Scan(&hashColumn))
+	assert.Equal(t, 0, hashColumn, "the failed migration must not add the hash column")
+
+	var resourceType int
+	require.NoError(t, conn.QueryRowContext(ctx,
+		"SELECT count(*) FROM information_schema.columns WHERE table_name = 'audit_log' AND column_name = 'resource_type'").Scan(&resourceType))
+	assert.Equal(t, 1, resourceType, "the failed migration must not drop the old columns")
+}
+
+// TestMigration0014AppliesOnEmptyTable pins the other side of the guard: the
+// normal forward path (audit_log created empty by 0007) must still succeed, so
+// the guard cannot be an unconditional abort.
+func TestMigration0014AppliesOnEmptyTable(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := startTestPostgres(t)
+	defer db.Close()
+
+	files := loadSQLFiles(t, getMigrationsDir(t))
+
+	upNames := make([]string, 0, len(files))
+	for name := range files {
+		if len(name) >= 3 && name[len(name)-3:] == ".up" {
+			upNames = append(upNames, name)
+		}
+	}
+	sort.Strings(upNames)
+
+	for _, name := range upNames {
+		applySQL(t, ctx, db, files[name])
+	}
+
+	var hashColumn int
+	require.NoError(t, db.QueryRowContext(ctx,
+		"SELECT count(*) FROM information_schema.columns WHERE table_name = 'audit_log' AND column_name = 'hash'").Scan(&hashColumn))
+	assert.Equal(t, 1, hashColumn, "hash column should exist after a clean migration run")
 }
