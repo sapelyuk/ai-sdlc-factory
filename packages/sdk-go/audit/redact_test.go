@@ -1,0 +1,259 @@
+package audit
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+)
+
+func TestIsSensitiveKey(t *testing.T) {
+	sensitive := []string{
+		"token", "access_token", "X-Access-Token", "api_key", "APIKEY",
+		"password", "client_secret", "credentials", "authorization",
+		"private_key", "session_cookie", "DATABASE_DSN", "connection_string",
+		"vault_token", "bearer",
+	}
+	for _, key := range sensitive {
+		if !IsSensitiveKey(key) {
+			t.Errorf("IsSensitiveKey(%q) = false, want true", key)
+		}
+	}
+
+	plain := []string{"tool_name", "risk_level", "result", "model", "profile", "duration_ms", "run_id"}
+	for _, key := range plain {
+		if IsSensitiveKey(key) {
+			t.Errorf("IsSensitiveKey(%q) = true, want false", key)
+		}
+	}
+}
+
+// TestIsSensitiveKeyKeepsUsageCounters guards the billing contract: token usage
+// and cost figures must survive redaction, while any other key that merely
+// contains the word "token" must not.
+func TestIsSensitiveKeyKeepsUsageCounters(t *testing.T) {
+	usage := []string{
+		"tokens_in", "tokens_out", "total_tokens", "total_tokens_in", "total_tokens_out",
+		"final_tokens", "final_tokens_in", "final_tokens_out", "prompt_tokens",
+		"completion_tokens", "cached_tokens", "reasoning_tokens", "max_tokens",
+		"token_count", "tokens_used", "tokens_charged", "Total_Tokens_In", "total tokens in",
+	}
+	for _, key := range usage {
+		if IsSensitiveKey(key) {
+			t.Errorf("IsSensitiveKey(%q) = true, usage counters must reach the audit log", key)
+		}
+	}
+
+	out := Redact(map[string]any{
+		"total_tokens_in": float64(10),
+		"final_tokens_in": 5,
+		"total_cost_usd":  "0.0042",
+		"tokens":          "ghp_abcdefghijklmnopqrstuv",
+		"token_usage_uri": "https://api.example.com/u?key=abcdef0123456789",
+	})
+	if out["total_tokens_in"] != float64(10) {
+		t.Errorf("total_tokens_in = %v, want 10", out["total_tokens_in"])
+	}
+	if out["final_tokens_in"] != 5 {
+		t.Errorf("final_tokens_in = %v, want 5", out["final_tokens_in"])
+	}
+	if out["total_cost_usd"] != "0.0042" {
+		t.Errorf("total_cost_usd = %v, want the cost to be preserved", out["total_cost_usd"])
+	}
+	if out["tokens"] != RedactedValue {
+		t.Errorf("tokens = %v, an unknown token-shaped key must stay redacted", out["tokens"])
+	}
+	if out["token_usage_uri"] != RedactedValue {
+		t.Errorf("token_usage_uri = %v, an unknown token-shaped key must stay redacted", out["token_usage_uri"])
+	}
+}
+
+func TestRedactReplacesSecretKeys(t *testing.T) {
+	out := Redact(map[string]any{
+		"tool_name":    "git.push",
+		"access_token": "shhh",
+		"nested": map[string]any{
+			"api_key":  "shhh",
+			"endpoint": "https://example.com",
+		},
+		"list": []any{
+			map[string]any{"password": "shhh"},
+			"plain",
+		},
+	})
+
+	if out["tool_name"] != "git.push" {
+		t.Fatalf("non-sensitive key was modified: %v", out["tool_name"])
+	}
+	if out["access_token"] != RedactedValue {
+		t.Fatalf("access_token = %v, want %s", out["access_token"], RedactedValue)
+	}
+	nested := out["nested"].(map[string]any)
+	if nested["api_key"] != RedactedValue {
+		t.Fatalf("nested api_key = %v", nested["api_key"])
+	}
+	if nested["endpoint"] != "https://example.com" {
+		t.Fatalf("nested endpoint was modified: %v", nested["endpoint"])
+	}
+	first := out["list"].([]any)[0].(map[string]any)
+	if first["password"] != RedactedValue {
+		t.Fatalf("list item password = %v", first["password"])
+	}
+}
+
+func TestRedactScansStringValues(t *testing.T) {
+	cases := map[string]string{
+		"github token":  "failed with ghp_integrationsecret0123456789 in headers",
+		"aws key":       "access key AKIAIOSFODNN7EXAMPLE rejected",
+		"slack token":   "failed with " + "xoxb" + "-" + "test1234567890",
+		"jwt":           "authorization rejected: eyJhbGciOiJIUzI1NiIs.eyJzdWIiOiIxMjM0NTY3ODkw.c2lnbmF0dXJlYWJj",
+		"pem":           "loaded -----BEGIN RSA PRIVATE KEY----- blob",
+		"dsn":           "cannot reach postgres://user:supersecret@db:5432/app",
+		"inline secret": "config password=hunter2 not accepted",
+	}
+	for name, in := range cases {
+		got := RedactString(in)
+		if !strings.Contains(got, RedactedValue) {
+			t.Errorf("%s: secret not redacted: %q", name, got)
+		}
+		for _, leak := range []string{"hunter2", "supersecret", "AKIAIOSFODNN7EXAMPLE", "ghp_integrationsecret0123456789", "BEGIN RSA PRIVATE KEY"} {
+			if strings.Contains(got, leak) {
+				t.Errorf("%s: leaked %q in %q", name, leak, got)
+			}
+		}
+	}
+}
+
+// TestRedactSkCredentials guards the blocker reported in the review of PR #108:
+// OpenAI and Anthropic API keys must never reach the audit log. The first
+// assertion keeps the key name redacted; the second one proves that the value
+// patterns also catch the same credential under a neutral key and inside a
+// free-form message, which is where a leaked key actually shows up.
+func TestRedactSkCredentials(t *testing.T) {
+	cases := []string{
+		"sk-1234567890abcdefghijklmnopqrstuvwxyz",
+		"sk-ant-api03-abcdefghijklmnopqrstuvwxyz12345",
+		"sk-proj-abcdefghijklmnopqrstuvwxyz1234567890",
+	}
+	for _, c := range cases {
+		input := map[string]any{"api_key": c}
+		out := Redact(input)
+		if strings.Contains(fmt.Sprint(out), c) {
+			t.Errorf("sk- credential leaked: %s -> %v", c, out)
+		}
+
+		details := Redact(map[string]any{
+			"model": "gpt-4o",
+			"error": "upstream rejected the request with " + c,
+		})
+		encoded := fmt.Sprint(details)
+		if strings.Contains(encoded, c) {
+			t.Errorf("sk- credential leaked inside a value: %s -> %s", c, encoded)
+		}
+		if !strings.Contains(encoded, RedactedValue) {
+			t.Errorf("expected %s in %s for %s", RedactedValue, encoded, c)
+		}
+	}
+}
+
+// TestRedactProviderTokens covers the GitHub fine-grained and GitLab personal
+// access token formats that were absent from the value patterns.
+func TestRedactProviderTokens(t *testing.T) {
+	cases := map[string]string{
+		"github fine-grained": "github_pat_11ABCDEFG0abcdef_ABCDEFGHijklmnopqrstuvwxyz1234",
+		"gitlab pat":          "glpat-abcdefghijklmnopqrstuvwx",
+	}
+	for name, token := range cases {
+		got := RedactString("auth failed, credential " + token + " rejected")
+		if strings.Contains(got, token) {
+			t.Errorf("%s: token leaked: %q", name, got)
+		}
+		if !strings.Contains(got, RedactedValue) {
+			t.Errorf("%s: expected %s in %q", name, RedactedValue, got)
+		}
+	}
+}
+
+// TestRedactSkPatternsRespectWordBoundaries keeps legitimate identifiers intact.
+// "sk-" only marks a credential at the start of a word, so words that merely
+// contain the sequence must survive redaction untouched.
+func TestRedactSkPatternsRespectWordBoundaries(t *testing.T) {
+	safe := []string{
+		"sk-learn",
+		"task-run-workflow-execution",
+		"risk-level-assessment-and-remediation",
+		"flask-routing-configuration-guide",
+		"resource task-run-workflow-execution-01 created",
+	}
+	for _, s := range safe {
+		if got := RedactString(s); got != s {
+			t.Errorf("legitimate string was rewritten: %q -> %q", s, got)
+		}
+	}
+}
+
+func TestRedactLeavesSafeStrings(t *testing.T) {
+	in := "tool git.push denied by policy R3"
+	if got := RedactString(in); got != in {
+		t.Fatalf("safe string was rewritten: %q", got)
+	}
+}
+
+func TestRedactDoesNotMutateInput(t *testing.T) {
+	original := map[string]any{"token": "raw"}
+	Redact(original)
+	if original["token"] != "raw" {
+		t.Fatal("Redact must not mutate the caller's map")
+	}
+	if Redact(nil) != nil {
+		t.Fatal("Redact(nil) must stay nil")
+	}
+}
+
+func TestRedactBoundsRecursion(t *testing.T) {
+	deep := map[string]any{}
+	cursor := deep
+	for i := 0; i < maxRedactDepth+10; i++ {
+		next := map[string]any{"level": i}
+		cursor["child"] = next
+		cursor = next
+	}
+	out := Redact(deep)
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("deeply nested details must stay encodable: %v", err)
+	}
+	if !strings.Contains(string(encoded), RedactedValue) {
+		t.Fatalf("expected the depth limit to cut the payload short: %s", encoded)
+	}
+}
+
+// TestRedactRunsBeforeHashing is the guarantee required by issue #14 rule 4:
+// the hashed and stored payload never contains the secret.
+func TestRedactRunsBeforeHashing(t *testing.T) {
+	logger, store := fixedClock(t)
+	_, err := logger.Append(t.Context(), Event{
+		WorkspaceID: testWorkspace,
+		ActorID:     SystemActor("tool-gateway"),
+		Action:      ActionToolCall,
+		ResourceID:  "git.push",
+		Details: map[string]any{
+			"tool_name": "git.push",
+			"token":     "ghp_integrationsecret0123456789",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stored := store.Records(testWorkspace)[0]
+	if strings.Contains(string(stored.Details), "ghp_integrationsecret0123456789") {
+		t.Fatalf("secret leaked into details JSON: %s", stored.Details)
+	}
+	if !strings.Contains(string(stored.Details), RedactedValue) {
+		t.Fatalf("expected %s in details, got %s", RedactedValue, stored.Details)
+	}
+	if err := VerifyChain(store.Records(testWorkspace)); err != nil {
+		t.Fatalf("redaction must not break the chain: %v", err)
+	}
+}

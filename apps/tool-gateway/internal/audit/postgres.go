@@ -2,105 +2,51 @@ package audit
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
-// advisoryLockKey serializes audit appends across gateway replicas.
-const advisoryLockKey int64 = 0x746f6f6c5f617564 // "tool_aud"
-
-// PostgresStore persists audit records in tool_call_audit_log.
+// PostgresStore persists audit records in the global audit_log table
+// (migration 0014). Chain serialization (advisory lock plus FOR UPDATE on the
+// head), RLS tenant scoping and secret redaction are implemented by the shared
+// package; this adapter only translates between the tool-call view and the
+// global event contract.
 type PostgresStore struct {
-	pool *pgxpool.Pool
+	inner *sdkaudit.PostgresStore
 }
 
 // NewPostgresStore creates a Store backed by PostgreSQL.
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
-	return &PostgresStore{pool: pool}
+	return &PostgresStore{inner: sdkaudit.NewPostgresStore(pool)}
 }
 
-// Append writes a record in a transaction holding an advisory lock, so the
-// hash chain stays linear even with several gateway replicas.
+// Append writes one record of the workspace chain.
 func (s *PostgresStore) Append(ctx context.Context, workspaceID uuid.UUID, build func(prevHash string) (Record, error)) (Record, error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return Record{}, fmt.Errorf("audit: begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, advisoryLockKey); err != nil {
-		return Record{}, fmt.Errorf("audit: acquire chain lock: %w", err)
-	}
-
-	// RLS on tool_call_audit_log is scoped to the workspace of the call, so
-	// the tenant context must be set before the chain head is read. Each
-	// workspace therefore has its own linear hash chain.
-	// set_config(..., true) is the SET LOCAL equivalent for pooled
-	// connections.
-	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, true)`,
-		workspaceID.String()); err != nil {
-		return Record{}, fmt.Errorf("audit: set tenant context: %w", err)
-	}
-
-	var prev string
-	err = tx.QueryRow(ctx, `
-		SELECT hash_chain FROM tool_call_audit_log
-		WHERE workspace_id = $1
-		ORDER BY created_at DESC, id DESC
-		LIMIT 1`, workspaceID).Scan(&prev)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return Record{}, fmt.Errorf("audit: read previous hash: %w", err)
-	}
-
-	rec, err := build(prev)
+	rec, err := s.inner.Append(ctx, workspaceID, "", func(prev *string) (sdkaudit.Record, error) {
+		tool, err := build(derefHash(prev))
+		if err != nil {
+			return sdkaudit.Record{}, err
+		}
+		return tool.toSDK(derefHash(prev)), nil
+	})
 	if err != nil {
 		return Record{}, err
 	}
-
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO tool_call_audit_log
-			(id, workspace_id, agent_id, tool_name, risk_level, result,
-			 error_message, hash_chain, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $9)`,
-		rec.ID, rec.WorkspaceID, rec.AgentID, rec.ToolName, rec.RiskLevel,
-		rec.Result, rec.ErrorMessage, rec.HashChain, rec.CreatedAt); err != nil {
-		return Record{}, fmt.Errorf("audit: insert record: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return Record{}, fmt.Errorf("audit: commit: %w", err)
-	}
-	return rec, nil
+	return fromSDK(rec), nil
 }
 
 // Query returns all records for a workspace ordered by created_at.
 func (s *PostgresStore) Query(ctx context.Context, workspaceID uuid.UUID) ([]Record, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, workspace_id, agent_id, tool_name, risk_level, result,
-		       COALESCE(error_message, ''), hash_chain, created_at
-		FROM tool_call_audit_log
-		WHERE workspace_id = $1
-		ORDER BY created_at, id`, workspaceID)
+	records, err := s.inner.Query(ctx, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("audit: query: %w", err)
 	}
-	defer rows.Close()
-
-	var out []Record
-	for rows.Next() {
-		var rec Record
-		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.AgentID, &rec.ToolName,
-			&rec.RiskLevel, &rec.Result, &rec.ErrorMessage, &rec.HashChain, &rec.CreatedAt); err != nil {
-			return nil, fmt.Errorf("audit: scan: %w", err)
-		}
-		out = append(out, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("audit: rows: %w", err)
+	out := make([]Record, 0, len(records))
+	for _, rec := range records {
+		out = append(out, fromSDK(rec))
 	}
 	return out, nil
 }

@@ -54,26 +54,23 @@ func setupPostgresPool(t *testing.T) (*pgxpool.Pool, func()) {
 		t.Skipf("PostgreSQL ping failed: %v", err)
 	}
 
-	// Apply migration 0011 (tool_call_audit_log table).
-	migrationPath := "../../../../migrations/postgres/0011_tool_gateway_audit.up.sql"
-	migration, err := os.ReadFile(migrationPath)
-	if err != nil {
-		t.Skipf("read migration: %v", err)
-	}
-	if _, err := pool.Exec(ctx, string(migration)); err != nil {
-		pool.Close()
-		t.Skipf("apply migration: %v", err)
-	}
-
-	// Apply migration 0012 (stub result support).
-	stubMigrationPath := "../../../../migrations/postgres/0012_audit_stub_result.up.sql"
-	stubMigration, err := os.ReadFile(stubMigrationPath)
-	if err != nil {
-		t.Skipf("read stub migration: %v", err)
-	}
-	if _, err := pool.Exec(ctx, string(stubMigration)); err != nil {
-		pool.Close()
-		t.Skipf("apply stub migration: %v", err)
+	// Apply the migrations that create the global audit_log table:
+	// 0001 (workspaces), 0002 (task_runs), 0007 (audit_log), 0014 (hash chain).
+	for _, name := range []string{
+		"0001_init_squads_and_agents.up.sql",
+		"0002_init_tasks_and_sdlc.up.sql",
+		"0007_init_audit_and_cost.up.sql",
+		"0014_global_audit_log.up.sql",
+	} {
+		migrationPath := "../../../../migrations/postgres/" + name
+		migration, err := os.ReadFile(migrationPath)
+		if err != nil {
+			t.Skipf("read migration: %v", err)
+		}
+		if _, err := pool.Exec(ctx, string(migration)); err != nil {
+			pool.Close()
+			t.Skipf("apply migration %s: %v", name, err)
+		}
 	}
 
 	teardown := func() {

@@ -294,5 +294,6 @@ Migrations are in `migrations/postgres/`:
 | 11 | `0011_tool_gateway_audit` | tool_call_audit_log (hash-chained audit) |
 | 12 | `0012_audit_stub_result` | Adds the `stub` audit result |
 | 13 | `0013_task_runs_workspace_path` | Adds the TaskRun workspace path used by Sandbox Manager |
+| 14 | `0014_global_audit_log` | Transforms `audit_log` into a tamper-evident hash-chained log (global, not per-service) |
 
 Each migration has a paired `.up.sql` / `.down.sql` file for applying and rolling back.

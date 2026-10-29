@@ -2,11 +2,13 @@ package audit
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 func entry(tool, result string) Entry {
@@ -56,7 +58,7 @@ func TestVerifyDetectsTampering(t *testing.T) {
 	}
 
 	records := store.Records()
-	records[1].ToolName = "fs.delete"
+	records[1].Details = json.RawMessage(`{"tool_name":"fs.delete","risk_level":"R1","result":"denied","error_message":""}`)
 	if err := Verify(records); err == nil || !strings.Contains(err.Error(), "broken") {
 		t.Fatalf("expected a broken chain error, got %v", err)
 	}
@@ -146,6 +148,31 @@ func TestLoggerVerify(t *testing.T) {
 	ws := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	if err := logger.Verify(context.Background(), ws); err != nil {
 		t.Fatalf("Verify: %v", err)
+	}
+}
+
+func TestLoggerVerifiesMixedGlobalEvents(t *testing.T) {
+	workspaceID := uuid.New()
+	store := &sdkaudit.MemoryStore{}
+	sharedLogger := sdkaudit.NewLoggerWithStore(store)
+	for _, action := range []string{
+		sdkaudit.ActionRunStarted,
+		sdkaudit.ActionLLMCall,
+		sdkaudit.ActionSandboxCreate,
+	} {
+		if err := sharedLogger.Log(context.Background(), sdkaudit.Event{
+			WorkspaceID: workspaceID,
+			ActorID:     sdkaudit.SystemActor("test"),
+			Action:      action,
+			Details:     map[string]any{"run_id": "run-123"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	toolGatewayStore := &MemoryStore{inner: store, order: []uuid.UUID{workspaceID}}
+	if err := NewLogger(toolGatewayStore).Verify(context.Background(), workspaceID); err != nil {
+		t.Fatalf("verify mixed global event chain: %v", err)
 	}
 }
 

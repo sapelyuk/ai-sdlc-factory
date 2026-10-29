@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/agent"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/audit"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/handoff"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 // mockAgentStepActivity is the mock activity function registered with the test env.
@@ -28,20 +31,34 @@ func (m *mockAgentStepActivity) Execute(ctx context.Context, input agent.StepInp
 	return nil, args.Error(1)
 }
 
+type mockAuditActivity struct {
+	events []audit.Event
+}
+
+func (m *mockAuditActivity) Execute(_ context.Context, input audit.Event) error {
+	m.events = append(m.events, input)
+	return nil
+}
+
 // TaskRunSuite tests TaskRunWorkflow with mocked activities.
 type TaskRunSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
-	env      *testsuite.TestWorkflowEnvironment
-	activity *mockAgentStepActivity
+	env         *testsuite.TestWorkflowEnvironment
+	activity    *mockAgentStepActivity
+	auditEvents *mockAuditActivity
 }
 
 func (s *TaskRunSuite) SetupTest() {
 	s.env = s.NewTestWorkflowEnvironment()
 	s.activity = &mockAgentStepActivity{}
+	s.auditEvents = &mockAuditActivity{}
 	// Register with name "AgentStep" to match the workflow's ExecuteActivity call.
 	s.env.RegisterActivityWithOptions(s.activity.Execute, activity.RegisterOptions{
 		Name: "AgentStep",
+	})
+	s.env.RegisterActivityWithOptions(s.auditEvents.Execute, activity.RegisterOptions{
+		Name: AuditRecordActivityName,
 	})
 	s.env.RegisterWorkflow(TaskRunWorkflow)
 }
@@ -85,6 +102,7 @@ func (s *TaskRunSuite) TestTaskRunWorkflow_HappyPath() {
 
 	input := TaskRunInput{
 		TaskRunID:         "test-run-1",
+		WorkspaceID:       uuid.MustParse("11111111-1111-4111-8111-111111111111"),
 		Profile:           "code-fast",
 		TaskDescription:   "do task",
 		DefaultMaxCostUSD: 10.0,
@@ -99,6 +117,16 @@ func (s *TaskRunSuite) TestTaskRunWorkflow_HappyPath() {
 	s.NoError(s.env.GetWorkflowResult(&result))
 	s.NotNil(result)
 	s.Equal("Done", result.Goal)
+	s.Len(s.auditEvents.events, 3)
+	s.Equal(sdkaudit.ActionRunStarted, s.auditEvents.events[0].Action)
+	s.Equal(sdkaudit.ActionHandoffCreated, s.auditEvents.events[1].Action)
+	s.Equal(sdkaudit.ActionTaskCompleted, s.auditEvents.events[2].Action)
+	keys := map[string]bool{}
+	for _, ev := range s.auditEvents.events {
+		s.NotEmpty(ev.IdempotencyKey)
+		s.False(keys[ev.IdempotencyKey], "audit event idempotency keys must be distinct")
+		keys[ev.IdempotencyKey] = true
+	}
 }
 
 // TestTaskRunWorkflow_BudgetExceeded tests that the workflow stops on budget exceeded.
@@ -113,6 +141,7 @@ func (s *TaskRunSuite) TestTaskRunWorkflow_BudgetExceeded() {
 
 	input := TaskRunInput{
 		TaskRunID:         "test-run-2",
+		WorkspaceID:       uuid.MustParse("11111111-1111-4111-8111-111111111111"),
 		Profile:           "code-fast",
 		TaskDescription:   "do task",
 		DefaultMaxCostUSD: 1.0,
@@ -137,6 +166,7 @@ func (s *TaskRunSuite) TestTaskRunWorkflow_MaxStepsReached() {
 
 	input := TaskRunInput{
 		TaskRunID:         "test-run-3",
+		WorkspaceID:       uuid.MustParse("11111111-1111-4111-8111-111111111111"),
 		Profile:           "code-fast",
 		TaskDescription:   "do task",
 		DefaultMaxCostUSD: 100.0,
@@ -169,6 +199,7 @@ func (s *TaskRunSuite) TestSDLCWorkflow_Minimal() {
 
 	input := SDLCInput{
 		TaskRunID:         "sdlc-run-1",
+		WorkspaceID:       uuid.MustParse("11111111-1111-4111-8111-111111111111"),
 		Profile:           "code-fast",
 		TaskDesc:          "do task",
 		DefaultMaxCostUSD: 10.0,
@@ -183,4 +214,15 @@ func (s *TaskRunSuite) TestSDLCWorkflow_Minimal() {
 	s.NoError(s.env.GetWorkflowResult(&result))
 	s.NotNil(result)
 	s.Equal("SDLC done", result.Goal)
+}
+
+func (s *TaskRunSuite) TestTaskRunWorkflow_RequiresWorkspace() {
+	s.env.ExecuteWorkflow(TaskRunWorkflow, TaskRunInput{
+		TaskRunID:         "test-run-no-workspace",
+		Profile:           "code-fast",
+		DefaultMaxCostUSD: 1,
+		DefaultMaxSteps:   1,
+	})
+	s.Error(s.env.GetWorkflowError())
+	s.Empty(s.auditEvents.events)
 }

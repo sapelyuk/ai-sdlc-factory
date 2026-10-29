@@ -1,14 +1,18 @@
 # Build stage
 FROM golang:1.26-alpine AS builder
 
-WORKDIR /app
+# The app resolves the shared SDK through a `replace` directive that points at
+# ../../packages/sdk-go, so the build tree has to keep that relative layout.
+WORKDIR /app/apps/worker
 
 # Copy go mod files first for caching
-COPY apps/worker/go.mod ./
+COPY apps/worker/go.mod apps/worker/go.sum ./
+COPY packages/sdk-go/go.mod packages/sdk-go/go.sum /app/packages/sdk-go/
 RUN go mod download
 
 # Copy source code
-COPY apps/worker/ .
+COPY apps/worker/ ./
+COPY packages/sdk-go/ /app/packages/sdk-go/
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /worker ./cmd/

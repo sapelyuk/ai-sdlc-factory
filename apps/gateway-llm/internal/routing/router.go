@@ -14,6 +14,7 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/domain"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/providers"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/repository"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 // CallMeta carries attribution identifiers for a logical call.
@@ -52,11 +53,19 @@ type Router struct {
 	repo      callRepo
 	providers map[string]providers.Provider
 	now       func() time.Time
+	// auditor records one llm_call event per finished logical call (issue #14).
+	auditor sdkaudit.Auditor
 }
 
 // New creates a Router.
 func New(cat catalogSource, repo callRepo, providers map[string]providers.Provider) *Router {
-	return &Router{catalog: cat, repo: repo, providers: providers, now: func() time.Time { return time.Now().UTC() }}
+	return &Router{
+		catalog:   cat,
+		repo:      repo,
+		providers: providers,
+		now:       func() time.Time { return time.Now().UTC() },
+		auditor:   sdkaudit.Nop(),
+	}
 }
 
 // SetClock overrides the clock (used in tests).
@@ -129,6 +138,11 @@ func (r *Router) Chat(ctx context.Context, profileName string, req domain.ChatRe
 		}
 		if err := r.repo.FinishLogicalCall(finalizeCtx, call); err != nil {
 			log.Printf("ERROR: failed to finalize partial logical call %s: %v", call.ID, err)
+		} else {
+			// The row reached a final state on a detached context (client
+			// disconnect or provider panic), so the audit event uses the same
+			// budget instead of the canceled request context.
+			r.auditLLMCall(finalizeCtx, call, errors.New("finalized by the deferred finalizer"))
 		}
 	}()
 
@@ -152,6 +166,7 @@ func (r *Router) Chat(ctx context.Context, profileName string, req domain.ChatRe
 		log.Printf("ERROR: failed to persist failed logical call %s: %v", call.ID, err)
 	} else {
 		finalized = true
+		r.auditLLMCall(ctx, call, lastErr)
 	}
 	return &Result{LogicalCall: call}, fmt.Errorf("%w: %w", domain.ErrAllFailed, lastErr)
 }
@@ -213,6 +228,7 @@ func (r *Router) tryAttempt(
 		if err := r.repo.FinishLogicalCall(ctx, call); err != nil {
 			return nil, fmt.Errorf("persist succeeded logical call: %w", err)
 		}
+		r.auditLLMCall(ctx, call, nil)
 		return &Result{LogicalCall: call, Content: resp.Content}, nil
 	}
 

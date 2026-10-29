@@ -38,10 +38,16 @@ type stubRepo struct {
 	health       map[repository.ModelKey]*domain.ModelHealth
 	finished     []*domain.LogicalCall
 	created      []*domain.LogicalCall
+	// workspaceID mirrors the tenant the real repository reads from the
+	// context, so audit events carry a valid workspace.
+	workspaceID uuid.UUID
 }
 
 func newStubRepo() *stubRepo {
-	return &stubRepo{health: make(map[repository.ModelKey]*domain.ModelHealth)}
+	return &stubRepo{
+		health:      make(map[repository.ModelKey]*domain.ModelHealth),
+		workspaceID: uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+	}
 }
 
 func (s *stubRepo) HealthFor(ctx context.Context, keys []repository.ModelKey) (map[repository.ModelKey]*domain.ModelHealth, error) {
@@ -63,6 +69,10 @@ func (s *stubRepo) CreateLogicalCall(ctx context.Context, call *domain.LogicalCa
 	// Assign an ID if not already set (mimics DB behavior).
 	if call.ID == uuid.Nil {
 		call.ID = uuid.New()
+	}
+	// The real repository stamps the tenant taken from the request context.
+	if call.WorkspaceID == uuid.Nil {
+		call.WorkspaceID = s.workspaceID
 	}
 	s.logicalCalls = append(s.logicalCalls, call)
 	return nil

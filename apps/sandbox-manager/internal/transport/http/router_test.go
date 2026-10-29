@@ -21,6 +21,7 @@ import (
 	"github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/config"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/sandbox"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 type routerDocker struct {
@@ -93,6 +94,15 @@ type routerTasks struct {
 	readyErr error
 }
 
+type routerAuditRecorder struct {
+	events []sdkaudit.Event
+}
+
+func (a *routerAuditRecorder) Log(_ context.Context, event sdkaudit.Event) error {
+	a.events = append(a.events, event)
+	return nil
+}
+
 func (s routerTasks) WorkspacePath(context.Context, uuid.UUID, uuid.UUID) (string, error) {
 	return s.path, s.err
 }
@@ -100,12 +110,16 @@ func (s routerTasks) WorkspacePath(context.Context, uuid.UUID, uuid.UUID) (strin
 func (s routerTasks) Ready(context.Context) error { return s.readyErr }
 
 func newRouterTestHandler(tasks sandbox.TaskRunStore, docker *routerDocker) http.Handler {
+	return newRouterTestHandlerWithAuditor(tasks, docker, nil)
+}
+
+func newRouterTestHandlerWithAuditor(tasks sandbox.TaskRunStore, docker *routerDocker, auditor sdkaudit.Auditor) http.Handler {
 	manager := sandbox.NewManager(docker, &config.Config{
 		Runtime:        "runsc",
 		SandboxImage:   "ai-sdlc-factory/sandbox-go-node:latest",
 		SandboxNetwork: "sandbox-net",
 		DiskLimitBytes: 2 * 1024 * 1024 * 1024,
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)), auditor)
 	return NewRouter(Options{
 		Manager: manager,
 		Tasks:   tasks,
@@ -124,8 +138,9 @@ func makeRequest(handler http.Handler, body string) *httptest.ResponseRecorder {
 
 func TestExecResolvesTenantWorkspaceAndDestroysContainer(t *testing.T) {
 	docker := &routerDocker{stdout: []byte("hello")}
+	auditor := &routerAuditRecorder{}
 	workspacePath := filepath.Join(t.TempDir(), "task-1")
-	handler := newRouterTestHandler(routerTasks{path: workspacePath}, docker)
+	handler := newRouterTestHandlerWithAuditor(routerTasks{path: workspacePath}, docker, auditor)
 	taskRunID := uuid.NewString()
 	response := makeRequest(handler, `{"task_run_id":"`+taskRunID+`","command":["echo","hello"]}`)
 	if response.Code != http.StatusOK {
@@ -140,6 +155,16 @@ func TestExecResolvesTenantWorkspaceAndDestroysContainer(t *testing.T) {
 	}
 	if docker.hostConfig.Mounts[0].Source != workspacePath || !docker.removed {
 		t.Fatalf("workspace mount/cleanup = %+v / %v", docker.hostConfig.Mounts, docker.removed)
+	}
+	if len(auditor.events) != 2 {
+		t.Fatalf("audit events = %d, want create and destroy", len(auditor.events))
+	}
+	workspaceID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	if auditor.events[0].WorkspaceID != workspaceID || auditor.events[1].WorkspaceID != workspaceID {
+		t.Fatalf("audit tenant IDs = %s/%s, want %s", auditor.events[0].WorkspaceID, auditor.events[1].WorkspaceID, workspaceID)
+	}
+	if auditor.events[1].Details["reason"] != "exec_completed" {
+		t.Fatalf("destroy event details = %+v", auditor.events[1].Details)
 	}
 }
 

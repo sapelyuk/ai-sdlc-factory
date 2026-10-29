@@ -8,8 +8,15 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/mark3labs/mcp-go v1.3.0
 	github.com/open-policy-agent/opa v1.21.4
+	github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go v0.0.0
+	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 )
+
+// The shared SDK lives in the same monorepo and is not published, so every
+// app resolves it from the repository tree. The Dockerfile copies
+// packages/ alongside the app for the same reason.
+replace github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go => ../../packages/sdk-go
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -79,7 +86,6 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.6 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.3 // indirect
 	github.com/testcontainers/testcontainers-go v0.44.0 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect

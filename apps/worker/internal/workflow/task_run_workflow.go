@@ -10,14 +10,20 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/agent"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/audit"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/handoff"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 // TaskRunInput is the input for TaskRunWorkflow.
 type TaskRunInput struct {
 	// TaskRunID uniquely identifies this task run instance.
 	TaskRunID string `json:"task_run_id"`
+	// WorkspaceID is the tenant that owns the run. It is mandatory: the audit
+	// log is partitioned and RLS-filtered by workspace (issue #14), and every
+	// event of the run must land in that workspace's chain.
+	WorkspaceID uuid.UUID `json:"workspace_id"`
 	// RunID is the SDLC run that owns this task run (LLM attribution).
 	RunID string `json:"run_id,omitempty"`
 	// TaskID is the task being executed (LLM attribution).
@@ -56,6 +62,44 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
+
+	// The audit event is required by the security contract, so a run without a
+	// workspace cannot be attributed and must not start.
+	if input.WorkspaceID == uuid.Nil {
+		return nil, fmt.Errorf("workflow: workspace_id is required")
+	}
+	actor := audit.ActorForRun(input.AgentID)
+
+	// Audit events are small writes; they get their own budget and must never
+	// stall the run, so a failure is logged and the loop continues.
+	auditCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    10 * time.Second,
+			MaximumAttempts:    3,
+		},
+	})
+
+	runStartedKey, err := auditIdempotencyKey(ctx)
+	if err != nil {
+		return nil, err
+	}
+	recordAudit(auditCtx, audit.Event{
+		WorkspaceID:    input.WorkspaceID,
+		ActorID:        actor,
+		Action:         sdkaudit.ActionRunStarted,
+		IdempotencyKey: runStartedKey,
+		ResourceID:     input.TaskRunID,
+		Details: map[string]any{
+			"task_run_id": input.TaskRunID,
+			"run_id":      input.RunID,
+			"task_id":     input.TaskID,
+			"agent_id":    input.AgentID,
+			"profile":     input.Profile,
+		},
+	})
 
 	// Resolve effective limits.
 	maxCost := input.DefaultMaxCostUSD
@@ -117,6 +161,38 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 
 		// Handoff ready.
 		if result.Handoff != nil {
+			handoffKey, err := auditIdempotencyKey(ctx)
+			if err != nil {
+				return nil, err
+			}
+			recordAudit(auditCtx, audit.Event{
+				WorkspaceID:    input.WorkspaceID,
+				ActorID:        actor,
+				Action:         sdkaudit.ActionHandoffCreated,
+				IdempotencyKey: handoffKey,
+				ResourceID:     input.TaskRunID,
+				Details:        handoffDetails(input, result.Handoff),
+			})
+			completedKey, err := auditIdempotencyKey(ctx)
+			if err != nil {
+				return nil, err
+			}
+			recordAudit(auditCtx, audit.Event{
+				WorkspaceID:    input.WorkspaceID,
+				ActorID:        actor,
+				Action:         sdkaudit.ActionTaskCompleted,
+				IdempotencyKey: completedKey,
+				ResourceID:     input.TaskRunID,
+				Details: map[string]any{
+					"task_run_id":    input.TaskRunID,
+					"run_id":         input.RunID,
+					"task_id":        input.TaskID,
+					"agent_id":       input.AgentID,
+					"profile":        input.Profile,
+					"steps":          budgetSnap.Steps,
+					"total_cost_usd": budgetSnap.TotalCost,
+				},
+			})
 			return result.Handoff, nil
 		}
 	}
@@ -126,3 +202,50 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 
 // AgentStepActivityName is the registered name of the AgentStep activity.
 const AgentStepActivityName = "AgentStep"
+
+// AuditRecordActivityName is the registered name of the audit activity.
+const AuditRecordActivityName = "AuditRecord"
+
+func auditIdempotencyKey(ctx workflow.Context) (string, error) {
+	var key string
+	if err := workflow.SideEffect(ctx, func(workflow.Context) any {
+		return uuid.NewString()
+	}).Get(&key); err != nil {
+		return "", fmt.Errorf("workflow: create audit idempotency key: %w", err)
+	}
+	return key, nil
+}
+
+// recordAudit appends one event through the audit activity.
+//
+// A failed append is logged and swallowed: an audit outage must not abort an
+// agent run that is already consuming budget. The run stays attributable
+// because the remaining events of the same chain are still written.
+func recordAudit(ctx workflow.Context, ev audit.Event) {
+	if err := workflow.ExecuteActivity(ctx, AuditRecordActivityName, ev).Get(ctx, nil); err != nil {
+		workflow.GetLogger(ctx).Warn(
+			"audit event was not recorded",
+			"action", ev.Action,
+			"resource_id", ev.ResourceID,
+			"error", err,
+		)
+	}
+}
+
+// handoffDetails renders the handoff summary for the audit log. Only the goal
+// and the item counts are stored: the full package is already persisted by the
+// caller of the workflow, and the audit chain must stay compact.
+func handoffDetails(input TaskRunInput, pkg *handoff.HandoffPackage) map[string]any {
+	return map[string]any{
+		"task_run_id":         input.TaskRunID,
+		"run_id":              input.RunID,
+		"task_id":             input.TaskID,
+		"agent_id":            input.AgentID,
+		"goal":                pkg.Goal,
+		"context_refs":        len(pkg.ContextRefs),
+		"acceptance_criteria": len(pkg.AcceptanceCriteria),
+		"constraints":         len(pkg.Constraints),
+		"decisions_made":      len(pkg.DecisionsMade),
+		"open_questions":      len(pkg.OpenQuestions),
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/google/uuid"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/config"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 const (
@@ -26,17 +27,21 @@ const (
 
 // Manager creates and manages isolated task-run containers.
 type Manager struct {
-	docker DockerClient
-	config *config.Config
-	logger *slog.Logger
+	docker  DockerClient
+	config  *config.Config
+	logger  *slog.Logger
+	auditor sdkaudit.Auditor
 }
 
 // NewManager constructs a sandbox manager.
-func NewManager(docker DockerClient, cfg *config.Config, logger *slog.Logger) *Manager {
+func NewManager(docker DockerClient, cfg *config.Config, logger *slog.Logger, auditor sdkaudit.Auditor) *Manager {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Manager{docker: docker, config: cfg, logger: logger}
+	if auditor == nil {
+		auditor = sdkaudit.Nop()
+	}
+	return &Manager{docker: docker, config: cfg, logger: logger, auditor: auditor}
 }
 
 // Ready checks the Docker API connection through the configured proxy.
@@ -46,7 +51,10 @@ func (m *Manager) Ready(ctx context.Context) error {
 }
 
 // Create creates a non-root sandbox with a read-only root filesystem.
-func (m *Manager) Create(ctx context.Context, taskRunID uuid.UUID, workspacePath string) (string, error) {
+func (m *Manager) Create(ctx context.Context, workspaceID, taskRunID uuid.UUID, workspacePath string) (string, error) {
+	if workspaceID == uuid.Nil {
+		return "", errors.New("workspace_id must not be nil")
+	}
 	if taskRunID == uuid.Nil {
 		return "", errors.New("task_run_id must not be nil")
 	}
@@ -113,6 +121,27 @@ func (m *Manager) Create(ctx context.Context, taskRunID uuid.UUID, workspacePath
 		}
 		return "", fmt.Errorf("start sandbox container: %w", err)
 	}
+	if err := m.auditor.Log(ctx, sdkaudit.Event{
+		WorkspaceID:    workspaceID,
+		ActorID:        sdkaudit.SystemActor("sandbox-manager"),
+		Action:         sdkaudit.ActionSandboxCreate,
+		IdempotencyKey: "sandbox_create:" + created.ID,
+		ResourceID:     created.ID,
+		Details: map[string]any{
+			"container_id":   created.ID,
+			"image":          m.config.SandboxImage,
+			"limits":         map[string]any{"disk_bytes": m.config.DiskLimitBytes, "memory_bytes": int64(512 * 1024 * 1024), "nano_cpus": int64(500_000_000), "pids": pidsLimit},
+			"workspace_path": workspacePath,
+		},
+	}); err != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		removeErr := m.docker.ContainerRemove(cleanupCtx, created.ID, container.RemoveOptions{Force: true, RemoveVolumes: true})
+		if removeErr != nil {
+			return "", errors.Join(fmt.Errorf("audit sandbox creation: %w", err), fmt.Errorf("remove unaudited sandbox: %w", removeErr))
+		}
+		return "", fmt.Errorf("audit sandbox creation: %w", err)
+	}
 	return created.ID, nil
 }
 
@@ -167,9 +196,15 @@ func (m *Manager) Exec(ctx context.Context, containerID string, command []string
 }
 
 // Destroy stops and removes a sandbox and any anonymous volumes it owns.
-func (m *Manager) Destroy(ctx context.Context, containerID string) error {
+func (m *Manager) Destroy(ctx context.Context, workspaceID uuid.UUID, containerID, reason string) error {
+	if workspaceID == uuid.Nil {
+		return errors.New("workspace_id must not be nil")
+	}
 	if containerID == "" {
 		return errors.New("container ID is required")
+	}
+	if reason == "" {
+		return errors.New("destroy reason is required")
 	}
 	stopErr := m.docker.ContainerStop(ctx, containerID, container.StopOptions{Timeout: ptr(int(1))})
 	removeErr := m.docker.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true, RemoveVolumes: true})
@@ -178,6 +213,19 @@ func (m *Manager) Destroy(ctx context.Context, containerID string) error {
 	}
 	if removeErr != nil {
 		return fmt.Errorf("remove sandbox container: %w", removeErr)
+	}
+	if err := m.auditor.Log(ctx, sdkaudit.Event{
+		WorkspaceID:    workspaceID,
+		ActorID:        sdkaudit.SystemActor("sandbox-manager"),
+		Action:         sdkaudit.ActionSandboxDestroy,
+		IdempotencyKey: "sandbox_destroy:" + containerID,
+		ResourceID:     containerID,
+		Details: map[string]any{
+			"container_id": containerID,
+			"reason":       reason,
+		},
+	}); err != nil {
+		return fmt.Errorf("audit sandbox destruction: %w", err)
 	}
 	return nil
 }

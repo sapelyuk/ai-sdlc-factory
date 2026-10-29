@@ -449,6 +449,104 @@ func TestVerifyAuditEndpoint(t *testing.T) {
 	})
 }
 
+func TestRunAuditEndpointsUseWorkspaceIdentity(t *testing.T) {
+	const workspaceID = "11111111-1111-1111-1111-111111111111"
+	const agentID = "22222222-2222-2222-2222-222222222222"
+	store := audit.NewMemoryStore()
+	logger := audit.NewLogger(store)
+	_, err := logger.Record(context.Background(), audit.Entry{
+		WorkspaceID: uuid.MustParse(workspaceID),
+		AgentID:     uuid.MustParse(agentID),
+		ToolName:    "run-123",
+		RiskLevel:   "R1",
+		Result:      audit.ResultSuccess,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := NewRouter(Options{
+		MCP:        &nextHandler{},
+		Catalog:    testCatalog(t),
+		Authorizer: &fakeAuthorizer{},
+		Auditor:    logger,
+		DB:         fakePinger{},
+	}).Handler()
+
+	t.Run("query run records", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/audit?run_id=run-123", nil)
+		setIdentity(req, "admin", "R0", "")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"resource_id":"run-123"`) {
+			t.Fatalf("status/body = %d/%s", rec.Code, rec.Body)
+		}
+	})
+
+	t.Run("verify current workspace", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/audit/verify", nil)
+		setIdentity(req, "admin", "R0", "")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"ok"`) {
+			t.Fatalf("status/body = %d/%s", rec.Code, rec.Body)
+		}
+	})
+
+	t.Run("reject non-admin", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/audit?run_id=run-123", nil)
+		setIdentity(req, "developer", "R0", "")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403", rec.Code)
+		}
+	})
+}
+
+func TestRunAuditHandlerMatchesRunIDInGlobalDetails(t *testing.T) {
+	const workspaceID = "11111111-1111-1111-1111-111111111111"
+	store := fixedAuditRecordStore{records: []audit.Record{{
+		ID:          uuid.New(),
+		WorkspaceID: uuid.MustParse(workspaceID),
+		ActorID:     "system:worker",
+		Action:      "run_started",
+		ResourceID:  "task-run-1",
+		Details:     json.RawMessage(`{"run_id":"run-123"}`),
+	}}}
+	router := NewRouter(Options{
+		MCP:        &nextHandler{},
+		Catalog:    testCatalog(t),
+		Authorizer: &fakeAuthorizer{},
+		Auditor:    audit.NewLogger(store),
+		DB:         fakePinger{},
+	}).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/audit?run_id=run-123", nil)
+	setIdentity(req, "admin", "R0", "")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"action":"run_started"`) {
+		t.Fatalf("status/body = %d/%s", rec.Code, rec.Body)
+	}
+}
+
+type fixedAuditRecordStore struct {
+	records []audit.Record
+}
+
+func (s fixedAuditRecordStore) Append(context.Context, uuid.UUID, func(string) (audit.Record, error)) (audit.Record, error) {
+	return audit.Record{}, errors.New("append not supported")
+}
+
+func (s fixedAuditRecordStore) Query(_ context.Context, workspaceID uuid.UUID) ([]audit.Record, error) {
+	records := make([]audit.Record, 0, len(s.records))
+	for _, record := range s.records {
+		if record.WorkspaceID == workspaceID {
+			records = append(records, record)
+		}
+	}
+	return records, nil
+}
+
 type failingStore struct{}
 
 func (failingStore) Append(context.Context, uuid.UUID, func(string) (audit.Record, error)) (audit.Record, error) {

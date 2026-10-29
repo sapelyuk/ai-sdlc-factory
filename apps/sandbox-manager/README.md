@@ -77,7 +77,7 @@ These are planning estimates, not per-language quotas.
 | `PORT` | `8060` | HTTP listen port |
 | `DOCKER_HOST` | required | Docker API proxy URL, normally `tcp://docker-socket-proxy:2375` |
 | `RUNTIME` | `runc` | `runsc` for production/CI; `runc` emits a warning for local development |
-| `DATABASE_URL` | required | PostgreSQL DSN used to resolve tenant-scoped TaskRuns |
+| `DATABASE_URL` | required | PostgreSQL DSN used to resolve tenant-scoped TaskRuns and write audit events |
 | `SANDBOX_DISK_LIMIT_BYTES` | `2147483648` | Container writable-layer size |
 | `SANDBOX_NETWORK` | `sandbox-net` | Dedicated internal network attached to sandbox containers |
 | `SANDBOX_IMAGE` | `ai-sdlc-factory/sandbox-go-node:latest` | Prebuilt sandbox base image |

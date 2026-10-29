@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/sandbox-manager/internal/config"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 type fakeDocker struct {
@@ -34,6 +35,16 @@ type fakeDocker struct {
 	execCreateErr error
 	attachErr     error
 	inspectErr    error
+}
+
+type auditRecorder struct {
+	events []sdkaudit.Event
+	err    error
+}
+
+func (a *auditRecorder) Log(_ context.Context, event sdkaudit.Event) error {
+	a.events = append(a.events, event)
+	return a.err
 }
 
 func (d *fakeDocker) Ping(context.Context) (types.Ping, error) {
@@ -96,12 +107,16 @@ func multiplexedOutput(stream byte, content []byte) []byte {
 }
 
 func newTestManager(docker *fakeDocker, runtime string) *Manager {
+	return newTestManagerWithAuditor(docker, runtime, nil)
+}
+
+func newTestManagerWithAuditor(docker *fakeDocker, runtime string, auditor sdkaudit.Auditor) *Manager {
 	return NewManager(docker, &config.Config{
 		Runtime:        runtime,
 		SandboxImage:   "ai-sdlc-factory/sandbox-go-node:latest",
 		SandboxNetwork: "sandbox-net",
 		DiskLimitBytes: 2 * 1024 * 1024 * 1024,
-	}, nil)
+	}, nil, auditor)
 }
 
 func TestCreateUsesRequiredIsolationAndLimits(t *testing.T) {
@@ -110,7 +125,7 @@ func TestCreateUsesRequiredIsolationAndLimits(t *testing.T) {
 	taskRunID := uuid.New()
 	path := filepath.Join(t.TempDir(), taskRunID.String())
 
-	id, err := manager.Create(context.Background(), taskRunID, path)
+	id, err := manager.Create(context.Background(), uuid.New(), taskRunID, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,9 +165,52 @@ func TestCreateUsesRequiredIsolationAndLimits(t *testing.T) {
 	}
 }
 
+func TestCreateWritesTenantScopedAuditEvent(t *testing.T) {
+	docker := &fakeDocker{}
+	auditor := &auditRecorder{}
+	manager := newTestManagerWithAuditor(docker, "runsc", auditor)
+	workspaceID := uuid.New()
+	path := filepath.Join(t.TempDir(), "workspace")
+
+	containerID, err := manager.Create(context.Background(), workspaceID, uuid.New(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if containerID != "container-123" || len(auditor.events) != 1 {
+		t.Fatalf("container/events = %q/%d", containerID, len(auditor.events))
+	}
+	ev := auditor.events[0]
+	if ev.WorkspaceID != workspaceID || ev.Action != sdkaudit.ActionSandboxCreate ||
+		ev.IdempotencyKey != "sandbox_create:container-123" || ev.ResourceID != containerID {
+		t.Fatalf("audit event = %+v", ev)
+	}
+	if ev.Details["container_id"] != containerID ||
+		ev.Details["image"] != "ai-sdlc-factory/sandbox-go-node:latest" ||
+		ev.Details["workspace_path"] != path {
+		t.Fatalf("audit details = %+v", ev.Details)
+	}
+	limits, ok := ev.Details["limits"].(map[string]any)
+	if !ok || limits["disk_bytes"] != int64(2*1024*1024*1024) ||
+		limits["memory_bytes"] != int64(512*1024*1024) || limits["nano_cpus"] != int64(500_000_000) {
+		t.Fatalf("audit limits = %#v", ev.Details["limits"])
+	}
+}
+
+func TestCreateRemovesSandboxWhenAuditFails(t *testing.T) {
+	docker := &fakeDocker{}
+	auditor := &auditRecorder{err: errors.New("audit unavailable")}
+	manager := newTestManagerWithAuditor(docker, "runsc", auditor)
+	if _, err := manager.Create(context.Background(), uuid.New(), uuid.New(), filepath.Join(t.TempDir(), "workspace")); err == nil {
+		t.Fatal("expected audit failure")
+	}
+	if !docker.removed {
+		t.Fatal("unaudited container should be removed")
+	}
+}
+
 func TestCreateRejectsUnsafeWorkspacePath(t *testing.T) {
 	manager := newTestManager(&fakeDocker{}, "runsc")
-	if _, err := manager.Create(context.Background(), uuid.New(), "relative/path"); err == nil {
+	if _, err := manager.Create(context.Background(), uuid.New(), uuid.New(), "relative/path"); err == nil {
 		t.Fatal("expected relative workspace path to be rejected")
 	}
 }
@@ -160,7 +218,7 @@ func TestCreateRejectsUnsafeWorkspacePath(t *testing.T) {
 func TestCreateRemovesContainerWhenStartFails(t *testing.T) {
 	docker := &fakeDocker{startErr: errors.New("start failed")}
 	manager := newTestManager(docker, "runc")
-	_, err := manager.Create(context.Background(), uuid.New(), filepath.Join(t.TempDir(), "workspace"))
+	_, err := manager.Create(context.Background(), uuid.New(), uuid.New(), filepath.Join(t.TempDir(), "workspace"))
 	if err == nil {
 		t.Fatal("expected start error")
 	}
@@ -178,7 +236,7 @@ func TestReadyPropagatesDockerError(t *testing.T) {
 
 func TestCreatePropagatesDockerCreateError(t *testing.T) {
 	manager := newTestManager(&fakeDocker{createErr: errors.New("create failed")}, "runsc")
-	if _, err := manager.Create(context.Background(), uuid.New(), filepath.Join(t.TempDir(), "workspace")); err == nil {
+	if _, err := manager.Create(context.Background(), uuid.New(), uuid.New(), filepath.Join(t.TempDir(), "workspace")); err == nil {
 		t.Fatal("expected container create error")
 	}
 }
@@ -186,7 +244,7 @@ func TestCreatePropagatesDockerCreateError(t *testing.T) {
 func TestCreateReportsCleanupErrorAfterStartFailure(t *testing.T) {
 	docker := &fakeDocker{startErr: errors.New("start failed"), removeErr: errors.New("remove failed")}
 	manager := newTestManager(docker, "runc")
-	_, err := manager.Create(context.Background(), uuid.New(), filepath.Join(t.TempDir(), "workspace"))
+	_, err := manager.Create(context.Background(), uuid.New(), uuid.New(), filepath.Join(t.TempDir(), "workspace"))
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("remove failed")) {
 		t.Fatalf("error = %v, want cleanup failure", err)
 	}
@@ -267,7 +325,7 @@ func TestExecRejectsInvalidArguments(t *testing.T) {
 func TestDestroyStopsAndRemovesVolumes(t *testing.T) {
 	docker := &fakeDocker{}
 	manager := newTestManager(docker, "runsc")
-	if err := manager.Destroy(context.Background(), "container-123"); err != nil {
+	if err := manager.Destroy(context.Background(), uuid.New(), "container-123", "test"); err != nil {
 		t.Fatal(err)
 	}
 	if !docker.stopped || !docker.removed {
@@ -275,20 +333,40 @@ func TestDestroyStopsAndRemovesVolumes(t *testing.T) {
 	}
 }
 
+func TestDestroyWritesTenantScopedAuditEvent(t *testing.T) {
+	docker := &fakeDocker{}
+	auditor := &auditRecorder{}
+	manager := newTestManagerWithAuditor(docker, "runsc", auditor)
+	workspaceID := uuid.New()
+
+	if err := manager.Destroy(context.Background(), workspaceID, "container-123", "exec_completed"); err != nil {
+		t.Fatal(err)
+	}
+	if len(auditor.events) != 1 {
+		t.Fatalf("audit events = %d, want 1", len(auditor.events))
+	}
+	ev := auditor.events[0]
+	if ev.WorkspaceID != workspaceID || ev.Action != sdkaudit.ActionSandboxDestroy ||
+		ev.IdempotencyKey != "sandbox_destroy:container-123" || ev.ResourceID != "container-123" ||
+		ev.Details["reason"] != "exec_completed" {
+		t.Fatalf("audit event = %+v", ev)
+	}
+}
+
 func TestDestroyReturnsRemoveError(t *testing.T) {
 	docker := &fakeDocker{stopErr: errors.New("already stopped"), removeErr: errors.New("remove failed")}
 	manager := newTestManager(docker, "runsc")
-	if err := manager.Destroy(context.Background(), "container-123"); err == nil {
+	if err := manager.Destroy(context.Background(), uuid.New(), "container-123", "test"); err == nil {
 		t.Fatal("expected remove error")
 	}
 }
 
 func TestDestroyValidatesIDAndAllowsAlreadyStoppedContainer(t *testing.T) {
 	manager := newTestManager(&fakeDocker{stopErr: errors.New("already stopped")}, "runsc")
-	if err := manager.Destroy(context.Background(), ""); err == nil {
+	if err := manager.Destroy(context.Background(), uuid.New(), "", "test"); err == nil {
 		t.Fatal("expected empty container ID to be rejected")
 	}
-	if err := manager.Destroy(context.Background(), "container"); err != nil {
+	if err := manager.Destroy(context.Background(), uuid.New(), "container", "test"); err != nil {
 		t.Fatalf("remove should succeed even if stop reports an error: %v", err)
 	}
 }

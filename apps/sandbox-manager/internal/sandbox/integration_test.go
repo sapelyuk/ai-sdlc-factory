@@ -64,15 +64,16 @@ func TestSandboxDockerLifecycleIntegration(t *testing.T) {
 		SandboxImage:   "ai-sdlc-factory/sandbox-go-node:latest",
 		SandboxNetwork: "sandbox-net",
 		DiskLimitBytes: 2 * 1024 * 1024 * 1024,
-	}, slog.New(slog.NewTextHandler(os.Stderr, nil)))
-	containerID, err := manager.Create(ctx, uuid.New(), workspacePath)
+	}, slog.New(slog.NewTextHandler(os.Stderr, nil)), nil)
+	workspaceID := uuid.New()
+	containerID, err := manager.Create(ctx, workspaceID, uuid.New(), workspacePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cleanupCancel()
-		if err := manager.Destroy(cleanupCtx, containerID); err != nil {
+		if err := manager.Destroy(cleanupCtx, workspaceID, containerID, "integration_test_cleanup"); err != nil {
 			t.Errorf("destroy sandbox: %v", err)
 		}
 	})
