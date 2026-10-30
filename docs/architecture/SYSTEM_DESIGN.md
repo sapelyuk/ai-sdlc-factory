@@ -510,6 +510,7 @@ Before completing a stage (see §14.1), verify:
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.11 | 2026-10-30 | Added ADR-024 (data-only migrations) and ADR-025 (pinning exceptions). |
 | 1.10 | 27.10.2026 | Added ADR-023 (Sandbox isolation boundary: docker-socket-proxy, egress allowlist, gVisor). |
 | 1.9 | 22.10.2026 | Added ADR-022 (selection of `mark3labs/mcp-go` for Tool Gateway). §4.2, §11.1, and §12.1 reference ADR-022. (#83) |
 | 1.8 | 22.10.2026 | Restored numbering: §1 (§1.1, §1.3), §5 (§5.1), §9 (§9.1), §16 (§16.2–§16.5). References to §1.4, §16.1, §16.6 preserved. Per review: removed ADR-015 reference from §1.3 (not about multitenancy), clarified KB hierarchy sources in §9.1, fixed coverage threshold source in §16.2 (`AGENTS.md`), removed unconfirmed historical names in §16.5 (#78) |
