@@ -25,6 +25,11 @@ type Catalog struct {
 	pool *pgxpool.Pool
 	cfg  *config.Config
 
+	// fetch reads the candidate rows. New binds it to queryProfiles; tests
+	// substitute an in-memory source so the validation, filtering and ordering
+	// rules of Load are covered without a database.
+	fetch func(context.Context) ([]domain.ModelProfile, error)
+
 	mu       sync.RWMutex
 	profiles map[string][]domain.ModelProfile // keyed by profile_name, sorted by priority
 	loadedAt time.Time
@@ -32,13 +37,14 @@ type Catalog struct {
 
 // New creates a Catalog backed by the given pool and config.
 func New(pool *pgxpool.Pool, cfg *config.Config) *Catalog {
-	return &Catalog{pool: pool, cfg: cfg}
+	c := &Catalog{pool: pool, cfg: cfg}
+	c.fetch = c.queryProfiles
+	return c
 }
 
-// Load fetches all enabled profiles from the database and validates them.
-// Any model_id containing "-latest" causes the whole load to fail
-// (ADR-021: profiles pin versions, floating aliases are config defects).
-func (c *Catalog) Load(ctx context.Context) error {
+// queryProfiles selects the enabled llm_model_profiles rows. Rows come back in
+// (profile_name, priority) order, but Load does not rely on that: it re-sorts.
+func (c *Catalog) queryProfiles(ctx context.Context) ([]domain.ModelProfile, error) {
 	rows, err := c.pool.Query(ctx, `
 		SELECT profile_name, provider, model_id, priority, capabilities,
 		       cost_per_mtok_in, cost_per_mtok_out, enabled
@@ -46,18 +52,38 @@ func (c *Catalog) Load(ctx context.Context) error {
 		WHERE enabled = true
 		ORDER BY profile_name, priority, provider, model_id`)
 	if err != nil {
-		return fmt.Errorf("query llm_model_profiles: %w", err)
+		return nil, fmt.Errorf("query llm_model_profiles: %w", err)
 	}
 	defer rows.Close()
 
-	profiles := map[string][]domain.ModelProfile{}
-	skipped := map[string]bool{}
+	var items []domain.ModelProfile
 	for rows.Next() {
 		var p domain.ModelProfile
 		if err := rows.Scan(&p.ProfileName, &p.Provider, &p.ModelID, &p.Priority,
 			&p.Capabilities, &p.CostPerMtokIn, &p.CostPerMtokOut, &p.Enabled); err != nil {
-			return fmt.Errorf("scan llm_model_profiles row: %w", err)
+			return nil, fmt.Errorf("scan llm_model_profiles row: %w", err)
 		}
+		items = append(items, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate llm_model_profiles: %w", err)
+	}
+	return items, nil
+}
+
+// Load fetches all enabled profiles and validates them.
+// Any model_id containing "-latest" causes the whole load to fail
+// (ADR-021: profiles pin versions, floating aliases are config defects).
+// A failed load keeps the previously cached snapshot in place.
+func (c *Catalog) Load(ctx context.Context) error {
+	items, err := c.fetch(ctx)
+	if err != nil {
+		return err
+	}
+
+	profiles := map[string][]domain.ModelProfile{}
+	skipped := map[string]bool{}
+	for _, p := range items {
 		if err := validatePinned(p.ModelID); err != nil {
 			return fmt.Errorf("profile %q provider %q model %q: %w", p.ProfileName, p.Provider, p.ModelID, err)
 		}
@@ -72,9 +98,6 @@ func (c *Catalog) Load(ctx context.Context) error {
 			continue
 		}
 		profiles[p.ProfileName] = append(profiles[p.ProfileName], p)
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate llm_model_profiles: %w", err)
 	}
 
 	for name := range profiles {
