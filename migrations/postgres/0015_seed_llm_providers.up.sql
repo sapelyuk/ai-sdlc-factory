@@ -28,12 +28,20 @@
 
 BEGIN;
 
+-- ── Catalog read path ────────────────────────────────────────
+-- catalog.Load reads WHERE enabled = true ORDER BY profile_name, priority.
+-- The primary key covers the ordering but not the enabled filter, so this
+-- partial index backs the query once providers are activated.
+CREATE INDEX IF NOT EXISTS idx_llm_model_profiles_enabled
+    ON llm_model_profiles (profile_name, priority)
+    WHERE enabled = true;
+
 INSERT INTO llm_model_profiles
     (profile_name, provider, model_id, priority, capabilities, cost_per_mtok_in, cost_per_mtok_out, enabled)
 VALUES
     -- ── Gemini (Google, OpenAI-compatible layer) ──
     ('reasoning-strong', 'google',   'gemini-2.5-pro',            2, '{"context_window":1048576,"supports_tools":true,"supports_vision":true}', 1.25,  10.00, false),
-    ('long-context',     'google',   'gemini-2.5-pro',            0, '{"context_window":1048576,"supports_tools":true,"supports_vision":true}', 1.25,  10.00, false),
+    ('long-context',     'google',   'gemini-2.5-pro',            2, '{"context_window":1048576,"supports_tools":true,"supports_vision":true}', 1.25,  10.00, false),
     ('code-fast',        'google',   'gemini-2.5-flash',          2, '{"context_window":1048576,"supports_tools":true,"supports_vision":true}', 0.30,   2.50, false),
     ('cheap-bulk',       'google',   'gemini-2.5-flash',          2, '{"context_window":1048576,"supports_tools":true,"supports_vision":true}', 0.30,   2.50, false),
     -- ── DeepSeek (OpenAI-compatible; alias only, no pinned version) ──
