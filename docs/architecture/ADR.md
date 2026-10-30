@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADR) — ai-sdlc-factory
 
-**Version 1.7 · 27.10.2026**
+**Version 1.8 · 30.10.2026**
 
 Format: MADR. Statuses: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
 
@@ -368,10 +368,72 @@ Additionally, the sandbox containers must be able to fetch dependencies (Go, npm
 
 ---
 
+## ADR-024. Data-only migrations require a reversible schema change
+
+**Status:** accepted.
+
+**Context.**
+Migration 0015 (seed providers) is the first data-only migration in the repository: it inserts rows into `llm_model_profiles` without changing schema. The existing test policy (`TestDownSQLDropTableIfExists`) requires every `.down.sql` to contain a reversible schema change (`DROP TABLE IF EXISTS` or `DROP INDEX IF EXISTS`). A pure `DELETE FROM` cannot satisfy this policy without weakening the test, and weakening tests is R3 (`AGENTS.md` rule 4).
+
+**Decision.**
+Every data-only migration MUST contain a reversible schema change that is used by production code. For migration 0015, this is a partial index used by `catalog.Load`:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_llm_model_profiles_enabled
+  ON llm_model_profiles (profile_name, priority)
+  WHERE enabled = true;
+```
+
+This index is:
+- directly useful for the actual query (`WHERE enabled = true ORDER BY profile_name, priority`);
+- reversible (`DROP INDEX IF EXISTS` in `.down.sql`);
+- a genuine schema change that satisfies `TestDownSQLDropTableIfExists` without weakening it.
+
+If a future data-only migration cannot justify a useful schema change, its design is questioned before implementation. Either:
+- the migration is folded into a feature migration (with a real schema change), or
+- the test policy is amended via a new ADR.
+
+**Consequences.**
+- No weakening of the test policy.
+- Data-only seeds are reversible and have a performance rationale.
+- Future data migrations must follow this pattern.
+
+**References:** ADR-002, `AGENTS.md` rule 4 (no weakening tests), Issue #113, Issue #110.
+
+---
+
+## ADR-025. Model pinning exceptions for providers without version pinning
+
+**Status:** accepted.
+
+**Context.**
+ADR-021 requires `model_id` in `llm_model_profiles` to be a pinned version (e.g., `claude-sonnet-4-20250101`), not a floating alias (`-latest`). This protects the capability contract from silent changes by the provider.
+
+However, DeepSeek and Groq do not expose pinned model versions — only stable aliases (`deepseek-chat`, `deepseek-reasoner`, `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`). These aliases are documented by the providers as stable identifiers, but they can change underlying model weights without notice.
+
+**Decision.**
+Pinning is required where the provider supports it. For providers that do not expose pinned versions, the stable alias is used as the `model_id`, and the following applies:
+- The alias is treated as an opaque stable identifier.
+- The risk of capability drift is documented in `Known Limitations` of the PR that adds the provider.
+- Regression evals (per role) MUST run when a provider's alias changes behavior — a follow-up for M2 once evals land.
+- If a provider later exposes pinned versions, the `model_id` is updated to the pinned form via a new migration.
+
+Currently affected providers: DeepSeek, Groq. Any future provider that does not support pinning falls under this ADR.
+
+**Consequences.**
+- DeepSeek and Groq can be used without violating ADR-021.
+- The risk of capability drift is accepted and documented.
+- Evals become a mandatory control once they exist (M2).
+
+**References:** ADR-004, ADR-021, Issue #113.
+
+---
+
 ## Document changes
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.8 | 30.10.2026 | Added ADR-024 (data-only migrations) and ADR-025 (pinning exceptions). |
 | 1.7 | 27.10.2026 | Added ADR-023 (Sandbox isolation boundary) (#101) |
 | 1.6 | 22.10.2026 | Added ADR-022 (selection of `mark3labs/mcp-go` for Tool Gateway) (#83) |
 | 1.5 | 22.10.2026 | Added ADR-021 (LLM Gateway: routing, fallback, cost attribution) (#73) |
