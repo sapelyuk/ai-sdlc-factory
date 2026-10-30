@@ -6,12 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/config"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/domain"
 )
 
@@ -21,15 +23,16 @@ const refreshInterval = 5 * time.Minute
 // Catalog is a cached, validated view of llm_model_profiles.
 type Catalog struct {
 	pool *pgxpool.Pool
+	cfg  *config.Config
 
 	mu       sync.RWMutex
 	profiles map[string][]domain.ModelProfile // keyed by profile_name, sorted by priority
 	loadedAt time.Time
 }
 
-// New creates a Catalog backed by the given pool.
-func New(pool *pgxpool.Pool) *Catalog {
-	return &Catalog{pool: pool}
+// New creates a Catalog backed by the given pool and config.
+func New(pool *pgxpool.Pool, cfg *config.Config) *Catalog {
+	return &Catalog{pool: pool, cfg: cfg}
 }
 
 // Load fetches all enabled profiles from the database and validates them.
@@ -48,6 +51,7 @@ func (c *Catalog) Load(ctx context.Context) error {
 	defer rows.Close()
 
 	profiles := map[string][]domain.ModelProfile{}
+	skipped := map[string]bool{}
 	for rows.Next() {
 		var p domain.ModelProfile
 		if err := rows.Scan(&p.ProfileName, &p.Provider, &p.ModelID, &p.Priority,
@@ -56,6 +60,16 @@ func (c *Catalog) Load(ctx context.Context) error {
 		}
 		if err := validatePinned(p.ModelID); err != nil {
 			return fmt.Errorf("profile %q provider %q model %q: %w", p.ProfileName, p.Provider, p.ModelID, err)
+		}
+		// A provider whose credentials are not configured on this deployment
+		// must not enter the catalog: the router would otherwise attempt calls
+		// that fail with an auth error on every request (issue #112).
+		if !c.providerConfigured(p.Provider) {
+			if !skipped[p.Provider] {
+				skipped[p.Provider] = true
+				slog.Info("skipping provider: credentials not configured", "provider", p.Provider)
+			}
+			continue
 		}
 		profiles[p.ProfileName] = append(profiles[p.ProfileName], p)
 	}
@@ -82,6 +96,30 @@ func validatePinned(modelID string) error {
 		return domain.ErrFloatingAlias
 	}
 	return nil
+}
+
+// providerConfigured reports whether the deployment has credentials for the
+// provider. Ollama is a local server and is identified by its base URL rather
+// than an API key. A nil config disables filtering (tests without providers).
+func (c *Catalog) providerConfigured(provider string) bool {
+	if c.cfg == nil {
+		return true
+	}
+	switch provider {
+	case "anthropic":
+		return c.cfg.AnthropicAPIKey != ""
+	case "openai":
+		return c.cfg.OpenAIAPIKey != ""
+	case "google":
+		return c.cfg.GoogleAPIKey != ""
+	case "deepseek":
+		return c.cfg.DeepSeekAPIKey != ""
+	case "groq":
+		return c.cfg.GroqAPIKey != ""
+	case "ollama":
+		return c.cfg.OllamaBaseURL != ""
+	}
+	return false
 }
 
 // For returns the catalog entries for a profile, ordered by priority.
