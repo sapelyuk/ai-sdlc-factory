@@ -168,12 +168,14 @@ func newLLMEnv(t *testing.T, name string) *llmEnv {
 	t.Cleanup(appPool.Close)
 
 	return &llmEnv{
-		t:           t,
-		ctx:         ctx,
-		pool:        pool,
-		appPool:     appPool,
-		repo:        repository.New(appPool),
-		cat:         catalog.New(appPool),
+		t:       t,
+		ctx:     ctx,
+		pool:    pool,
+		appPool: appPool,
+		repo:    repository.New(appPool),
+		// nil config disables the provider-credential filter: routing tests
+		// seed their own catalog rows and register fake providers.
+		cat:         catalog.New(appPool, nil),
 		workspaceID: workspaceID,
 		authorID:    authorID,
 	}

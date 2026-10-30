@@ -19,7 +19,9 @@ import (
 type Provider interface {
 	// Chat sends a chat completion request and returns a unified response.
 	Chat(ctx context.Context, modelID string, req domain.ChatRequest) (domain.ChatResponse, error)
-	// Name returns the provider name (anthropic, openai, ollama).
+	// Name returns the provider name (anthropic, openai, google, deepseek,
+	// groq, ollama). It is the key used by the router to resolve a catalog
+	// row to an adapter and is recorded on llm_attempts.provider.
 	Name() string
 }
 

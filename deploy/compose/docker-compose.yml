@@ -336,6 +336,12 @@ services:
       AI_ANTHROPIC_API_KEY: ${AI_ANTHROPIC_API_KEY:-}
       AI_OPENAI_API_KEY: ${AI_OPENAI_API_KEY:-}
       AI_OLLAMA_BASE_URL: ${AI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      AI_GOOGLE_API_KEY: ${AI_GOOGLE_API_KEY:-}
+      AI_GOOGLE_BASE_URL: ${AI_GOOGLE_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      AI_DEEPSEEK_API_KEY: ${AI_DEEPSEEK_API_KEY:-}
+      AI_DEEPSEEK_BASE_URL: ${AI_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      AI_GROQ_API_KEY: ${AI_GROQ_API_KEY:-}
+      AI_GROQ_BASE_URL: ${AI_GROQ_BASE_URL:-https://api.groq.com/openai/v1}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8040/healthz"]
       interval: 30s

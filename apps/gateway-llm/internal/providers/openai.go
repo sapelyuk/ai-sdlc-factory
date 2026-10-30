@@ -34,7 +34,11 @@ func openaiErrorUsage(body []byte) (PartialUsage, bool) {
 }
 
 // OpenAIProvider implements Provider for the OpenAI Chat Completions API.
+// It also serves any OpenAI-compatible endpoint (Gemini, DeepSeek, Groq) via
+// NewOpenAICompat, which overrides the reported provider name so errors and
+// audit rows attribute to the real provider (ADR-021).
 type OpenAIProvider struct {
+	name    string
 	baseURL string
 	apiKey  string
 	client  *http.Client
@@ -49,14 +53,24 @@ func NewOpenAI(apiKey string) *OpenAIProvider {
 // (used in tests against stub HTTP servers).
 func NewOpenAIWithBaseURL(apiKey, baseURL string) *OpenAIProvider {
 	return &OpenAIProvider{
+		name:    "openai",
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		client:  NewHTTPClient(120 * time.Second),
 	}
 }
 
+// NewOpenAICompat creates an adapter for a provider that exposes the OpenAI
+// Chat Completions wire format under its own base URL. name is the provider
+// identifier as stored in llm_model_profiles (google, deepseek, groq).
+func NewOpenAICompat(name, apiKey, baseURL string) *OpenAIProvider {
+	p := NewOpenAIWithBaseURL(apiKey, baseURL)
+	p.name = name
+	return p
+}
+
 // Name returns the provider name.
-func (p *OpenAIProvider) Name() string { return "openai" }
+func (p *OpenAIProvider) Name() string { return p.name }
 
 // openaiRequest is the wire format for OpenAI Chat Completions API.
 type openaiRequest struct {

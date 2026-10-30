@@ -43,7 +43,7 @@ func main() {
 	}
 
 	// Load the global model catalog.
-	cat := catalog.New(pool)
+	cat := catalog.New(pool, cfg)
 	if err := cat.Load(context.Background()); err != nil {
 		log.Fatalf("catalog load: %v", err)
 	}
@@ -55,6 +55,18 @@ func main() {
 	}
 	if cfg.OpenAIAPIKey != "" {
 		prov["openai"] = providers.NewOpenAI(cfg.OpenAIAPIKey)
+	}
+	// Gemini, DeepSeek and Groq all expose the OpenAI Chat Completions wire
+	// format, so they reuse the OpenAI adapter with a provider-specific base
+	// URL and name (ADR-008: HTTP adapters, no per-provider SDK).
+	if cfg.GoogleAPIKey != "" {
+		prov["google"] = providers.NewOpenAICompat("google", cfg.GoogleAPIKey, cfg.GoogleBaseURL)
+	}
+	if cfg.DeepSeekAPIKey != "" {
+		prov["deepseek"] = providers.NewOpenAICompat("deepseek", cfg.DeepSeekAPIKey, cfg.DeepSeekBaseURL)
+	}
+	if cfg.GroqAPIKey != "" {
+		prov["groq"] = providers.NewOpenAICompat("groq", cfg.GroqAPIKey, cfg.GroqBaseURL)
 	}
 	if cfg.OllamaBaseURL != "" {
 		prov["ollama"] = providers.NewOllama(cfg.OllamaBaseURL)
