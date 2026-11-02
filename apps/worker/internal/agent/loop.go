@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client"
 	agentctx "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/context"
@@ -24,6 +25,11 @@ type StepResult struct {
 	BudgetExceeded bool `json:"budget_exceeded,omitempty"`
 	// BudgetExceededReason carries the error message when BudgetExceeded is true.
 	BudgetExceededReason string `json:"budget_exceeded_reason,omitempty"`
+	// RejectedMissing is set when the incoming handoff package is incomplete
+	// (SYSTEM_DESIGN.md §8.4): the receiver must not guess, the workflow
+	// returns the package to its sender with these diagnostics. No LLM budget
+	// is consumed for a rejected package.
+	RejectedMissing []string `json:"rejected_missing,omitempty"`
 }
 
 // StepInput is the input to a single AgentStep.
@@ -45,6 +51,13 @@ type StepInput struct {
 	MaxCostUSD     float64              `json:"max_cost_usd"`
 	MaxSteps       int                  `json:"max_steps"`
 	RecentCalls    RecentCallHashes     `json:"recent_calls,omitempty"`
+	// IncomingHandoff is the package handed over by the previous agent in a
+	// chain (issue #21). When set, the receiver continues from it instead of
+	// the bare task description.
+	IncomingHandoff *handoff.HandoffPackage `json:"incoming_handoff,omitempty"`
+	// IncomingFeedback carries the receiver diagnostics attached when the
+	// package was returned to its author for rework.
+	IncomingFeedback []string `json:"incoming_feedback,omitempty"`
 }
 
 // LLM is the subset of the LLM Gateway client used by the ReAct loop.
@@ -93,17 +106,54 @@ func NewExecutor(
 
 // ExecuteStep runs one ReAct iteration.
 // At stepIndex==0 it builds the initial context and injects it as a system message.
+// When an incoming handoff package is present it is validated first
+// (SYSTEM_DESIGN.md §8.4: the receiver must not guess): an incomplete package
+// is rejected without consuming any LLM budget, a complete one is injected
+// into the conversation as the structured task description.
 func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResult, error) {
 	msgs := input.Messages
 
 	// On the first step, build context and prepend system message.
 	if input.StepIndex == 0 && len(msgs) == 0 {
-		built, err := e.ctxBuilder.Build(ctx, input.ProjectID, input.TaskDesc)
+		taskDesc := input.TaskDesc
+		var userContent string
+		if input.IncomingHandoff != nil {
+			// Receiver-side completeness check. A nil package here is a
+			// wiring bug, so it fails the activity instead of the run.
+			missing, err := handoff.ValidateIncoming(input.IncomingHandoff)
+			if err != nil {
+				return nil, fmt.Errorf("agent: validate incoming handoff: %w", err)
+			}
+			// A package that came back for rework carries the receiver
+			// diagnostics: the author fixes its own package instead of
+			// being rejected again (SYSTEM_DESIGN.md §8.4).
+			if len(missing) > 0 && len(input.IncomingFeedback) == 0 {
+				return &StepResult{
+					Messages:        msgs,
+					RejectedMissing: missing,
+				}, nil
+			}
+			prompt, err := incomingPrompt(input.IncomingHandoff, input.IncomingFeedback)
+			if err != nil {
+				return nil, fmt.Errorf("agent: build incoming handoff prompt: %w", err)
+			}
+			userContent = prompt
+			// The semantic-layer context follows the goal of the package.
+			taskDesc = input.IncomingHandoff.Goal
+		} else {
+			userContent = input.TaskDesc
+			if len(input.IncomingFeedback) > 0 {
+				userContent += "\n\nThe previous receiver rejected this work for the following gaps. Fix them:\n" +
+					"- " + strings.Join(input.IncomingFeedback, "\n- ")
+			}
+		}
+
+		built, err := e.ctxBuilder.Build(ctx, input.ProjectID, taskDesc)
 		if err != nil {
 			return nil, fmt.Errorf("agent: context build: %w", err)
 		}
 		sysMsg := client.ChatMessage{Role: "system", Content: built.Content}
-		userMsg := client.ChatMessage{Role: "user", Content: input.TaskDesc}
+		userMsg := client.ChatMessage{Role: "user", Content: userContent}
 		msgs = []client.ChatMessage{sysMsg, userMsg}
 	}
 
@@ -202,4 +252,31 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 		Usage:       llmResp.Usage,
 		RecentCalls: recent,
 	}, nil
+}
+
+// incomingPrompt renders the structured handoff injection: the wire form of
+// the received package plus the diagnostics the previous receiver attached
+// when it returned the package for rework.
+func incomingPrompt(pkg *handoff.HandoffPackage, feedback []string) (string, error) {
+	wire, err := handoff.WireCopy(pkg)
+	if err != nil {
+		return "", err
+	}
+	raw, err := json.Marshal(wire)
+	if err != nil {
+		return "", fmt.Errorf("handoff: marshal incoming package: %w", err)
+	}
+	var b strings.Builder
+	b.WriteString("You are continuing a task handed off to you by another agent.")
+	b.WriteString(" Work from this handoff package:\n<handoff>\n")
+	b.Write(raw)
+	b.WriteString("\n</handoff>\n")
+	if len(feedback) > 0 {
+		b.WriteString("The previous receiver rejected this package for the following gaps. Fix them:\n")
+		for _, item := range feedback {
+			b.WriteString("- " + item + "\n")
+		}
+	}
+	b.WriteString("Continue the task and return a complete handoff package as your final answer.")
+	return b.String(), nil
 }

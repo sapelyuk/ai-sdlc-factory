@@ -1,7 +1,7 @@
 // Command worker starts the ai-sdlc-factory Temporal worker.
 //
-// It registers TaskRunWorkflow, SDLCWorkflow, and AgentStepActivity on the
-// ai-sdlc-factory task queue. See issue #104.
+// It registers TaskRunWorkflow, ChainWorkflow, SDLCWorkflow, and
+// AgentStepActivity on the ai-sdlc-factory task queue. See issues #104, #21.
 package main
 
 import (
@@ -71,6 +71,7 @@ func main() {
 
 	// Register workflows.
 	w.RegisterWorkflow(wf.TaskRunWorkflow)
+	w.RegisterWorkflow(wf.ChainWorkflow)
 	w.RegisterWorkflow(wf.SDLCWorkflow)
 
 	// Register activities.
