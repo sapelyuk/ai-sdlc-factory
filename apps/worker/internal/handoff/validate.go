@@ -96,7 +96,7 @@ func ValidateIncoming(pkg *HandoffPackage) (missing []string, err error) {
 			}
 		}
 	}
-	if pkg.ExpectedOutputSchema == nil || len(pkg.ExpectedOutputSchema) == 0 {
+	if len(pkg.ExpectedOutputSchema) == 0 {
 		missing = append(missing, "expected_output_schema")
 	} else {
 		var parsed map[string]any
