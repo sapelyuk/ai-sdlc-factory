@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -136,9 +137,25 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 	var feedback []string
 	var steps int
 	var totalCost float64
+	// reviewedBy lists the reviewers that approved the current package. A
+	// rejection resets it because the reworked package starts a new review
+	// round.
+	var reviewedBy []string
+	// pendingNext holds the remaining agents of a fan-out route. The
+	// sequential topology runs multiple required reviewers one after another:
+	// the Temporal MVP executes one child workflow per chain step, so parallel
+	// review would be a separate contract change.
+	var pendingNext []string
+	// reviewAuthorID is the author of the package under review. A rejection
+	// by any reviewer returns the package to this author, not to the previous
+	// reviewer in the fan-out.
+	var reviewAuthorID string
 
-	for step := 0; step < maxChain; step++ {
-		result, err := runChainTaskRun(ctx, input, currentAgentID, currentPkg, feedback, step)
+	for steps < maxChain {
+		agentID := currentAgentID
+
+		chainStep := steps
+		result, err := runChainTaskRun(ctx, input, agentID, currentPkg, feedback, chainStep)
 		if err != nil {
 			return nil, err
 		}
@@ -149,21 +166,31 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 		// author. The package itself is unchanged; the diagnostics travel
 		// with the next run as feedback.
 		if result.Rejected {
-			sender := currentPkg.Metadata.GetSourceAgentID()
+			sender := pkgSourceAgentID(currentPkg)
+			// A reviewer that rejects a fan-out returns the package to the
+			// original author, not to the previous reviewer.
+			if reviewAuthorID != "" {
+				sender = reviewAuthorID
+			}
 			if sender == "" {
 				return nil, fmt.Errorf("workflow: rejected package has no source agent to return to")
 			}
-			if sender == currentAgentID {
-				return nil, fmt.Errorf("workflow: agent %s rejected its own package", currentAgentID)
+			if sender == agentID {
+				return nil, fmt.Errorf("workflow: agent %s rejected its own package", agentID)
 			}
 			recordRoutedAudit(auditCtx, input.WorkspaceID, routerActor, routedAuditInput{
-				FromAgentID:      currentAgentID,
+				FromAgentID:      agentID,
 				ToAgentID:        sender,
-				ChainStep:        step,
+				ChainStep:        chainStep,
 				ReturnedToSender: true,
 				Missing:          result.Missing,
 				Goal:             currentPkg.Goal,
 			})
+			// The reworked package is a new review round: approvals of the
+			// previous round no longer apply.
+			reviewedBy = nil
+			pendingNext = nil
+			reviewAuthorID = ""
 			currentAgentID = sender
 			feedback = result.Missing
 			continue
@@ -172,11 +199,41 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 		pkg := result.Handoff
 		feedback = nil
 
+		// Record the approval before routing: the pipeline router counts the
+		// reviewers that already approved the package.
+		if isReviewer(&input.Team, agentID) {
+			reviewedBy = appendUnique(reviewedBy, agentID)
+		} else {
+			// A non-reviewer produced a new package: earlier approvals
+			// described the previous content, so the review round restarts.
+			reviewedBy = nil
+		}
+		stampReviewedBy(pkg, reviewedBy)
+
+		if len(pendingNext) > 0 {
+			// Fan-out in progress: hand the package approved by this reviewer
+			// to the next one without re-routing.
+			currentAgentID = pendingNext[0]
+			pendingNext = pendingNext[1:]
+			currentPkg = pkg
+			continue
+		}
+		// The fan-out, if any, is complete.
+		reviewAuthorID = ""
+
 		// Route the produced package. The source identity was stamped by the
 		// TaskRunWorkflow from its trusted input.
 		route, err := router.Route(pkg, &input.Team)
 		if err != nil {
-			return nil, fmt.Errorf("workflow: route handoff at chain step %d: %w", step, err)
+			if errors.Is(err, handoff.ErrReviewerNotFound) {
+				recordChainAbortedAudit(auditCtx, input.WorkspaceID, routerActor, chainAbortInput{
+					FromAgentID: pkgSourceAgentID(pkg),
+					ChainStep:   chainStep,
+					Goal:        pkg.Goal,
+					Reason:      abortReasonReviewerNotFound,
+				})
+			}
+			return nil, fmt.Errorf("workflow: route handoff at chain step %d: %w", chainStep, err)
 		}
 
 		if route.Terminal {
@@ -190,60 +247,117 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 				return nil, fmt.Errorf("workflow: validate terminal handoff: %w", err)
 			}
 			if len(missing) > 0 {
-				sender := pkg.Metadata.GetSourceAgentID()
+				sender := pkgSourceAgentID(pkg)
 				if sender == "" {
 					return nil, fmt.Errorf("workflow: incomplete terminal package has no source agent to return to")
 				}
 				recordRoutedAudit(auditCtx, input.WorkspaceID, routerActor, routedAuditInput{
-					FromAgentID:      currentAgentID,
+					FromAgentID:      agentID,
 					ToAgentID:        sender,
-					ChainStep:        step,
+					ChainStep:        chainStep,
 					ReturnedToSender: true,
 					Missing:          missing,
 					Goal:             pkg.Goal,
 				})
+				// The reworked package is a new review round.
+				reviewedBy = nil
 				currentAgentID = sender
 				currentPkg = pkg
 				feedback = missing
 				continue
 			}
 			recordRoutedAudit(auditCtx, input.WorkspaceID, routerActor, routedAuditInput{
-				FromAgentID: pkg.Metadata.GetSourceAgentID(),
-				ChainStep:   step,
+				FromAgentID: pkgSourceAgentID(pkg),
+				ChainStep:   chainStep,
 				Terminal:    true,
 				Goal:        pkg.Goal,
 			})
 			return &ChainResult{
 				FinalHandoff:    pkg,
-				TerminalAgentID: pkg.Metadata.GetSourceAgentID(),
+				TerminalAgentID: pkgSourceAgentID(pkg),
 				Steps:           steps,
 				TotalCostUSD:    totalCost,
 			}, nil
 		}
 
-		// A single next agent is the MVP contract; multiple parallel
-		// receivers need an explicit contract change.
-		if len(route.NextAgentIDs) != 1 {
-			return nil, fmt.Errorf("workflow: routing returned %d next agents, expected 1", len(route.NextAgentIDs))
+		if len(route.NextAgentIDs) == 0 {
+			return nil, fmt.Errorf("workflow: routing returned no next agents")
 		}
-		next := route.NextAgentIDs[0]
+		if len(route.NextAgentIDs) > 1 {
+			// Multiple required reviewers: run them sequentially (the
+			// Temporal MVP has one child workflow per step) and accept the
+			// package only after every one of them approved it. A rejection
+			// returns it to the original author.
+			reviewAuthorID = pkgSourceAgentID(pkg)
+		}
+		currentAgentID = route.NextAgentIDs[0]
+		pendingNext = append([]string(nil), route.NextAgentIDs[1:]...)
+		currentPkg = pkg
 		recordRoutedAudit(auditCtx, input.WorkspaceID, routerActor, routedAuditInput{
-			FromAgentID: pkg.Metadata.GetSourceAgentID(),
-			ToAgentID:   next,
-			ChainStep:   step,
+			FromAgentID: pkgSourceAgentID(pkg),
+			ToAgentID:   route.NextAgentIDs[0],
+			ToAgentIDs:  route.NextAgentIDs,
+			ChainStep:   chainStep,
 			Goal:        pkg.Goal,
 		})
-		currentAgentID = next
-		currentPkg = pkg
 	}
 
 	return nil, fmt.Errorf("workflow: chain reached max length %d without a terminal handoff", maxChain)
+}
+
+// abortReasonReviewerNotFound is the chain_aborted reason written when the
+// review matrix cannot be satisfied.
+const abortReasonReviewerNotFound = "reviewer_not_found"
+
+// pkgSourceAgentID returns the package source from the runtime header, empty
+// when the package or header is absent.
+func pkgSourceAgentID(pkg *handoff.HandoffPackage) string {
+	if pkg == nil {
+		return ""
+	}
+	return pkg.Metadata.GetSourceAgentID()
+}
+
+// isReviewer reports whether the agent has a role allowed to review and the
+// team actually requires a review. A non-reviewer never adds an approval to
+// the package.
+func isReviewer(team *handoff.TeamConfig, agentID string) bool {
+	if team == nil || !team.ReviewMatrix.RequiresReview() {
+		return false
+	}
+	member := team.FindMember(agentID)
+	return member != nil && team.ReviewMatrix.AllowsRole(member.RoleName)
+}
+
+// appendUnique appends id unless it is already present. Review approvals are a
+// set: a reviewer that runs twice must not count as two independent approvals.
+func appendUnique(ids []string, id string) []string {
+	for _, existing := range ids {
+		if existing == id {
+			return ids
+		}
+	}
+	return append(ids, id)
+}
+
+// stampReviewedBy writes the current approval set into the runtime header so
+// the router can count completed reviews. The slice is copied because the
+// package crosses a child workflow boundary.
+func stampReviewedBy(pkg *handoff.HandoffPackage, reviewedBy []string) {
+	if pkg == nil {
+		return
+	}
+	if pkg.Metadata == nil {
+		pkg.Metadata = &handoff.HandoffMetadata{}
+	}
+	pkg.Metadata.ReviewedBy = append([]string(nil), reviewedBy...)
 }
 
 // routedAuditInput carries the fields of one handoff_routed audit event.
 type routedAuditInput struct {
 	FromAgentID      string
 	ToAgentID        string
+	ToAgentIDs       []string
 	ChainStep        int
 	Terminal         bool
 	ReturnedToSender bool
@@ -269,6 +383,9 @@ func recordRoutedAudit(ctx workflow.Context, workspaceID uuid.UUID, actor string
 	if in.ToAgentID != "" {
 		details["to_agent_id"] = in.ToAgentID
 	}
+	if len(in.ToAgentIDs) > 0 {
+		details["to_agent_ids"] = in.ToAgentIDs
+	}
 	if in.ReturnedToSender {
 		details["returned_to_sender"] = true
 		details["missing"] = in.Missing
@@ -282,6 +399,39 @@ func recordRoutedAudit(ctx workflow.Context, workspaceID uuid.UUID, actor string
 		// handoff produced by that agent.
 		ResourceID: in.FromAgentID,
 		Details:    details,
+	})
+}
+
+// chainAbortInput carries the fields of one chain_aborted audit event.
+type chainAbortInput struct {
+	FromAgentID string
+	ChainStep   int
+	Goal        string
+	Reason      string
+}
+
+// recordChainAbortedAudit appends one chain_aborted event. The chain is
+// aborted by the platform, so the actor is the worker. The event is written
+// before the workflow returns the routing error, keeping the failure
+// attributable in the audit chain.
+func recordChainAbortedAudit(ctx workflow.Context, workspaceID uuid.UUID, actor string, in chainAbortInput) {
+	key, err := auditIdempotencyKey(ctx)
+	if err != nil {
+		workflow.GetLogger(ctx).Warn("audit idempotency key failed", "error", err)
+		return
+	}
+	recordAudit(ctx, audit.Event{
+		WorkspaceID:    workspaceID,
+		ActorID:        actor,
+		Action:         sdkaudit.ActionChainAborted,
+		IdempotencyKey: key,
+		ResourceID:     in.FromAgentID,
+		Details: map[string]any{
+			"from_agent_id": in.FromAgentID,
+			"chain_step":    in.ChainStep,
+			"goal":          in.Goal,
+			"reason":        in.Reason,
+		},
 	})
 }
 

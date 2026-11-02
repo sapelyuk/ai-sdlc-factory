@@ -45,6 +45,7 @@ const (
 	ActionHandoffCreated  = "handoff_created"
 	ActionHandoffRouted   = "handoff_routed"
 	ActionHandoffRejected = "handoff_rejected"
+	ActionChainAborted    = "chain_aborted"
 	ActionApprovalDecided = "approval_decided"
 )
 

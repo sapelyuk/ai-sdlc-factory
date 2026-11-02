@@ -16,6 +16,12 @@ type HandoffMetadata struct {
 	SuggestedNextAgentID string `json:"suggested_next_agent_id,omitempty"`
 	// ChainStep is the 0-based position of the producing agent in the chain.
 	ChainStep int `json:"chain_step,omitempty"`
+	// ReviewedBy lists the reviewers that approved the package in the current
+	// review round. It is runtime routing state stamped by ChainWorkflow and is
+	// never taken from model output: Builder strips the whole header and keeps
+	// only the next-agent hint, so a prompt-injected model cannot claim that a
+	// review already happened.
+	ReviewedBy []string `json:"reviewed_by,omitempty"`
 }
 
 // GetSourceAgentID returns the source agent ID, empty when the header is
@@ -25,6 +31,15 @@ func (m *HandoffMetadata) GetSourceAgentID() string {
 		return ""
 	}
 	return m.SourceAgentID
+}
+
+// GetReviewedBy returns the reviewers that already approved the package, empty
+// when the header is absent.
+func (m *HandoffMetadata) GetReviewedBy() []string {
+	if m == nil {
+		return nil
+	}
+	return m.ReviewedBy
 }
 
 // HandoffPackage is the structured package for agent-to-agent handoff.

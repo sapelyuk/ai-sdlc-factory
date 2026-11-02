@@ -3,6 +3,7 @@ package handoff
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 )
 
@@ -165,6 +166,97 @@ func TestPipelineRouter_Route(t *testing.T) {
 		}
 		if !res.Terminal {
 			t.Fatalf("route = %+v, want terminal without review matrix", res)
+		}
+	})
+}
+
+func TestRouter_ReviewerNotFound_ReturnsError(t *testing.T) {
+	router := PipelineRouter{}
+
+	t.Run("no team member has an allowed reviewer role", func(t *testing.T) {
+		team := testTeam()
+		// The matrix still allows architect and QA, but neither is a
+		// resolved member of this team.
+		team.Members = []TeamMember{
+			{AgentID: "agent-pm", RoleName: "product-manager"},
+			{AgentID: "agent-dev", RoleName: "software-engineer"},
+		}
+		pkg := &HandoffPackage{Metadata: &HandoffMetadata{SourceAgentID: "agent-dev"}}
+		if _, err := router.Route(pkg, team); !errors.Is(err, ErrReviewerNotFound) {
+			t.Fatalf("route: got %v, want ErrReviewerNotFound", err)
+		}
+	})
+
+	t.Run("fewer eligible reviewers than required", func(t *testing.T) {
+		team := testTeam()
+		team.ReviewMatrix.RequiredReviewers = 3
+		pkg := &HandoffPackage{Metadata: &HandoffMetadata{SourceAgentID: "agent-dev"}}
+		if _, err := router.Route(pkg, team); !errors.Is(err, ErrReviewerNotFound) {
+			t.Fatalf("route: got %v, want ErrReviewerNotFound", err)
+		}
+	})
+}
+
+func TestRouter_MultipleReviewers_FanOut(t *testing.T) {
+	team := testTeam()
+	team.ReviewMatrix.RequiredReviewers = 2
+	pkg := &HandoffPackage{Metadata: &HandoffMetadata{SourceAgentID: "agent-dev"}}
+
+	res, err := PipelineRouter{}.Route(pkg, team)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Terminal {
+		t.Fatalf("route = %+v, want a fan-out", res)
+	}
+	if want := []string{"agent-architect", "agent-qa"}; !slices.Equal(res.NextAgentIDs, want) {
+		t.Fatalf("NextAgentIDs = %v, want %v", res.NextAgentIDs, want)
+	}
+}
+
+func TestRouter_ReviewerApprovals_AreCounted(t *testing.T) {
+	team := testTeam()
+	team.ReviewMatrix.RequiredReviewers = 2
+
+	t.Run("already approved reviewers are excluded", func(t *testing.T) {
+		pkg := &HandoffPackage{Metadata: &HandoffMetadata{
+			SourceAgentID: "agent-dev",
+			ReviewedBy:    []string{"agent-architect"},
+		}}
+		res, err := PipelineRouter{}.Route(pkg, team)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"agent-qa"}; !slices.Equal(res.NextAgentIDs, want) {
+			t.Fatalf("NextAgentIDs = %v, want %v", res.NextAgentIDs, want)
+		}
+	})
+
+	t.Run("all required reviewers approved completes the chain", func(t *testing.T) {
+		pkg := &HandoffPackage{Metadata: &HandoffMetadata{
+			SourceAgentID: "agent-dev",
+			ReviewedBy:    []string{"agent-architect", "agent-qa"},
+		}}
+		res, err := PipelineRouter{}.Route(pkg, team)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !res.Terminal || len(res.NextAgentIDs) != 0 {
+			t.Fatalf("route = %+v, want terminal", res)
+		}
+	})
+
+	t.Run("unknown reviewer IDs do not satisfy the matrix", func(t *testing.T) {
+		pkg := &HandoffPackage{Metadata: &HandoffMetadata{
+			SourceAgentID: "agent-dev",
+			ReviewedBy:    []string{"agent-outside"},
+		}}
+		res, err := PipelineRouter{}.Route(pkg, team)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"agent-architect", "agent-qa"}; !slices.Equal(res.NextAgentIDs, want) {
+			t.Fatalf("NextAgentIDs = %v, want %v", res.NextAgentIDs, want)
 		}
 	})
 }

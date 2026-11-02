@@ -68,6 +68,17 @@ func (s *ChainSuite) routedEvents() []audit.Event {
 	return out
 }
 
+// abortedEvents returns the chain_aborted events recorded by the chain.
+func (s *ChainSuite) abortedEvents() []audit.Event {
+	var out []audit.Event
+	for _, ev := range s.auditEvents.events {
+		if ev.Action == sdkaudit.ActionChainAborted {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
 // chainTeam builds a resolved team with the four standard MVP roles.
 func chainTeam(topology string) handoff.TeamConfig {
 	return handoff.TeamConfig{
@@ -197,6 +208,123 @@ func (s *ChainSuite) TestSequential_ReviewMatrixPicksReviewer() {
 	s.Equal("agent-architect", res.TerminalAgentID)
 	s.Require().Len(s.taskRunInputs, 2)
 	s.Equal("agent-architect", s.taskRunInputs[1].AgentID)
+}
+
+// TestChainWorkflow_ReviewerNotFound_Aborts verifies that a review that cannot
+// be performed stops the chain instead of silently completing it (P9).
+func (s *ChainSuite) TestChainWorkflow_ReviewerNotFound_Aborts() {
+	team := chainTeam(handoff.TopologyPipeline)
+	team.Lead = nil
+	// The matrix allows architect and QA roles, but this team has no member
+	// with either role: the required review cannot happen.
+	team.Members = []handoff.TeamMember{
+		{AgentID: "agent-pm", RoleName: "product-manager", Profile: "pm-fast"},
+		{AgentID: "agent-dev", RoleName: "software-engineer", Profile: "code-fast"},
+	}
+	s.mockTaskRun(&TaskRunResult{Handoff: chainPkg("Implemented", "agent-dev")})
+
+	s.env.ExecuteWorkflow(ChainWorkflow, s.chainInput(team, func(in *ChainInput) {
+		in.InitialAgentID = "agent-dev"
+	}))
+	s.True(s.env.IsWorkflowCompleted())
+	err := s.env.GetWorkflowError()
+	s.Require().Error(err)
+	s.Contains(err.Error(), "reviewer")
+
+	aborted := s.abortedEvents()
+	s.Require().Len(aborted, 1)
+	s.Equal(sdkaudit.SystemActor("worker"), aborted[0].ActorID)
+	s.Equal("reviewer_not_found", aborted[0].Details["reason"])
+	s.Equal("agent-dev", aborted[0].Details["from_agent_id"])
+	s.Equal("Implemented", aborted[0].Details["goal"])
+	s.EqualValues(0, aborted[0].Details["chain_step"])
+}
+
+// TestChainWorkflow_MultipleReviewers_AllMustApprove verifies the fan-out:
+// every required reviewer runs and the chain is terminal only after the last
+// approval.
+func (s *ChainSuite) TestChainWorkflow_MultipleReviewers_AllMustApprove() {
+	team := chainTeam(handoff.TopologyPipeline)
+	team.Lead = nil
+	team.ReviewMatrix.RequiredReviewers = 2
+	s.mockTaskRun(
+		&TaskRunResult{Handoff: chainPkg("Implemented", "agent-dev")},
+		&TaskRunResult{Handoff: chainPkg("Architecture approved", "agent-architect")},
+		&TaskRunResult{Handoff: chainPkg("QA approved", "agent-qa")},
+	)
+
+	s.env.ExecuteWorkflow(ChainWorkflow, s.chainInput(team, func(in *ChainInput) {
+		in.InitialAgentID = "agent-dev"
+	}))
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+
+	var res *ChainResult
+	s.NoError(s.env.GetWorkflowResult(&res))
+	s.Equal("agent-qa", res.TerminalAgentID)
+	s.Equal(3, res.Steps)
+
+	s.Require().Len(s.taskRunInputs, 3)
+	s.Equal("agent-dev", s.taskRunInputs[0].AgentID)
+	s.Equal("agent-architect", s.taskRunInputs[1].AgentID)
+	s.Equal("agent-qa", s.taskRunInputs[2].AgentID)
+	// The second reviewer receives the package approved by the first one.
+	s.Equal("agent-architect", s.taskRunInputs[2].IncomingHandoff.Metadata.SourceAgentID)
+	s.Equal([]string{"agent-architect"}, s.taskRunInputs[2].IncomingHandoff.Metadata.ReviewedBy)
+
+	routed := s.routedEvents()
+	s.Require().Len(routed, 2)
+	s.Equal("agent-dev", routed[0].Details["from_agent_id"])
+	s.Equal("agent-architect", routed[0].Details["to_agent_id"])
+	s.Equal([]interface{}{"agent-architect", "agent-qa"}, routed[0].Details["to_agent_ids"])
+	s.Equal(true, routed[1].Details["terminal"])
+}
+
+// TestChainWorkflow_SecondReviewerRejects_ReturnsToAuthor verifies that a
+// rejection by any reviewer prevents acceptance and returns the package to the
+// original author, not to the previous reviewer.
+func (s *ChainSuite) TestChainWorkflow_SecondReviewerRejects_ReturnsToAuthor() {
+	team := chainTeam(handoff.TopologyPipeline)
+	team.Lead = nil
+	team.ReviewMatrix.RequiredReviewers = 2
+	s.mockTaskRun(
+		&TaskRunResult{Handoff: chainPkg("Implemented", "agent-dev")},
+		&TaskRunResult{Handoff: chainPkg("Architecture approved", "agent-architect")},
+		&TaskRunResult{Rejected: true, Missing: []string{"acceptance_criteria"}},
+		&TaskRunResult{Handoff: chainPkg("Implemented v2", "agent-dev")},
+		&TaskRunResult{Handoff: chainPkg("Architecture approved v2", "agent-architect")},
+		&TaskRunResult{Handoff: chainPkg("QA approved", "agent-qa")},
+	)
+
+	s.env.ExecuteWorkflow(ChainWorkflow, s.chainInput(team, func(in *ChainInput) {
+		in.InitialAgentID = "agent-dev"
+		in.MaxChainLength = 10
+	}))
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+
+	var res *ChainResult
+	s.NoError(s.env.GetWorkflowResult(&res))
+	s.Equal("agent-qa", res.TerminalAgentID)
+	s.Equal(6, res.Steps)
+
+	s.Require().Len(s.taskRunInputs, 6)
+	rework := s.taskRunInputs[3]
+	s.Equal("agent-dev", rework.AgentID)
+	s.Equal("agent-architect", rework.IncomingHandoff.Metadata.SourceAgentID)
+	s.Equal([]string{"acceptance_criteria"}, rework.IncomingFeedback)
+
+	routed := s.routedEvents()
+	s.Require().Len(routed, 4)
+	// The second reviewer rejected: the package goes back to the original
+	// author.
+	s.True(routed[1].Details["returned_to_sender"].(bool))
+	s.Equal("agent-qa", routed[1].Details["from_agent_id"])
+	s.Equal("agent-dev", routed[1].Details["to_agent_id"])
+	s.Equal([]interface{}{"acceptance_criteria"}, routed[1].Details["missing"])
+	// The reworked package is reviewed from scratch by both reviewers.
+	s.Equal([]interface{}{"agent-architect", "agent-qa"}, routed[2].Details["to_agent_ids"])
+	s.Equal(true, routed[3].Details["terminal"])
 }
 
 func (s *ChainSuite) TestSequential_ProducerSuggestionIsFollowed() {

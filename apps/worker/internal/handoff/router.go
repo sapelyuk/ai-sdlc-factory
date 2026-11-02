@@ -50,6 +50,51 @@ func (t *TeamConfig) FindReviewer() *TeamMember {
 	return nil
 }
 
+// FindReviewers returns up to limit team members whose role is allowed to
+// review, in team declaration order. Agents listed in exclude are skipped: the
+// author never reviews its own package, and a reviewer that already approved
+// the current package must not review it twice.
+func (t *TeamConfig) FindReviewers(limit int, exclude ...string) []*TeamMember {
+	if limit <= 0 {
+		return nil
+	}
+	skip := make(map[string]struct{}, len(exclude))
+	for _, agentID := range exclude {
+		skip[agentID] = struct{}{}
+	}
+	reviewers := make([]*TeamMember, 0, limit)
+	for i := range t.Members {
+		member := &t.Members[i]
+		if _, excluded := skip[member.AgentID]; excluded {
+			continue
+		}
+		if !t.ReviewMatrix.AllowsRole(member.RoleName) {
+			continue
+		}
+		reviewers = append(reviewers, member)
+		if len(reviewers) == limit {
+			break
+		}
+	}
+	return reviewers
+}
+
+// approvedReviewers returns the set of team members that already approved the
+// package in the current review round. Only members with an allowed reviewer
+// role count: the routing header is runtime state, but the router still
+// ignores unknown IDs so a malformed header cannot satisfy the matrix.
+func (t *TeamConfig) approvedReviewers(meta *HandoffMetadata) map[string]struct{} {
+	approved := make(map[string]struct{})
+	for _, agentID := range meta.GetReviewedBy() {
+		member := t.FindMember(agentID)
+		if member == nil || !t.ReviewMatrix.AllowsRole(member.RoleName) {
+			continue
+		}
+		approved[agentID] = struct{}{}
+	}
+	return approved
+}
+
 // RouteResult describes where a handoff package is routed next.
 type RouteResult struct {
 	NextAgentIDs []string // empty when the chain is complete
@@ -88,6 +133,11 @@ var (
 	ErrUnknownSource = errors.New("handoff: source agent is not a team member")
 	// ErrNoLead is returned when orchestrated routing has no lead agent.
 	ErrNoLead = errors.New("handoff: team has no lead agent")
+	// ErrReviewerNotFound is returned when the review matrix requires an
+	// independent review but the team has no eligible reviewer. Routing fails
+	// instead of completing the chain silently: a required review that did not
+	// happen violates P9 (verification independent of the author).
+	ErrReviewerNotFound = errors.New("handoff: no eligible reviewer for the review matrix")
 )
 
 // PipelineRouter routes handoff packages along a sequential pipeline: the
@@ -124,23 +174,59 @@ func (PipelineRouter) Route(pkg *HandoffPackage, team *TeamConfig) (*RouteResult
 		return &RouteResult{NextAgentIDs: []string{suggested}}, nil
 	}
 
-	// 2. The review matrix decides who reviews next. The source agent's own
-	// role is excluded: a reviewer finishing its review completes the chain.
-	src := team.FindMember(pkg.Metadata.SourceAgentID)
-	if team.ReviewMatrix.RequiresReview() && (src == nil || !team.ReviewMatrix.AllowsRole(src.RoleName)) {
-		if reviewer := team.FindReviewer(); reviewer != nil {
-			return &RouteResult{NextAgentIDs: []string{reviewer.AgentID}}, nil
+	// 2. The review matrix decides who reviews next. A handoff that requires
+	// review must never complete the chain before every required reviewer has
+	// approved it (P9: verification independent of the author).
+	//
+	// The matrix is declared in team.schema.json as required_reviewers plus
+	// allowed_roles. required_reviewers is the fan-out width: a team that
+	// lists `reviewer: [arch, reviewer]` resolves to required_reviewers=2 and
+	// both agents receive the package. ALL required reviewers must approve;
+	// this is stricter than a quorum and is the safe choice because
+	// SYSTEM_DESIGN.md and SDLC_STATE_MACHINE.md do not define a quorum rule.
+	// The sequential topology runs the reviewers one after another: the
+	// Temporal MVP executes one child workflow per chain step.
+	if team.ReviewMatrix.RequiresReview() {
+		approved := team.approvedReviewers(pkg.Metadata)
+		src := team.FindMember(pkg.Metadata.SourceAgentID)
+		// The author never reviews its own package. When the author's role is
+		// an allowed reviewer role, the package it produced counts as one
+		// completed review (a reviewer finishing its review completes the
+		// chain, as before).
+		if src != nil && team.ReviewMatrix.AllowsRole(src.RoleName) {
+			approved[src.AgentID] = struct{}{}
+		}
+		remaining := team.ReviewMatrix.RequiredReviewers - len(approved)
+		if remaining > 0 {
+			exclude := make([]string, 0, len(approved))
+			for agentID := range approved {
+				exclude = append(exclude, agentID)
+			}
+			reviewers := team.FindReviewers(remaining, exclude...)
+			if len(reviewers) < remaining {
+				return nil, fmt.Errorf(
+					"%w: required %d, eligible %d",
+					ErrReviewerNotFound, team.ReviewMatrix.RequiredReviewers, len(approved)+len(reviewers),
+				)
+			}
+			next := make([]string, len(reviewers))
+			for i, reviewer := range reviewers {
+				next[i] = reviewer.AgentID
+			}
+			return &RouteResult{NextAgentIDs: next}, nil
 		}
 	}
 
-	// 3. No suggestion and no required review: the chain is complete.
+	// 3. No suggestion and no outstanding review: the chain is complete.
 	return &RouteResult{Terminal: true}, nil
 }
 
 // OrchestratedRouter routes every handoff package through the team lead.
 // The lead (PM) decides whether to return the package to the author or
 // forward it to another agent; when the lead produced the package the chain
-// is complete.
+// is complete. In this topology the lead is the independent decision point
+// (P9): the review matrix is enforced by PipelineRouter, where no orchestrator
+// exists to make the review decision.
 type OrchestratedRouter struct{}
 
 // NewOrchestratedRouter returns a Router for the orchestrated topology.
