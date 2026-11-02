@@ -89,6 +89,13 @@ func startTestPostgres(t *testing.T) *sql.DB {
 				WithStartupTimeout(60*time.Second)),
 	)
 	if err != nil {
+		// A missing Docker daemon must not hide the migration checks: in CI the
+		// same failure is fatal, because a skipped Test (migrations) job would
+		// otherwise turn the required check green without running anything
+		// (issue #110).
+		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
+			t.Fatalf("cannot start postgres testcontainer in CI: %v", err)
+		}
 		t.Skipf("Skipping test: cannot start postgres container: %v (ensure Docker is running)", err)
 	}
 
