@@ -176,11 +176,12 @@ func TestTaskRunWorkflow_Integration(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 
-	var result *handoff.HandoffPackage
+	var result *workflow.TaskRunResult
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.NotNil(t, result)
-	require.Equal(t, "Implement feature", result.Goal)
-	require.Equal(t, []string{"tests pass"}, result.AcceptanceCriteria)
+	require.NotNil(t, result.Handoff)
+	require.Equal(t, "Implement feature", result.Handoff.Goal)
+	require.Equal(t, []string{"tests pass"}, result.Handoff.AcceptanceCriteria)
 
 	// The ReAct loop ran twice: tool call, then handoff.
 	requests := llm.Requests()

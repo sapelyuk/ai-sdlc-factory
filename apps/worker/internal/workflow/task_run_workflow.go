@@ -46,12 +46,39 @@ type TaskRunInput struct {
 	DefaultMaxCostUSD float64 `json:"default_max_cost_usd"`
 	// DefaultMaxSteps is injected from the worker config.
 	DefaultMaxSteps int `json:"default_max_steps"`
+	// ChainStep is the 0-based position of this execution in the handoff
+	// chain (issue #21). It is stamped into the produced package metadata.
+	ChainStep int `json:"chain_step,omitempty"`
+	// IncomingHandoff is the package handed over by the previous agent in a
+	// chain (issue #21). When set, the receiver validates it first: an
+	// incomplete package is returned to its sender without consuming budget
+	// (SYSTEM_DESIGN.md §8.4).
+	IncomingHandoff *handoff.HandoffPackage `json:"incoming_handoff,omitempty"`
+	// IncomingFeedback carries the receiver diagnostics attached when the
+	// package was returned to its author for rework.
+	IncomingFeedback []string `json:"incoming_feedback,omitempty"`
+}
+
+// TaskRunResult is the outcome of one agent execution in a handoff chain.
+type TaskRunResult struct {
+	// Handoff is the package produced by this agent, stamped with the runtime
+	// routing metadata. It is nil when the run failed or rejected its input.
+	Handoff *handoff.HandoffPackage `json:"handoff,omitempty"`
+	// Rejected is true when the incoming package was incomplete: the run
+	// returned it to its sender instead of doing work.
+	Rejected bool `json:"rejected,omitempty"`
+	// Missing lists the incomplete fields reported by the receiver check.
+	Missing []string `json:"missing,omitempty"`
+	// Steps is the number of ReAct steps the agent executed.
+	Steps int `json:"steps,omitempty"`
+	// TotalCostUSD is the accumulated LLM cost of this run.
+	TotalCostUSD float64 `json:"total_cost_usd,omitempty"`
 }
 
 // TaskRunWorkflow runs a full ReAct agent loop for one task.
 // It loops over AgentStep activities until a valid handoff is produced
 // or the budget is exhausted.
-func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.HandoffPackage, error) {
+func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*TaskRunResult, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -101,6 +128,28 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 		},
 	})
 
+	// A chain run that receives a package marks the start of the receiving
+	// work explicitly, so the chain is traceable end to end (issue #21).
+	if input.IncomingHandoff != nil {
+		taskStartedKey, err := auditIdempotencyKey(ctx)
+		if err != nil {
+			return nil, err
+		}
+		recordAudit(auditCtx, audit.Event{
+			WorkspaceID:    input.WorkspaceID,
+			ActorID:        actor,
+			Action:         sdkaudit.ActionTaskStarted,
+			IdempotencyKey: taskStartedKey,
+			ResourceID:     input.TaskRunID,
+			Details: map[string]any{
+				"task_run_id": input.TaskRunID,
+				"agent_id":    input.AgentID,
+				"chain_step":  input.ChainStep,
+				"source":      input.IncomingHandoff.Metadata.GetSourceAgentID(),
+			},
+		})
+	}
+
 	// Resolve effective limits.
 	maxCost := input.DefaultMaxCostUSD
 	if input.MaxCostUSD > 0 {
@@ -127,21 +176,23 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 		}
 
 		activityInput := agent.StepInput{
-			TaskRunID:      input.TaskRunID,
-			RunID:          input.RunID,
-			TaskID:         input.TaskID,
-			AgentID:        input.AgentID,
-			StepIndex:      stepIndex,
-			IdempotencyKey: idempotencyKey,
-			Messages:       messages,
-			Profile:        input.Profile,
-			ProjectID:      input.ProjectID,
-			TaskDesc:       input.TaskDescription,
-			Tools:          input.Tools,
-			BudgetSnapshot: budgetSnap,
-			MaxCostUSD:     maxCost,
-			MaxSteps:       maxSteps,
-			RecentCalls:    recentCalls,
+			TaskRunID:        input.TaskRunID,
+			RunID:            input.RunID,
+			TaskID:           input.TaskID,
+			AgentID:          input.AgentID,
+			StepIndex:        stepIndex,
+			IdempotencyKey:   idempotencyKey,
+			Messages:         messages,
+			Profile:          input.Profile,
+			ProjectID:        input.ProjectID,
+			TaskDesc:         input.TaskDescription,
+			Tools:            input.Tools,
+			BudgetSnapshot:   budgetSnap,
+			MaxCostUSD:       maxCost,
+			MaxSteps:         maxSteps,
+			RecentCalls:      recentCalls,
+			IncomingHandoff:  input.IncomingHandoff,
+			IncomingFeedback: input.IncomingFeedback,
 		}
 
 		var result agent.StepResult
@@ -159,8 +210,40 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 			return nil, fmt.Errorf("workflow: budget exceeded at step %d: %s", stepIndex, result.BudgetExceededReason)
 		}
 
+		// The receiver found the incoming package incomplete: return it to
+		// its sender with the diagnostics, without doing any work and
+		// without a task_completed event (SYSTEM_DESIGN.md §8.4).
+		if len(result.RejectedMissing) > 0 {
+			rejectedKey, err := auditIdempotencyKey(ctx)
+			if err != nil {
+				return nil, err
+			}
+			recordAudit(auditCtx, audit.Event{
+				WorkspaceID:    input.WorkspaceID,
+				ActorID:        actor,
+				Action:         sdkaudit.ActionHandoffRejected,
+				IdempotencyKey: rejectedKey,
+				ResourceID:     input.TaskRunID,
+				Details: map[string]any{
+					"task_run_id": input.TaskRunID,
+					"agent_id":    input.AgentID,
+					"chain_step":  input.ChainStep,
+					"sender":      input.IncomingHandoff.Metadata.GetSourceAgentID(),
+					"missing":     result.RejectedMissing,
+				},
+			})
+			return &TaskRunResult{
+				Rejected: true,
+				Missing:  result.RejectedMissing,
+			}, nil
+		}
+
 		// Handoff ready.
 		if result.Handoff != nil {
+			// Stamp the runtime routing header: the source agent identity
+			// comes from the trusted workflow input, the next-agent hint the
+			// agent proposed is preserved (issue #21).
+			handoff.Stamp(result.Handoff, input.AgentID, input.ChainStep)
 			handoffKey, err := auditIdempotencyKey(ctx)
 			if err != nil {
 				return nil, err
@@ -193,7 +276,11 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*handoff.Handoff
 					"total_cost_usd": budgetSnap.TotalCost,
 				},
 			})
-			return result.Handoff, nil
+			return &TaskRunResult{
+				Handoff:      result.Handoff,
+				Steps:        budgetSnap.Steps,
+				TotalCostUSD: budgetSnap.TotalCost,
+			}, nil
 		}
 	}
 

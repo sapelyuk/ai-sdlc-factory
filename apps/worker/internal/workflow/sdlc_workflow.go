@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/handoff"
 	"go.temporal.io/sdk/workflow"
@@ -49,9 +51,15 @@ func SDLCWorkflow(ctx workflow.Context, input SDLCInput) (*handoff.HandoffPackag
 		DefaultMaxSteps:   input.DefaultMaxSteps,
 	}
 
-	var result *handoff.HandoffPackage
+	var result *TaskRunResult
 	if err := workflow.ExecuteChildWorkflow(ctx, TaskRunWorkflow, taskInput).Get(ctx, &result); err != nil {
 		return nil, err
 	}
-	return result, nil
+	if result == nil {
+		return nil, fmt.Errorf("workflow: task run returned no result")
+	}
+	if result.Rejected {
+		return nil, fmt.Errorf("workflow: task run rejected its input: missing %v", result.Missing)
+	}
+	return result.Handoff, nil
 }

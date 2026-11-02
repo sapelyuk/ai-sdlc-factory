@@ -113,10 +113,13 @@ func (s *TaskRunSuite) TestTaskRunWorkflow_HappyPath() {
 	s.True(s.env.IsWorkflowCompleted())
 	s.NoError(s.env.GetWorkflowError())
 
-	var result *handoff.HandoffPackage
+	var result *TaskRunResult
 	s.NoError(s.env.GetWorkflowResult(&result))
 	s.NotNil(result)
-	s.Equal("Done", result.Goal)
+	s.NotNil(result.Handoff)
+	s.Equal("Done", result.Handoff.Goal)
+	// A run without an incoming package has no chain receiver work: no
+	// task_started event is written.
 	s.Len(s.auditEvents.events, 3)
 	s.Equal(sdkaudit.ActionRunStarted, s.auditEvents.events[0].Action)
 	s.Equal(sdkaudit.ActionHandoffCreated, s.auditEvents.events[1].Action)
@@ -127,6 +130,118 @@ func (s *TaskRunSuite) TestTaskRunWorkflow_HappyPath() {
 		s.False(keys[ev.IdempotencyKey], "audit event idempotency keys must be distinct")
 		keys[ev.IdempotencyKey] = true
 	}
+}
+
+// TestTaskRunWorkflow_IncomingHandoff_Accepted verifies the chain receiver
+// path: the incoming package starts the receiving work (task_started) and
+// the produced package carries the stamped routing metadata (issue #21).
+func (s *TaskRunSuite) TestTaskRunWorkflow_IncomingHandoff_Accepted() {
+	incoming := &handoff.HandoffPackage{
+		Goal:                 "Implement auth",
+		ContextRefs:          []string{"sem://project/1"},
+		AcceptanceCriteria:   []string{"tests pass"},
+		ExpectedOutputSchema: json.RawMessage(`{"type":"object"}`),
+		Metadata:             &handoff.HandoffMetadata{SourceAgentID: "agent-pm", ChainStep: 0},
+	}
+	produced := &handoff.HandoffPackage{
+		Goal:                 "Implement auth",
+		ContextRefs:          []string{"sem://project/1", "artifact://diff/1"},
+		AcceptanceCriteria:   []string{"tests pass"},
+		ExpectedOutputSchema: json.RawMessage(`{"type":"object"}`),
+	}
+
+	captured := []agent.StepInput{}
+	s.activity.On("Execute", mock.Anything, mock.Anything).
+		Return(&agent.StepResult{
+			Messages: []client.ChatMessage{{Role: "user", Content: "handoff"}},
+			Usage:    client.LLMUsage{TotalCostUSD: 0.02},
+			Handoff:  produced,
+		}, nil).
+		Run(func(args mock.Arguments) {
+			captured = append(captured, args.Get(1).(agent.StepInput))
+		}).Once()
+
+	input := TaskRunInput{
+		TaskRunID:         "chain-run-1",
+		WorkspaceID:       uuid.MustParse("11111111-1111-4111-8111-111111111111"),
+		AgentID:           "agent-architect",
+		Profile:           "arch-strong",
+		TaskDescription:   "implement the feature",
+		DefaultMaxCostUSD: 10.0,
+		DefaultMaxSteps:   50,
+		ChainStep:         1,
+		IncomingHandoff:   incoming,
+	}
+
+	s.env.ExecuteWorkflow(TaskRunWorkflow, input)
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+
+	var result *TaskRunResult
+	s.NoError(s.env.GetWorkflowResult(&result))
+	s.NotNil(result)
+	s.False(result.Rejected)
+	s.NotNil(result.Handoff)
+
+	// The package is stamped from the trusted workflow input.
+	s.Equal("agent-architect", result.Handoff.Metadata.SourceAgentID)
+	s.Equal(1, result.Handoff.Metadata.ChainStep)
+
+	// The agent activity received the structured package unchanged.
+	s.Require().Len(captured, 1)
+	s.Equal("implement the feature", captured[0].TaskDesc)
+	s.Equal(input.IncomingHandoff, captured[0].IncomingHandoff)
+
+	s.Len(s.auditEvents.events, 4)
+	s.Equal(sdkaudit.ActionRunStarted, s.auditEvents.events[0].Action)
+	s.Equal(sdkaudit.ActionTaskStarted, s.auditEvents.events[1].Action)
+	s.Equal(sdkaudit.ActionHandoffCreated, s.auditEvents.events[2].Action)
+	s.Equal(sdkaudit.ActionTaskCompleted, s.auditEvents.events[3].Action)
+}
+
+// TestTaskRunWorkflow_IncomingHandoff_Rejected verifies that an incomplete
+// package is returned to its sender without consuming budget: the agent
+// never runs, no handoff is created and the run ends with handoff_rejected.
+func (s *TaskRunSuite) TestTaskRunWorkflow_IncomingHandoff_Rejected() {
+	incoming := &handoff.HandoffPackage{
+		Goal:        "",
+		ContextRefs: []string{"sem://project/1"},
+		Metadata:    &handoff.HandoffMetadata{SourceAgentID: "agent-pm"},
+	}
+
+	s.activity.On("Execute", mock.Anything, mock.Anything).
+		Return(&agent.StepResult{
+			Messages:        []client.ChatMessage{},
+			RejectedMissing: []string{"goal", "acceptance_criteria", "expected_output_schema"},
+		}, nil).Once()
+
+	input := TaskRunInput{
+		TaskRunID:         "chain-run-2",
+		WorkspaceID:       uuid.MustParse("11111111-1111-4111-8111-111111111111"),
+		AgentID:           "agent-qa",
+		Profile:           "code-fast",
+		TaskDescription:   "review the feature",
+		DefaultMaxCostUSD: 10.0,
+		DefaultMaxSteps:   50,
+		ChainStep:         1,
+		IncomingHandoff:   incoming,
+	}
+
+	s.env.ExecuteWorkflow(TaskRunWorkflow, input)
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+
+	var result *TaskRunResult
+	s.NoError(s.env.GetWorkflowResult(&result))
+	s.NotNil(result)
+	s.True(result.Rejected)
+	s.Equal([]string{"goal", "acceptance_criteria", "expected_output_schema"}, result.Missing)
+	s.Nil(result.Handoff)
+
+	s.Len(s.auditEvents.events, 3)
+	s.Equal(sdkaudit.ActionRunStarted, s.auditEvents.events[0].Action)
+	s.Equal(sdkaudit.ActionTaskStarted, s.auditEvents.events[1].Action)
+	s.Equal(sdkaudit.ActionHandoffRejected, s.auditEvents.events[2].Action)
 }
 
 // TestTaskRunWorkflow_BudgetExceeded tests that the workflow stops on budget exceeded.
