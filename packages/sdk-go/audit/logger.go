@@ -40,8 +40,11 @@ const (
 	ActionSandboxCreate   = "sandbox_create"
 	ActionSandboxDestroy  = "sandbox_destroy"
 	ActionRunStarted      = "run_started"
+	ActionTaskStarted     = "task_started"
 	ActionTaskCompleted   = "task_completed"
 	ActionHandoffCreated  = "handoff_created"
+	ActionHandoffRouted   = "handoff_routed"
+	ActionHandoffRejected = "handoff_rejected"
 	ActionApprovalDecided = "approval_decided"
 )
 
