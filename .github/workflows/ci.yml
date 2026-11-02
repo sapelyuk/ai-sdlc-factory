@@ -11,6 +11,7 @@ permissions:
 
 # All Go modules under apps/* and packages/* are checked. Add a new module
 # to the `app` matrix below to have lint, test, and build run for it.
+# Modules outside those trees (migrations/tests) run as their own job.
 jobs:
   lint:
     name: Lint (${{ matrix.app.name }})
@@ -298,6 +299,38 @@ jobs:
           docker rm -f docker-socket-proxy || true
           docker network rm sandbox-net || true
 
+  # Migration tests (issue #110). `migrations/tests` is a separate Go module
+  # (testcontainers-based) and lives outside the apps/*, packages/* matrix, so
+  # it never ran in CI: a migration could pass review and merge while
+  # TestMigrateUp / TestMigrateDown / TestMigrationNumbering stayed unchecked
+  # (see PR #113, where 0015_*.down.sql was caught only by review).
+  # The job applies every .up.sql and rolls back every .down.sql against a
+  # real PostgreSQL 18 + pgvector container (ADR-019). GitHub-hosted Linux
+  # runners ship a Docker daemon, so testcontainers starts without setup.
+  # CI=true turns "Docker is unavailable" into a failure instead of a silent
+  # skip; -count=1 stops a cached PASS from satisfying the required check.
+  test-migrations:
+    name: Test (migrations)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+          cache-dependency-path: migrations/tests/go.sum
+
+      - name: Run migration tests
+        working-directory: migrations/tests
+        env:
+          CI: 'true'
+        run: |
+          go test ./... -v -count=1 -timeout 10m
+
   # Aggregate job so the branch-protection "ci" context is satisfied.
   # It runs after all other jobs and succeeds only if they all succeed.
   ci:
@@ -310,6 +343,7 @@ jobs:
       - frontend-lint
       - cyrillic-check
       - sandbox-integration
+      - test-migrations
     if: always()
     steps:
       - name: Verify all required checks passed
