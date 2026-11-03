@@ -47,6 +47,7 @@ const (
 	ActionHandoffRejected = "handoff_rejected"
 	ActionChainAborted    = "chain_aborted"
 	ActionApprovalDecided = "approval_decided"
+	ActionGateChecked     = "gate_checked"
 )
 
 // Actor ID prefixes. An actor is "agent:<uuid>", "human:<uuid>",

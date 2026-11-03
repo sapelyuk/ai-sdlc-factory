@@ -11,6 +11,7 @@ import (
 
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/audit"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/gates"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/handoff"
 	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
@@ -20,6 +21,20 @@ import (
 // sender for rework, so a team that keeps bouncing an incomplete package
 // cannot loop forever.
 const DefaultMaxChainLength = 5
+
+// GateSpec describes the quality gate that must pass before the chain
+// output is accepted as the next stage's input (issue #20).
+type GateSpec struct {
+	// Name is the gate identifier from the registry (e.g. "ci_green").
+	Name string `json:"name"`
+	// Facts are the evidence the gate is evaluated against.
+	Facts gates.Facts `json:"facts,omitempty"`
+	// TimeoutSeconds overrides the default human_approval deadline (0 =
+	// DefaultApprovalTimeout). Ignored by auto and agent_review gates.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+	// RiskLevel pins the autonomy level of the gated action (ADR-013).
+	RiskLevel string `json:"risk_level,omitempty"`
+}
 
 // ChainInput is the input for ChainWorkflow: one team resolving a task
 // through a chain of agent handoffs (issue #21).
@@ -59,6 +74,15 @@ type ChainInput struct {
 	// Defaults are injected from the worker config.
 	DefaultMaxCostUSD float64 `json:"default_max_cost_usd"`
 	DefaultMaxSteps   int     `json:"default_max_steps"`
+	// RequestedBy is the human owner who initiated the chain (for audit and
+	// approval queue).
+	RequestedBy uuid.UUID `json:"requested_by,omitempty"`
+	// WorkflowID is the Temporal workflow execution ID.
+	WorkflowID string `json:"workflow_id,omitempty"`
+	// Gate is the quality gate that must pass before the chain output is
+	// accepted as the next stage's input (issue #20). When nil the chain
+	// terminal result is accepted without a gate (R0/R1 autonomy).
+	Gate *GateSpec `json:"gate,omitempty"`
 }
 
 // ChainResult is the outcome of a completed handoff chain.
@@ -73,6 +97,9 @@ type ChainResult struct {
 	Steps int `json:"steps"`
 	// TotalCostUSD is the accumulated LLM cost of all runs.
 	TotalCostUSD float64 `json:"total_cost_usd"`
+	// Gate is the outcome of the terminal gate check. It is nil when the
+	// chain has no gate (R0/R1 autonomy: the result is accepted directly).
+	Gate *GateOutcome `json:"gate,omitempty"`
 }
 
 // ChainWorkflow routes handoff packages between the agents of one team
@@ -272,11 +299,49 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 				Terminal:    true,
 				Goal:        pkg.Goal,
 			})
+
+			// Quality gate: the chain output is the input of the next stage,
+			// so the gate of that stage is enforced here before the result
+			// leaves the workflow (issue #20, SDLC_STATE_MACHINE.md §4).
+			// A blocked gate aborts the chain: the platform must never
+			// deliver evidence that did not pass its own check.
+			var gateOutcome *GateOutcome
+			if input.Gate != nil {
+				outcome, gateErr := WaitGate(ctx, WaitGateInput{
+					WorkspaceID: input.WorkspaceID,
+					Name:        input.Gate.Name,
+					Facts:       input.Gate.Facts,
+					Timeout:     time.Duration(input.Gate.TimeoutSeconds) * time.Second,
+					RequestedBy: input.RequestedBy,
+					RiskLevel:   input.Gate.RiskLevel,
+					WorkflowID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
+				})
+				if gateErr != nil {
+					return nil, fmt.Errorf("workflow: gate %q: %w", input.Gate.Name, gateErr)
+				}
+				recordGateAudit(auditCtx, input.WorkspaceID, routerActor, gateAuditInput{
+					GateName:   input.Gate.Name,
+					ChainStep:  chainStep,
+					Passed:     outcome.Passed,
+					Rejected:   outcome.Rejected,
+					Timeout:    outcome.Timeout,
+					Reason:     outcome.Reason,
+					ApprovalID: outcome.ApprovalID,
+					Goal:       pkg.Goal,
+				})
+				if outcome.IsBlocked() {
+					return nil, fmt.Errorf("workflow: gate %q blocked the transition: %s",
+						input.Gate.Name, outcome.Reason)
+				}
+				gateOutcome = &outcome
+			}
+
 			return &ChainResult{
 				FinalHandoff:    pkg,
 				TerminalAgentID: pkgSourceAgentID(pkg),
 				Steps:           steps,
 				TotalCostUSD:    totalCost,
+				Gate:            gateOutcome,
 			}, nil
 		}
 
@@ -486,4 +551,53 @@ func runChainTaskRun(
 		return nil, fmt.Errorf("workflow: task run for agent %s returned no result", agentID)
 	}
 	return result, nil
+}
+
+// gateAuditInput carries the fields of one gate_checked audit event.
+type gateAuditInput struct {
+	GateName   string
+	ChainStep  int
+	Passed     bool
+	Rejected   bool
+	Timeout    bool
+	Reason     string
+	ApprovalID string
+	Goal       string
+}
+
+// recordGateAudit appends one gate_checked event. The actor is the worker:
+// the platform evaluates the gate, not the agent.
+func recordGateAudit(ctx workflow.Context, workspaceID uuid.UUID, actor string, in gateAuditInput) {
+	key, err := auditIdempotencyKey(ctx)
+	if err != nil {
+		workflow.GetLogger(ctx).Warn("audit idempotency key failed", "error", err)
+		return
+	}
+	details := map[string]any{
+		"gate_name":  in.GateName,
+		"chain_step": in.ChainStep,
+		"goal":       in.Goal,
+	}
+	if in.Passed {
+		details["result"] = "passed"
+	}
+	if in.Rejected {
+		details["result"] = "rejected"
+		details["reason"] = in.Reason
+	}
+	if in.Timeout {
+		details["result"] = "timeout"
+		details["reason"] = in.Reason
+	}
+	if in.ApprovalID != "" {
+		details["approval_id"] = in.ApprovalID
+	}
+	recordAudit(ctx, audit.Event{
+		WorkspaceID:    workspaceID,
+		ActorID:        actor,
+		Action:         sdkaudit.ActionGateChecked,
+		IdempotencyKey: key,
+		ResourceID:     in.GateName,
+		Details:        details,
+	})
 }
