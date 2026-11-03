@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	approvalshandler "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/approvals/handler"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/config"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/iam"
 	registryhandler "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/handler"
@@ -24,8 +25,11 @@ type Router struct {
 }
 
 // NewRouter creates a new router with JWT auth, RBAC, and all routes.
+// approvalsHandler may be nil: then the approval queue routes are not mounted
+// (used by tests that only exercise the registry).
 func NewRouter(
 	h *registryhandler.RegistryHandler,
+	approvalsHandler *approvalshandler.ApprovalHandler,
 	readinessCheck func(context.Context) error,
 	cfg *config.Config,
 	jwtService *iam.JWTService,
@@ -110,6 +114,16 @@ func NewRouter(
 			r.Post("/{id}/clone", wrapRBAC("admin", h.CloneProcess))
 			r.Post("/{id}/revert", wrapRBAC("admin", h.RevertProcess))
 		})
+
+		// ── Approval queue (human_approval gates, ADR-013) ───────────
+		if approvalsHandler != nil {
+			r.Route("/api/v1/approvals", func(r chi.Router) {
+				r.Get("/", wrapRBAC("viewer", approvalsHandler.List))
+				r.Get("/{id}", approvalsHandler.Get)
+				r.Post("/{id}/approve", wrapRBAC("admin", approvalsHandler.Approve))
+				r.Post("/{id}/reject", wrapRBAC("admin", approvalsHandler.Reject))
+			})
+		}
 	})
 
 	return &Router{r: r}

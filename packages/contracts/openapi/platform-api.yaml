@@ -761,6 +761,134 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  # ── Approval Queue (human_approval gates) ─────────────────────
+  /api/v1/approvals:
+    get:
+      operationId: listApprovals
+      summary: List approval requests (human_approval gates)
+      description: |
+        Returns approval requests in the active workspace. The owner uses this
+        endpoint to see which R3 transitions are waiting for a decision
+        (FR-OPS-1, ADR-013, SDLC_STATE_MACHINE.md section 4).
+        Filter by status=pending to get only the requests that need an answer.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by request status. Defaults to all statuses.
+          schema:
+            type: string
+            enum: [pending, approved, rejected, expired]
+      responses:
+        "200":
+          description: Approval requests in the active workspace, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApprovalRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /api/v1/approvals/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      operationId: getApproval
+      summary: Get one approval request
+      description: |
+        Returns one approval request by its identifier in the active workspace.
+        The response carries the transition context and the artifact links the
+        owner needs to decide (SYSTEM_DESIGN.md section 8.4).
+      responses:
+        "200":
+          description: Approval request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /api/v1/approvals/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: approveRequest
+      summary: Approve an R3 transition (owner/admin)
+      description: |
+        Records a positive human decision for a pending approval request.
+        The workflow that waits on the request observes the decision and
+        allows the state transition (ADR-013, SDLC_STATE_MACHINE.md section 4).
+        An already decided or expired request cannot be approved: 409.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalDecision"
+      responses:
+        "200":
+          description: Approval request updated to status approved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /api/v1/approvals/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: rejectRequest
+      summary: Reject an R3 transition (owner/admin)
+      description: |
+        Records a negative human decision for a pending approval request.
+        The blocked transition stays blocked (SDLC_STATE_MACHINE.md section 5).
+        A rejection reason is recommended for the audit trail.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalDecision"
+      responses:
+        "200":
+          description: Approval request updated to status rejected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   # ── LLM Gateway ───────────────────────────────────────────────────
   /v1/llm/chat:
     post:
@@ -1345,6 +1473,81 @@ components:
       properties:
         status:
           $ref: "#/components/schemas/Status"
+    ApprovalRequest:
+      type: object
+      description: |
+        An approval request created when a human_approval gate (R3, ADR-013)
+        needs a decision from the owner. Persisted in the `approvals` table.
+      required: [id, workspace_id, gate_name, status, requested_by, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        stage_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        run_id:
+          type: string
+          format: uuid
+          nullable: true
+        workspace_id:
+          type: string
+          format: uuid
+        gate_name:
+          type: string
+          description: Gate identifier (SDLC_STATE_MACHINE.md section 4).
+        status:
+          type: string
+          enum: [pending, approved, rejected, expired]
+        requested_by:
+          type: string
+          format: uuid
+        approved_by:
+          type: string
+          format: uuid
+          nullable: true
+        risk_level:
+          type: string
+          enum: [R0, R1, R2, R3]
+        deadline_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Absolute deadline for the human decision (24 hours default).
+        context:
+          type: object
+          description: Transition context and artifact links for the owner.
+          additionalProperties: true
+        workflow_id:
+          type: string
+          description: Temporal workflow ID for fast-path signal delivery.
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the owner approved or rejected.
+    ApprovalDecision:
+      type: object
+      description: Request body for approve/reject operations.
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          maxLength: 4096
+          description: Optional comment accompanying the decision.
     CreateRoleRequest:
       type: object
       additionalProperties: false

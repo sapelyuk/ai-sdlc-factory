@@ -32,7 +32,14 @@
           },
           "gate": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "Name of the SDLC gate enforced on the transition out of this stage (SDLC_STATE_MACHINE.md section 4)"
+          },
+          "gate_timeout_seconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 604800,
+            "description": "Deadline of a human_approval request created by an R3 gate. Defaults to 86400 (24 hours) per SDLC_STATE_MACHINE.md section 7. Ignored by auto and agent_review gates."
           },
           "agents": {
             "type": "array",

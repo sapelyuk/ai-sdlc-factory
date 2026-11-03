@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	approvalshandler "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/approvals/handler"
+	approvalsrepo "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/approvals/repository"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/config"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/iam"
-	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/handler"
-	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/repository"
+	registryhandler "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/handler"
+	registryrepo "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/repository"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/telemetry"
 	httptransport "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/transport/http"
 )
@@ -78,22 +80,27 @@ func main() {
 	pingCancel()
 	slog.Info("connected to database")
 
-	roleRepo := repository.NewPostgresRoleRepository(conn)
-	teamRepo := repository.NewPostgresTeamRepository(conn)
-	processRepo := repository.NewPostgresProcessRepository(conn)
+	roleRepo := registryrepo.NewPostgresRoleRepository(conn)
+	teamRepo := registryrepo.NewPostgresTeamRepository(conn)
+	processRepo := registryrepo.NewPostgresProcessRepository(conn)
 
-	registryHandler, err := handler.NewRegistryHandler(roleRepo, teamRepo, processRepo)
+	registryHandler, err := registryhandler.NewRegistryHandler(roleRepo, teamRepo, processRepo)
 	if err != nil {
 		slog.Error("failed to initialize registry handler", "error", err)
 		os.Exit(1)
 	}
+
+	// Approval queue (FR-OPS-1): human_approval gate requests waiting for the
+	// owner decision (issue #20).
+	approvalRepo := approvalsrepo.NewPostgresApprovalRepository(conn)
+	approvalHandler := approvalshandler.NewApprovalHandler(approvalRepo)
 
 	// IAM setup.
 	userRepo := iam.NewPostgresUserRepository(conn)
 	jwtService := iam.NewJWTService(cfg.JWTSecret, cfg.JWTDuration)
 	loginHandler := httptransport.NewLoginHandler(userRepo, jwtService)
 
-	r := httptransport.NewRouter(registryHandler, conn.Ping, cfg, jwtService, loginHandler)
+	r := httptransport.NewRouter(registryHandler, approvalHandler, conn.Ping, cfg, jwtService, loginHandler)
 
 	srv := &http.Server{
 		Addr:         ":" + strconv.Itoa(cfg.Port),
