@@ -76,10 +76,6 @@ func TestPostgresStoreCRUD(t *testing.T) {
 	req := BuildApprovalRequest(ws, GateProdApproved, author, 2*time.Hour, map[string]any{
 		"from": "deploy", "to": "release",
 	})
-	trID := uuid.New()
-	req.TaskRunID = &trID
-	runID := uuid.New()
-	req.RunID = &runID
 	req.RiskLevel = "R3"
 	req.WorkflowID = "wf-gates-1"
 
