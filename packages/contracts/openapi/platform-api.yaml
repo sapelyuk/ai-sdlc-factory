@@ -790,6 +790,8 @@ paths:
                   $ref: "#/components/schemas/ApprovalRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /api/v1/approvals/{id}:
@@ -802,6 +804,7 @@ paths:
         Returns one approval request by its identifier in the active workspace.
         The response carries the transition context and the artifact links the
         owner needs to decide (SYSTEM_DESIGN.md section 8.4).
+        Requires at least the viewer role (SYSTEM_DESIGN.md section 10.4).
       responses:
         "200":
           description: Approval request.
@@ -813,6 +816,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -828,6 +833,8 @@ paths:
         The workflow that waits on the request observes the decision and
         allows the state transition (ADR-013, SDLC_STATE_MACHINE.md section 4).
         An already decided or expired request cannot be approved: 409.
+        The author of the request cannot approve it (P9 independent review): 403.
+        The decision is written to the audit log as an approval_decided event.
       requestBody:
         required: false
         content:
@@ -863,6 +870,8 @@ paths:
         Records a negative human decision for a pending approval request.
         The blocked transition stays blocked (SDLC_STATE_MACHINE.md section 5).
         A rejection reason is recommended for the audit trail.
+        The author of the request cannot reject it (P9 independent review): 403.
+        The decision is written to the audit log as an approval_decided event.
       requestBody:
         required: false
         content:
@@ -1495,6 +1504,9 @@ components:
           type: string
           format: uuid
           nullable: true
+          description: |
+            SDLC run the request belongs to, for cost and decision attribution
+            (NFR-9). NULL when the request was raised outside a run.
         workspace_id:
           type: string
           format: uuid
