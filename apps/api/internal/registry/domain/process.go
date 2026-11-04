@@ -16,6 +16,8 @@ type StageSpec struct {
 	// GateTimeoutSeconds overrides the default human_approval deadline
 	// (SDLC_STATE_MACHINE.md section 7: 24 hours). Ignored by auto and
 	// agent_review gates.
+	// NOTE: schema-only in v1 — wiring to ChainInput.Gate.TimeoutSeconds
+	// is tracked as a follow-up issue (#<N>) after PR #119.
 	GateTimeoutSeconds int      `json:"gate_timeout_seconds,omitempty" yaml:"gate_timeout_seconds,omitempty"`
 	Agents             []string `json:"agents,omitempty" yaml:"agents,omitempty"`
 }

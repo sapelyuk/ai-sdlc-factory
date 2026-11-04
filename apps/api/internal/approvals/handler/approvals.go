@@ -112,6 +112,10 @@ func (h *ApprovalHandler) decide(w http.ResponseWriter, r *http.Request, decisio
 			"approval request is already decided with status "+string(existing.Status))
 		return
 	}
+	if errors.Is(err, repository.ErrSelfApproval) {
+		writeError(w, http.StatusForbidden, "approver cannot be the author")
+		return
+	}
 	if err != nil {
 		writeRepositoryError(w, err)
 		return

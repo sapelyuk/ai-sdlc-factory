@@ -7,6 +7,7 @@ package workflow
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -125,13 +126,20 @@ func WaitGate(ctx workflow.Context, in WaitGateInput) (GateOutcome, error) {
 		sel := workflow.NewSelector(ctx)
 
 		// ── Signal: decision arrived via Temporal signal ──────────
-		var signaled bool
 		var decision gates.ApprovalDecision
-		sel.AddReceive(ch, func(c workflow.ReceiveChannel, _ bool) {
-			c.Receive(ctx, &decision)
-			if decision.ApprovalID == created.ApprovalID {
+		var signaled bool
+		sel.AddReceive(ch, func(c workflow.ReceiveChannel, ready bool) {
+			if !ready {
+				return
+			}
+			var d gates.ApprovalDecision
+			c.Receive(ctx, &d)
+			if d.ApprovalID == created.ApprovalID {
+				decision = d
 				signaled = true
 			}
+			// Non-matching signal: silently ignore and re-arm.
+			// The channel stays open so the next signal can be received.
 		})
 
 		// ── Deadline timer ───────────────────────────────────────
@@ -154,8 +162,43 @@ func WaitGate(ctx workflow.Context, in WaitGateInput) (GateOutcome, error) {
 			decideErr := decideApproval(ctx, in.WorkspaceID, created.ApprovalID, decision.Approved, decision.DecidedBy, decision.Reason)
 			if decideErr != nil {
 				// The decision was already recorded by the API: ignore.
-				// A real DB error is transient: continue waiting.
-				_ = decideErr
+				// A real DB error is transient: log and continue waiting.
+				// Retry up to 3 times with exponential backoff before
+				// falling back to poll (see Major 3.7).
+				ao := workflow.ActivityOptions{
+					StartToCloseTimeout: 10 * time.Second,
+					RetryPolicy: &temporal.RetryPolicy{
+						InitialInterval:    1 * time.Second,
+						BackoffCoefficient: 2.0,
+						MaximumAttempts:    3,
+					},
+				}
+				retryCtx := workflow.WithActivityOptions(ctx, ao)
+				for attempt := 1; attempt <= 3; attempt++ {
+					retryErr := decideApproval(retryCtx, in.WorkspaceID, created.ApprovalID, decision.Approved, decision.DecidedBy, decision.Reason)
+					if retryErr == nil {
+						decideErr = nil
+						break
+					}
+					slog.WarnContext(ctx, "failed to persist decision from signal, retrying",
+						"approval_id", created.ApprovalID,
+						"attempt", attempt,
+						"err", retryErr,
+					)
+					// Wait before retry using a short timer.
+					_ = workflow.NewTimer(ctx, time.Duration(attempt)*2*time.Second).Get(ctx, nil)
+				}
+				if decideErr != nil {
+					slog.WarnContext(ctx, "persist decision from signal failed after retries, falling back to poll",
+						"approval_id", created.ApprovalID,
+						"err", decideErr,
+					)
+					// Fall through to poll-based resolution.
+					// Reset flags so only poll is active.
+					signaled = false
+					pollTimer = workflow.NewTimer(ctx, approvalPollInterval)
+					continue
+				}
 			}
 			if decision.Approved {
 				return GateOutcome{Passed: true, ApprovalID: created.ApprovalID}, nil

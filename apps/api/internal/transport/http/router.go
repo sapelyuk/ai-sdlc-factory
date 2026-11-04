@@ -119,7 +119,7 @@ func NewRouter(
 		if approvalsHandler != nil {
 			r.Route("/api/v1/approvals", func(r chi.Router) {
 				r.Get("/", wrapRBAC("viewer", approvalsHandler.List))
-				r.Get("/{id}", approvalsHandler.Get)
+				r.Get("/{id}", wrapRBAC("viewer", approvalsHandler.Get))
 				r.Post("/{id}/approve", wrapRBAC("admin", approvalsHandler.Approve))
 				r.Post("/{id}/reject", wrapRBAC("admin", approvalsHandler.Reject))
 			})

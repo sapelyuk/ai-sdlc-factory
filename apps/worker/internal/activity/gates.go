@@ -24,9 +24,6 @@ type GateCheckInput struct {
 	GateName string `json:"gate_name"`
 	// Facts are the evidence the gate is evaluated against.
 	Facts gates.Facts `json:"facts,omitempty"`
-	// ApprovalTimeoutSeconds overrides the default human_approval deadline
-	// (0 = use the gate default). Only meaningful for human_approval gates.
-	ApprovalTimeoutSeconds int `json:"approval_timeout_seconds,omitempty"`
 }
 
 // GateCheckOutput is the result of a gate check.

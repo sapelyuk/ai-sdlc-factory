@@ -34,7 +34,7 @@ var _ ApprovalStore = (*PostgresStore)(nil)
 const approvalColumns = `id, workspace_id, gate_name, status, requested_by,
 	    COALESCE(approved_by, NULL), risk_level, deadline_at, context,
 	    COALESCE(comment, ''), COALESCE(workflow_id, ''),
-	    task_run_id, stage_run_id, created_at, updated_at, decided_at`
+	    task_run_id, stage_run_id, run_id, created_at, updated_at, decided_at`
 
 // Create inserts a pending request. The insert is idempotent on the primary
 // key: a retried activity must not create a second request for the same gate.
@@ -50,13 +50,14 @@ func (s *PostgresStore) Create(ctx context.Context, req ApprovalRequest) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO approvals
 				(id, workspace_id, gate_name, status, requested_by, risk_level,
-				 deadline_at, context, workflow_id, task_run_id, stage_run_id,
+				 deadline_at, context, workflow_id, task_run_id, stage_run_id, run_id,
 				 created_at, updated_at)
-			VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			ON CONFLICT (id) DO NOTHING`,
 			req.ID, req.WorkspaceID, req.GateName, req.RequestedBy,
 			req.RiskLevel, req.DeadlineAt, contextJSON, req.WorkflowID,
 			nullUUIDPtr(req.TaskRunID), nullUUIDPtr(req.StageRunID),
+			nullUUIDPtr(req.RunID),
 			req.CreatedAt, req.UpdatedAt,
 		)
 		return err
@@ -198,6 +199,8 @@ func (s *PostgresStore) Expire(ctx context.Context, id uuid.UUID) error {
 // workspaceOf reads the tenant of a request. The lookup runs outside RLS
 // because the tenant is precisely what the RLS setting needs: the column is
 // read through a policy-free helper query on the same pool.
+// workspaceOf bypasses RLS intentionally: this is the trusted worker service;
+// RLS context is set for downstream queries.
 func (s *PostgresStore) workspaceOf(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	var workspaceID uuid.UUID
 	err := s.pool.QueryRow(ctx,
@@ -242,6 +245,7 @@ func scanApproval(row rowLike, req *ApprovalRequest) error {
 		approvedBy  *uuid.UUID
 		taskRunID   *uuid.UUID
 		stageRunID  *uuid.UUID
+		runID       *uuid.UUID
 		deadlineAt  *time.Time
 		decidedAt   *time.Time
 		contextJSON []byte
@@ -250,7 +254,7 @@ func scanApproval(row rowLike, req *ApprovalRequest) error {
 		&req.ID, &req.WorkspaceID, &req.GateName, &status, &req.RequestedBy,
 		&approvedBy, &req.RiskLevel, &deadlineAt, &contextJSON,
 		&req.Comment, &req.WorkflowID, &taskRunID, &stageRunID,
-		&req.CreatedAt, &req.UpdatedAt, &decidedAt,
+		&runID, &req.CreatedAt, &req.UpdatedAt, &decidedAt,
 	)
 	if err != nil {
 		return err
@@ -259,6 +263,7 @@ func scanApproval(row rowLike, req *ApprovalRequest) error {
 	req.ApprovedBy = approvedBy
 	req.TaskRunID = taskRunID
 	req.StageRunID = stageRunID
+	req.RunID = runID
 	req.DeadlineAt = deadlineAt
 	req.DecidedAt = decidedAt
 	if len(contextJSON) > 0 {
