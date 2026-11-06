@@ -177,6 +177,10 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 	// by any reviewer returns the package to this author, not to the previous
 	// reviewer in the fan-out.
 	var reviewAuthorID string
+	// gateSignals buffers approval decisions that arrived for a request no
+	// gate is currently waiting for, so a decision is never dropped on the
+	// floor of an unrelated gate (review #119 Major 3.8).
+	var gateSignals ApprovalSignalBuffer
 
 	for steps < maxChain {
 		agentID := currentAgentID
@@ -315,6 +319,7 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 					RequestedBy: input.RequestedBy,
 					RiskLevel:   input.Gate.RiskLevel,
 					WorkflowID:  workflow.GetInfo(ctx).WorkflowExecution.ID,
+					Signals:     &gateSignals,
 				})
 				if gateErr != nil {
 					return nil, fmt.Errorf("workflow: gate %q: %w", input.Gate.Name, gateErr)
