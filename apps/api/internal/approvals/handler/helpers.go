@@ -24,7 +24,7 @@ func encoder(w http.ResponseWriter) *json.Encoder {
 // into the zero value of target: approving without a comment is a valid
 // decision, so the body is optional on both decide endpoints.
 func decodeBody(r *http.Request, target any) error {
-	if r.Body == nil {
+	if r == nil || r.Body == nil {
 		return nil
 	}
 	data, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBytes+1))

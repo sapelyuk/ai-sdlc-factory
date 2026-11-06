@@ -21,6 +21,7 @@ import (
 	registryrepo "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/repository"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/telemetry"
 	httptransport "github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/transport/http"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
 
 func main() {
@@ -92,7 +93,9 @@ func main() {
 
 	// Approval queue (FR-OPS-1): human_approval gate requests waiting for the
 	// owner decision (issue #20).
-	approvalRepo := approvalsrepo.NewPostgresApprovalRepository(conn)
+	approvalRepo := approvalsrepo.NewPostgresApprovalRepository(
+		conn, sdkaudit.NewLogger(conn),
+	)
 	approvalHandler := approvalshandler.NewApprovalHandler(approvalRepo)
 
 	// IAM setup.

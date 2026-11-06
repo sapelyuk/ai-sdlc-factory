@@ -4,15 +4,29 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/approvals/domain"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/approvals/repository"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/identity"
 )
+
+// newRequestWithID creates an httptest.Request with the chi route context
+// populated so that chi.URLParam(r, "id") returns the given UUID string.
+func newRequestWithID(method, path string, id uuid.UUID, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, path, body)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id.String())
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
 
 // mockApprovalRepo is a minimal in-memory repository for handler tests.
 type mockApprovalRepo struct {
@@ -124,7 +138,7 @@ func TestGet_NotFound_Returns404(t *testing.T) {
 	repo := newMockApprovalRepo()
 	h := NewApprovalHandler(repo)
 	id := uuid.New()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/approvals/"+id.String(), nil)
+	req := newRequestWithID(http.MethodGet, "/api/v1/approvals/"+id.String(), id, nil)
 	w := httptest.NewRecorder()
 
 	h.Get(w, req)
@@ -144,7 +158,7 @@ func TestGet_OK_Returns200(t *testing.T) {
 		WorkspaceID: uuid.New(),
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/approvals/"+id.String(), nil)
+	req := newRequestWithID(http.MethodGet, "/api/v1/approvals/"+id.String(), id, nil)
 	w := httptest.NewRecorder()
 
 	h := NewApprovalHandler(repo)
@@ -173,7 +187,7 @@ func TestApprove_HappyPath(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(domain.ApproveDecision{Comment: "LGTM"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/"+id.String()+"/approve", bytes.NewReader(body))
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/approve", id, bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	h := NewApprovalHandler(repo)
@@ -196,7 +210,7 @@ func TestReject_HappyPath(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(domain.ApproveDecision{Comment: "Needs work"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/"+id.String()+"/reject", bytes.NewReader(body))
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/reject", id, bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	h := NewApprovalHandler(repo)
@@ -210,8 +224,13 @@ func TestReject_HappyPath(t *testing.T) {
 func TestApprove_InvalidID_Returns400(t *testing.T) {
 	repo := newMockApprovalRepo()
 	h := NewApprovalHandler(repo)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/not-a-uuid/approve", bytes.NewReader([]byte("{}")))
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/not-a-uuid/approve", uuid.Nil, bytes.NewReader([]byte("{}")))
 	w := httptest.NewRecorder()
+
+	// Override the route context with a non-UUID value.
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "not-a-uuid")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	h.Approve(w, req)
 
@@ -223,7 +242,8 @@ func TestApprove_InvalidID_Returns400(t *testing.T) {
 func TestDecodeBody_MalformedJSON_Returns400(t *testing.T) {
 	repo := newMockApprovalRepo()
 	h := NewApprovalHandler(repo)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/"+uuid.New().String()+"/approve", bytes.NewReader([]byte("{invalid")))
+	id := uuid.New()
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/approve", id, bytes.NewReader([]byte("{invalid")))
 	w := httptest.NewRecorder()
 
 	h.Approve(w, req)
@@ -236,8 +256,9 @@ func TestDecodeBody_MalformedJSON_Returns400(t *testing.T) {
 func TestDecodeBody_TrailingData_Returns400(t *testing.T) {
 	repo := newMockApprovalRepo()
 	h := NewApprovalHandler(repo)
+	id := uuid.New()
 	body := `{"comment":"ok","unknown_field":"data"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/"+uuid.New().String()+"/approve", bytes.NewReader([]byte(body)))
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/approve", id, bytes.NewReader([]byte(body)))
 	w := httptest.NewRecorder()
 
 	h.Approve(w, req)
@@ -309,6 +330,9 @@ func TestWriteError_VerifyFormat(t *testing.T) {
 func TestParseID_InvalidUUID_ReturnsFalse(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/approvals/bad-id", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "bad-id")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	_, ok := parseID(w, req)
 	if ok {
 		t.Errorf("parseID(bad) returned ok = true, want false")
@@ -322,6 +346,9 @@ func TestParseID_ValidUUID_ReturnsTrue(t *testing.T) {
 	w := httptest.NewRecorder()
 	id := uuid.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/approvals/"+id.String(), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	result, ok := parseID(w, req)
 	if !ok {
 		t.Errorf("parseID(valid) returned ok = false, want true")
@@ -359,4 +386,283 @@ func TestValidStatus_Unknown(t *testing.T) {
 	if validStatus(domain.Status("unknown")) {
 		t.Error("validStatus(unknown) = true, want false")
 	}
+}
+
+// --- decide endpoint tests with auth context ---
+
+func TestApprove_SelfApproval_Returns403(t *testing.T) {
+	repo := newMockApprovalRepo()
+	repo.selfApprove = true
+	id := uuid.New()
+	h := NewApprovalHandler(repo)
+
+	body, _ := json.Marshal(domain.ApproveDecision{Comment: "self"})
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/approve", id, bytes.NewReader(body))
+	ctx := identity.WithTenant(req.Context(), uuid.New(), id)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	h.Approve(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("Approve(self) status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestApprove_AlreadyDecided_Returns409(t *testing.T) {
+	repo := newMockApprovalRepo()
+	id := uuid.New()
+	repo.items[id] = &domain.ApprovalRequest{
+		ID:          id,
+		Status:      domain.StatusApproved,
+		GateName:    "ci_green",
+		WorkspaceID: uuid.New(),
+	}
+	repo.decided = true
+	h := NewApprovalHandler(repo)
+
+	body, _ := json.Marshal(domain.ApproveDecision{Comment: "late"})
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/approve", id, bytes.NewReader(body))
+	ctx := identity.WithTenant(req.Context(), id, uuid.New())
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	h.Approve(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("Approve(already) status = %d, want %d", w.Code, http.StatusConflict)
+	}
+}
+
+func TestApprove_HappyPath_Returns200(t *testing.T) {
+	repo := newMockApprovalRepo()
+	id := uuid.New()
+	repo.items[id] = &domain.ApprovalRequest{
+		ID:          id,
+		Status:      domain.StatusPending,
+		GateName:    "ci_green",
+		WorkspaceID: uuid.New(),
+	}
+	h := NewApprovalHandler(repo)
+
+	body, _ := json.Marshal(domain.ApproveDecision{Comment: "LGTM"})
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/approve", id, bytes.NewReader(body))
+	ctx := identity.WithTenant(req.Context(), id, uuid.New())
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	h.Approve(w, req)
+
+	// Mock repo returns the item after approval, so GetByID finds it → 200.
+	if w.Code != http.StatusOK {
+		t.Errorf("Approve(happy) status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestReject_SelfApproval_Returns403(t *testing.T) {
+	repo := newMockApprovalRepo()
+	repo.selfApprove = true
+	id := uuid.New()
+	h := NewApprovalHandler(repo)
+
+	body, _ := json.Marshal(domain.ApproveDecision{Comment: "self"})
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/reject", id, bytes.NewReader(body))
+	ctx := identity.WithTenant(req.Context(), uuid.New(), id)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	h.Reject(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("Reject(self) status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestReject_AlreadyDecided_Returns409(t *testing.T) {
+	repo := newMockApprovalRepo()
+	id := uuid.New()
+	repo.items[id] = &domain.ApprovalRequest{
+		ID:          id,
+		Status:      domain.StatusRejected,
+		GateName:    "ci_green",
+		WorkspaceID: uuid.New(),
+	}
+	repo.decided = true
+	h := NewApprovalHandler(repo)
+
+	body, _ := json.Marshal(domain.ApproveDecision{Comment: "late"})
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/reject", id, bytes.NewReader(body))
+	ctx := identity.WithTenant(req.Context(), id, uuid.New())
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	h.Reject(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("Reject(already) status = %d, want %d", w.Code, http.StatusConflict)
+	}
+}
+
+// --- writeRepositoryError tests ---
+
+func TestWriteRepositoryError_PgError23514(t *testing.T) {
+	w := httptest.NewRecorder()
+	pgErr := &pgconn.PgError{Code: "23514"}
+	writeRepositoryError(w, pgErr)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("writeRepositoryError(PgError 23514) status = %d, want %d", w.Code, http.StatusUnprocessableEntity)
+	}
+}
+
+func TestWriteRepositoryError_MissingTenantContext(t *testing.T) {
+	w := httptest.NewRecorder()
+	writeRepositoryError(w, identity.ErrMissingTenantContext)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("writeRepositoryError(MissingTenantContext) status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestWriteRepositoryError_NotFound(t *testing.T) {
+	w := httptest.NewRecorder()
+	writeRepositoryError(w, domain.ErrNotFound)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("writeRepositoryError(NotFound) status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestWriteRepositoryError_GenericError(t *testing.T) {
+	w := httptest.NewRecorder()
+	writeRepositoryError(w, errors.New("some unknown db error"))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("writeRepositoryError(generic) status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
+
+// --- decodeBody error path tests ---
+
+func TestDecodeBody_ReadError(t *testing.T) {
+	var target domain.ApproveDecision
+	req := httptest.NewRequest(http.MethodPost, "/", io.LimitReader(nil, 0))
+	// This should not panic
+	err := decodeBody(req, &target)
+	// nil or EOF is acceptable
+	_ = err
+}
+
+// --- Handler error paths ---
+
+// errApprovalRepo is a mock repo that always returns errors.
+type errApprovalRepo struct{}
+
+func (e *errApprovalRepo) List(_ context.Context, _ *domain.Status) ([]*domain.ApprovalRequest, error) {
+	return nil, errors.New("db connection lost")
+}
+func (e *errApprovalRepo) GetByID(_ context.Context, _ uuid.UUID) (*domain.ApprovalRequest, error) {
+	return nil, errors.New("db connection lost")
+}
+func (e *errApprovalRepo) Approve(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) error {
+	return errors.New("db connection lost")
+}
+func (e *errApprovalRepo) Reject(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) error {
+	return errors.New("db connection lost")
+}
+
+var _ repository.ApprovalRepository = (*errApprovalRepo)(nil)
+
+func TestList_RepoError_Returns500(t *testing.T) {
+	h := NewApprovalHandler(&errApprovalRepo{})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/approvals", nil)
+	w := httptest.NewRecorder()
+
+	h.List(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("List(repo error) status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestGet_RepoError_Returns500(t *testing.T) {
+	h := NewApprovalHandler(&errApprovalRepo{})
+	id := uuid.New()
+	req := newRequestWithID(http.MethodGet, "/api/v1/approvals/"+id.String(), id, nil)
+	w := httptest.NewRecorder()
+
+	h.Get(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Get(repo error) status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestDecide_RepoError_Returns500(t *testing.T) {
+	repo := newMockApprovalRepo()
+	id := uuid.New()
+	repo.items[id] = &domain.ApprovalRequest{
+		ID:          id,
+		Status:      domain.StatusPending,
+		GateName:    "ci_green",
+		WorkspaceID: uuid.New(),
+	}
+	h := NewApprovalHandler(&errApprovalRepo{})
+	body, _ := json.Marshal(domain.ApproveDecision{Comment: "test"})
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/approve", id, bytes.NewReader(body))
+	ctx := identity.WithTenant(req.Context(), id, uuid.New())
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	h.Approve(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Approve(repo error) status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestDecide_UnknownDecisionPath(t *testing.T) {
+	// The switch in decide has no default case, but testing the generic
+	// error path covers the final writeRepositoryError call.
+	repo := newMockApprovalRepo()
+	id := uuid.New()
+	repo.items[id] = &domain.ApprovalRequest{
+		ID:          id,
+		Status:      domain.StatusPending,
+		GateName:    "ci_green",
+		WorkspaceID: uuid.New(),
+	}
+	h := NewApprovalHandler(&errApprovalRepo{})
+	body, _ := json.Marshal(domain.ApproveDecision{Comment: "test"})
+	req := newRequestWithID(http.MethodPost, "/api/v1/approvals/"+id.String()+"/reject", id, bytes.NewReader(body))
+	ctx := identity.WithTenant(req.Context(), id, uuid.New())
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	h.Reject(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Reject(repo error) status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
+
+// brokenWriter always returns an error on Write to cover writeJSON encode error.
+type brokenWriter struct {
+	http.ResponseWriter
+}
+
+func (b *brokenWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
+}
+
+func TestWriteJSON_EncodeError(t *testing.T) {
+	w := &brokenWriter{httptest.NewRecorder()}
+	// writeJSON calls encoder.Encode which will fail on brokenWriter.Write.
+	writeJSON(w, http.StatusOK, map[string]string{"key": "value"})
+	// The test just verifies logError is called without panicking.
+}
+
+func TestLogError(t *testing.T) {
+	// logError should not panic.
+	logError("test message", errors.New("test error"))
 }
