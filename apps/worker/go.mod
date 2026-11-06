@@ -6,7 +6,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go v0.0.0
+	github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go v0.0.0-20261102184102-ff481163259f
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	go.temporal.io/sdk v1.30.0

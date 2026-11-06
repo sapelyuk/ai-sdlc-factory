@@ -19,6 +19,7 @@ import (
 	httpproto "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/config"
 	agentctx "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/context"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/gates"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/handoff"
 	wf "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/workflow"
 	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
@@ -82,6 +83,25 @@ func main() {
 	auditActivity := activity.NewAuditActivity(sdkaudit.NewLogger(pool))
 	w.RegisterActivityWithOptions(auditActivity.Execute, temporalactivity.RegisterOptions{
 		Name: wf.AuditRecordActivityName,
+	})
+
+	// Register gate activities (issue #20).
+	gateStore := gates.NewPostgresStore(pool)
+	gateSvc := gates.NewService(gates.WithApprovalStore(gateStore))
+	w.RegisterActivityWithOptions(activity.NewGateCheckActivity(gateSvc).Execute, temporalactivity.RegisterOptions{
+		Name: wf.GateCheckActivityName,
+	})
+	w.RegisterActivityWithOptions(activity.NewApprovalCreateActivity(gateStore).Execute, temporalactivity.RegisterOptions{
+		Name: wf.ApprovalCreateActivityName,
+	})
+	w.RegisterActivityWithOptions(activity.NewApprovalPollActivity(gateStore).Execute, temporalactivity.RegisterOptions{
+		Name: wf.ApprovalPollActivityName,
+	})
+	w.RegisterActivityWithOptions(activity.NewApprovalExpireActivity(gateStore).Execute, temporalactivity.RegisterOptions{
+		Name: wf.ApprovalExpireActivityName,
+	})
+	w.RegisterActivityWithOptions(activity.NewApprovalDecideActivity(gateStore).Execute, temporalactivity.RegisterOptions{
+		Name: wf.ApprovalDecideActivityName,
 	})
 
 	// Start health-check server in background.

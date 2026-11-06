@@ -20,7 +20,7 @@ func TestHealthReadinessAndTenantBoundaries(t *testing.T) {
 	// Create a stub login handler (won't be called in this test).
 	loginHandler := NewLoginHandler(nil, jwtService)
 
-	router := NewRouter(nil, func(context.Context) error {
+	router := NewRouter(nil, nil, func(context.Context) error {
 		return errors.New("database unavailable")
 	}, cfg, jwtService, loginHandler)
 

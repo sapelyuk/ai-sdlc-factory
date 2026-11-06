@@ -9,11 +9,17 @@ import (
 
 // StageSpec defines a stage in a process.
 type StageSpec struct {
-	Name        string   `json:"name" yaml:"name"`
-	Order       int      `json:"order" yaml:"order"`
-	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
-	Gate        string   `json:"gate" yaml:"gate"`
-	Agents      []string `json:"agents,omitempty" yaml:"agents,omitempty"`
+	Name        string `json:"name" yaml:"name"`
+	Order       int    `json:"order" yaml:"order"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	Gate        string `json:"gate" yaml:"gate"`
+	// GateTimeoutSeconds overrides the default human_approval deadline
+	// (SDLC_STATE_MACHINE.md section 7: 24 hours). Ignored by auto and
+	// agent_review gates.
+	// NOTE: schema-only in v1 — wiring to ChainInput.Gate.TimeoutSeconds
+	// is tracked as a follow-up issue (#<N>) after PR #119.
+	GateTimeoutSeconds int      `json:"gate_timeout_seconds,omitempty" yaml:"gate_timeout_seconds,omitempty"`
+	Agents             []string `json:"agents,omitempty" yaml:"agents,omitempty"`
 }
 
 // ProcessSpec is the YAML-serializable specification for a Process.
