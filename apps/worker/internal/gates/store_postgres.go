@@ -12,6 +12,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// pgxPool is the minimum interface the store needs from a connection pool.
+// *pgxpool.Pool satisfies it automatically.
+type pgxPool interface {
+	Begin(context.Context) (pgx.Tx, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
 // PostgresStore persists approval requests into the shared `approvals` table
 // (migration 0002, extended by 0016). The worker writes the request and reads
 // the decision; the API exposes the same rows to the owner.
@@ -20,11 +27,16 @@ import (
 // sets `app.current_workspace_id` before touching it, exactly like the audit
 // store does (packages/sdk-go/audit).
 type PostgresStore struct {
-	pool *pgxpool.Pool
+	pool pgxPool
 }
 
-// NewPostgresStore returns a store backed by the given connection pool.
+// NewPostgresStore returns a store backed by the given connection pool. A nil
+// pool is stored as a nil interface so the per-method guards keep reporting a
+// missing pool instead of panicking on a typed-nil.
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
+	if pool == nil {
+		return &PostgresStore{}
+	}
 	return &PostgresStore{pool: pool}
 }
 
