@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/identity"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/catalog"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/domain"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/registry/repository"
 )
@@ -58,6 +59,13 @@ func NewRegistryHandler(
 	if err != nil {
 		return nil, fmt.Errorf("compile process schema: %w", err)
 	}
+	roleCatalogDir, err := findRoleCatalogDirectory()
+	if err != nil {
+		return nil, err
+	}
+	if err := catalog.ValidateRoleDirectory(roleCatalogDir, roleSchema); err != nil {
+		return nil, fmt.Errorf("validate Registry role catalog: %w", err)
+	}
 	return &RegistryHandler{
 		roles: roles, teams: teams, processes: processes,
 		roleSchema: roleSchema, teamSchema: teamSchema, processSchema: processSchema,
@@ -83,6 +91,31 @@ func findSchemaDirectory() (string, error) {
 		}
 	}
 	return "", fmt.Errorf("could not find Registry JSON-Schemas; set SCHEMA_DIR")
+}
+
+func findRoleCatalogDirectory() (string, error) {
+	var candidates []string
+	if configured := os.Getenv("ROLE_CATALOG_DIR"); configured != "" {
+		candidates = append(candidates, configured)
+	}
+	candidates = append(candidates, filepath.Join("catalog", "roles"))
+	if _, sourceFile, _, ok := runtime.Caller(0); ok {
+		candidates = append(candidates, filepath.Join(filepath.Dir(sourceFile), "..", "..", "..", "..", "..", "catalog", "roles"))
+	}
+	for _, candidate := range candidates {
+		dir, err := filepath.Abs(candidate)
+		if err != nil {
+			return "", fmt.Errorf("resolve Registry role catalog path %q: %w", candidate, err)
+		}
+		info, err := os.Stat(dir)
+		if err == nil && info.IsDir() {
+			return dir, nil
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("inspect Registry role catalog %q: %w", dir, err)
+		}
+	}
+	return "", fmt.Errorf("could not find Registry role catalog; set ROLE_CATALOG_DIR")
 }
 
 func validateSpec(schema *jsonschema.Schema, spec any) error {
