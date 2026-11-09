@@ -7,11 +7,13 @@ metadata:
 spec:
   system_prompt_ref: prompts/roles/business-analyst.md
   inputs:
-    - name: product_requirements
-      type: document
+    - name: prd
+      artifact_type: prd
+    - name: research_report
+      artifact_type: research_report
   outputs:
-    - name: domain_model
-      type: document
+    - name: slpr_v1
+      artifact_type: slpr
   model:
     capability: reasoning-strong
   tools:

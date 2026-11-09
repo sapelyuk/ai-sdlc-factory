@@ -7,11 +7,14 @@ metadata:
 spec:
   system_prompt_ref: prompts/roles/product-manager.md
   inputs:
-    - name: product_goal
-      type: document
+    - name: research_report
+      artifact_type: research_report
+      required: false
   outputs:
-    - name: product_requirements
-      type: document
+    - name: prd
+      artifact_type: prd
+    - name: user_stories
+      artifact_type: user_stories
   model:
     capability: reasoning-strong
   tools:

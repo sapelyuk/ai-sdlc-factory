@@ -7,11 +7,15 @@ metadata:
 spec:
   system_prompt_ref: prompts/roles/qa-engineer.md
   inputs:
-    - name: implementation
-      type: code
+    - name: pr
+      artifact_type: pr
+    - name: acceptance_criteria
+      artifact_type: criteria
   outputs:
     - name: test_report
-      type: document
+      artifact_type: test_report
+    - name: coverage_report
+      artifact_type: report
   model:
     capability: code-fast
   tools:

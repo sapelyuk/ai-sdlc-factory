@@ -7,11 +7,15 @@ metadata:
 spec:
   system_prompt_ref: prompts/roles/backend-developer.md
   inputs:
-    - name: approved_design
-      type: document
+    - name: ticket
+      artifact_type: ticket
+    - name: am_v1
+      artifact_type: am
   outputs:
-    - name: implementation
-      type: code
+    - name: code_branch
+      artifact_type: branch
+    - name: pr
+      artifact_type: pr
   model:
     capability: code-strong
   tools:

@@ -7,11 +7,11 @@ metadata:
 spec:
   system_prompt_ref: prompts/roles/product-researcher.md
   inputs:
-    - name: research_question
-      type: document
+    - name: hypothesis
+      artifact_type: hypothesis
   outputs:
-    - name: research_brief
-      type: document
+    - name: research_report
+      artifact_type: research_report
   model:
     capability: long-context
   tools:

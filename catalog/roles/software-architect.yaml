@@ -7,11 +7,17 @@ metadata:
 spec:
   system_prompt_ref: prompts/roles/software-architect.md
   inputs:
-    - name: approved_requirements
-      type: document
+    - name: prd
+      artifact_type: prd
+    - name: slpr_v1
+      artifact_type: slpr
   outputs:
-    - name: architecture_design
-      type: document
+    - name: am_v1
+      artifact_type: am
+    - name: adr
+      artifact_type: adr
+    - name: c4_diagrams
+      artifact_type: diagram
   model:
     capability: reasoning-strong
   tools:
