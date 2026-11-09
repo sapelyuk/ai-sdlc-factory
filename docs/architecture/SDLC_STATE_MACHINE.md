@@ -33,6 +33,18 @@ Monitoring --> Research (feedback loop)
 | `Deploy` | DevOps | approve | deployed environment |
 | `Monitoring` | DevOps + PM | metrics | reports, feedback tasks |
 
+### Role I/O contract (v1)
+
+Each role declares `spec.inputs` and `spec.outputs` as an array of
+`{name, artifact_type, required, schema_ref?}` (see `packages/contracts/schemas/role.schema.json`).
+
+- `artifact_type` refers to artifacts listed in the table above. In v1 it is a free string
+  validated by pattern `^[a-z][a-z0-9_-]*$`; in v2 it will become an enum sourced from
+  SLP `ArtifactType` (ONTOLOGY_SPEC.md §3.1, FR-SEM).
+- `required` defaults to `true`. Set `false` for optional artifacts.
+- `schema_ref` is optional. When present, handoff validation (SYSTEM_DESIGN.md §8.4, #21)
+  uses it as `expected_output_schema` for the recipient.
+
 ## 3. Transitions and conditions
 
 ### 3.9 InDev → CodeReview
