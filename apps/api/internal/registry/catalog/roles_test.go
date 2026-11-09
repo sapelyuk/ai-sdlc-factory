@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -150,6 +151,71 @@ func TestProductManagerResearchReportOptional(t *testing.T) {
 		}
 	}
 	t.Fatal("product-manager must declare research_report input")
+}
+
+// TestCatalogRoles_UseArtifactTypeNotLegacyType guards the catalog against
+// drifting to the deprecated `type` field. HTTP API still accepts legacy `type`
+// for compatibility, but catalog YAMLs must use `artifact_type`.
+func TestCatalogRoles_UseArtifactTypeNotLegacyType(t *testing.T) {
+	for _, name := range []string{
+		"backend-developer",
+		"business-analyst",
+		"code-reviewer",
+		"frontend-developer",
+		"product-manager",
+		"product-researcher",
+		"qa-engineer",
+		"software-architect",
+		"ux-ui-designer",
+	} {
+		role := loadRole(t, name)
+		for _, in := range role.Spec.Inputs {
+			if in.Type != "" {
+				t.Errorf("%s.inputs[%s]: use artifact_type, not deprecated type", role.Metadata.Name, in.Name)
+			}
+		}
+		for _, out := range role.Spec.Outputs {
+			if out.Type != "" {
+				t.Errorf("%s.outputs[%s]: use artifact_type, not deprecated type", role.Metadata.Name, out.Name)
+			}
+		}
+	}
+}
+
+func TestArtifactSchemaAcceptsLegacyTypeAndRejectsMixedFields(t *testing.T) {
+	schema := compileRoleSchema(t, filepath.Join(repositoryRoot(t), "packages", "contracts", "schemas", "role.schema.json"))
+	legacyRole := "apiVersion: ai-sdlc-factory/v1\nkind: Role\nmetadata:\n  name: legacy-role\n  version: 1.0.0\n  description: Legacy role.\nspec:\n  system_prompt_ref: prompts/roles/legacy-role.md\n  inputs:\n    - name: request\n      type: document\n  outputs:\n    - name: result\n      type: document\n  model:\n    capability: code-fast\n  tools:\n    allow: []\n    deny: []\n  knowledge_scopes: [platform]\n  limits:\n    max_steps: 1\n    max_cost_usd: 0\n    max_wall_minutes: 1\n  autonomy: strict\n"
+	var legacy any
+	if err := yaml.Unmarshal([]byte(legacyRole), &legacy); err != nil {
+		t.Fatalf("unmarshal legacy role: %v", err)
+	}
+	jsonData, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal legacy role: %v", err)
+	}
+	var value any
+	if err := json.Unmarshal(jsonData, &value); err != nil {
+		t.Fatalf("decode legacy role: %v", err)
+	}
+	if err := schema.Validate(value); err != nil {
+		t.Fatalf("legacy type fields unexpectedly rejected: %v", err)
+	}
+
+	mixedRole := "apiVersion: ai-sdlc-factory/v1\nkind: Role\nmetadata:\n  name: mixed-role\n  version: 1.0.0\n  description: Mixed role.\nspec:\n  system_prompt_ref: prompts/roles/mixed-role.md\n  inputs:\n    - name: request\n      type: document\n      artifact_type: document\n  outputs:\n    - name: result\n      artifact_type: document\n  model:\n    capability: code-fast\n  tools:\n    allow: []\n    deny: []\n  knowledge_scopes: [platform]\n  limits:\n    max_steps: 1\n    max_cost_usd: 0\n    max_wall_minutes: 1\n  autonomy: strict\n"
+	var mixed any
+	if err := yaml.Unmarshal([]byte(mixedRole), &mixed); err != nil {
+		t.Fatalf("unmarshal mixed role: %v", err)
+	}
+	jsonData, err = json.Marshal(mixed)
+	if err != nil {
+		t.Fatalf("marshal mixed role: %v", err)
+	}
+	if err := json.Unmarshal(jsonData, &value); err != nil {
+		t.Fatalf("decode mixed role: %v", err)
+	}
+	if err := schema.Validate(value); err == nil {
+		t.Fatal("mixed type and artifact_type unexpectedly accepted")
+	}
 }
 
 func TestRoleToolsFollowAntiInjectionSeparation(t *testing.T) {
