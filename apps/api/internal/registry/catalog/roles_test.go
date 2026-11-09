@@ -28,8 +28,25 @@ type roleDocument struct {
 }
 
 type artifactDocument struct {
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
+	Name         string `yaml:"name"`
+	ArtifactType string `yaml:"artifact_type"`
+	Type         string `yaml:"type"`
+	Required     *bool  `yaml:"required"`
+	SchemaRef    string `yaml:"schema_ref"`
+}
+
+func (a artifactDocument) artifactTypeName() string {
+	if a.ArtifactType != "" {
+		return a.ArtifactType
+	}
+	return a.Type
+}
+
+func (a artifactDocument) isRequired() bool {
+	if a.Required == nil {
+		return true
+	}
+	return *a.Required
 }
 
 func TestRoleSchemaValidatesAllNineRoleFiles(t *testing.T) {
@@ -112,6 +129,29 @@ func TestRoleToolsAndAutonomy(t *testing.T) {
 	requireTools(t, roles["ux-ui-designer"], "allow", "figma.read", "figma.write", "design.export_tokens")
 }
 
+func TestSoftwareArchitectOutputsContainAM(t *testing.T) {
+	role := loadRole(t, "software-architect")
+	for _, out := range role.Spec.Outputs {
+		if out.Name == "am_v1" && out.artifactTypeName() == "am" {
+			return
+		}
+	}
+	t.Fatal("software-architect must declare am_v1 with artifact_type am")
+}
+
+func TestProductManagerResearchReportOptional(t *testing.T) {
+	role := loadRole(t, "product-manager")
+	for _, in := range role.Spec.Inputs {
+		if in.Name == "research_report" {
+			if in.isRequired() {
+				t.Fatal("research_report must be required: false for product-manager")
+			}
+			return
+		}
+	}
+	t.Fatal("product-manager must declare research_report input")
+}
+
 func TestRoleToolsFollowAntiInjectionSeparation(t *testing.T) {
 	root := repositoryRoot(t)
 	roleDirectory := filepath.Join(root, "catalog", "roles")
@@ -151,7 +191,7 @@ func TestRoleToolsFollowAntiInjectionSeparation(t *testing.T) {
 
 func TestValidateRoleDirectoryRejectsInvalidCatalogs(t *testing.T) {
 	schema := compileRoleSchema(t, filepath.Join(repositoryRoot(t), "packages", "contracts", "schemas", "role.schema.json"))
-	validRole := "apiVersion: ai-sdlc-factory/v1\nkind: Role\nmetadata:\n  name: test-role\n  version: 1.0.0\n  description: Test role.\nspec:\n  system_prompt_ref: prompts/roles/test-role.md\n  inputs:\n    - name: request\n      type: document\n  outputs:\n    - name: result\n      type: document\n  model:\n    capability: code-fast\n  tools:\n    allow: []\n    deny: []\n  knowledge_scopes: [platform]\n  limits:\n    max_steps: 1\n    max_cost_usd: 0\n    max_wall_minutes: 1\n  autonomy: strict\n"
+	validRole := "apiVersion: ai-sdlc-factory/v1\nkind: Role\nmetadata:\n  name: test-role\n  version: 1.0.0\n  description: Test role.\nspec:\n  system_prompt_ref: prompts/roles/test-role.md\n  inputs:\n    - name: request\n      artifact_type: document\n  outputs:\n    - name: result\n      artifact_type: document\n  model:\n    capability: code-fast\n  tools:\n    allow: []\n    deny: []\n  knowledge_scopes: [platform]\n  limits:\n    max_steps: 1\n    max_cost_usd: 0\n    max_wall_minutes: 1\n  autonomy: strict\n"
 	validDirectory := t.TempDir()
 	if err := os.WriteFile(filepath.Join(validDirectory, "role.yaml"), []byte(validRole), 0o600); err != nil {
 		t.Fatal(err)
@@ -167,6 +207,8 @@ func TestValidateRoleDirectoryRejectsInvalidCatalogs(t *testing.T) {
 	}{
 		{name: "invalid YAML", content: "kind: [", wantMessage: "parse role"},
 		{name: "invalid schema", content: strings.Replace(validRole, "ai-sdlc-factory/v1", "other/v1", 1), wantMessage: "validate role"},
+		{name: "missing artifact_type", content: strings.Replace(validRole, "  inputs:\n    - name: request\n      artifact_type: document\n", "  inputs:\n    - name: request\n", 1), wantMessage: "validate role"},
+		{name: "invalid artifact_type pattern", content: strings.Replace(validRole, "artifact_type: document", "artifact_type: Document", 1), wantMessage: "validate role"},
 		{name: "multiple documents", content: validRole + "---\nkind: Role\n", wantMessage: "multiple YAML documents"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -209,6 +251,21 @@ func repositoryRoot(t *testing.T) string {
 		t.Fatal("could not locate role catalog test source")
 	}
 	return filepath.Clean(filepath.Join(filepath.Dir(source), "..", "..", "..", "..", ".."))
+}
+
+func loadRole(t *testing.T, name string) roleDocument {
+	t.Helper()
+	root := repositoryRoot(t)
+	path := filepath.Join(root, "catalog", "roles", name+".yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var role roleDocument
+	if err := yaml.Unmarshal(data, &role); err != nil {
+		t.Fatalf("parse %s: %v", name, err)
+	}
+	return role
 }
 
 func requireTools(t *testing.T, role roleDocument, list string, tools ...string) {
