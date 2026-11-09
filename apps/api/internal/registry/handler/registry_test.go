@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -207,6 +209,19 @@ func TestCreateRoleUsesTenantContextAndReturnsInitialVersion(t *testing.T) {
 	}
 	if roles.created.Status != domain.StatusDraft {
 		t.Fatalf("initial status = %s, want draft", roles.created.Status)
+	}
+}
+
+func TestNewRegistryHandlerRejectsInvalidRoleCatalog(t *testing.T) {
+	catalogDirectory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(catalogDirectory, "invalid.yaml"), []byte("kind: NotRole\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ROLE_CATALOG_DIR", catalogDirectory)
+
+	_, err := NewRegistryHandler(&roleRepositoryStub{}, &teamRepositoryStub{}, &processRepositoryStub{})
+	if err == nil || !strings.Contains(err.Error(), "validate Registry role catalog") {
+		t.Fatalf("NewRegistryHandler() error = %v, want catalog validation error", err)
 	}
 }
 
