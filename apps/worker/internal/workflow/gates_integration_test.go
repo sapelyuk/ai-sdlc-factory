@@ -188,6 +188,7 @@ func setupGatesPostgres(t *testing.T) (*pgxpool.Pool, context.Context) {
 		"0001_init_squads_and_agents.up.sql",
 		"0002_init_tasks_and_sdlc.up.sql",
 		"0016_sdlc_gates.up.sql",
+		"0017_approvals_run_id.up.sql",
 	}
 	for _, name := range migrations {
 		contents, err := os.ReadFile(filepath.Join(gateRepoRoot(t), "migrations", "postgres", name))
