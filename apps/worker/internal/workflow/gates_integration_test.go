@@ -174,6 +174,9 @@ func setupGatesPostgres(t *testing.T) (*pgxpool.Pool, context.Context) {
 		postgrescontainer.BasicWaitStrategies(),
 	)
 	if err != nil {
+		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
+			t.Fatalf("failed to start PostgreSQL container in CI: %v", err)
+		}
 		t.Skipf("failed to start PostgreSQL container: %v", err)
 	}
 	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
@@ -189,6 +192,7 @@ func setupGatesPostgres(t *testing.T) (*pgxpool.Pool, context.Context) {
 		"0002_init_tasks_and_sdlc.up.sql",
 		"0016_sdlc_gates.up.sql",
 		"0017_approvals_run_id.up.sql",
+		"0018_approvals_run_id_set_null.up.sql",
 	}
 	for _, name := range migrations {
 		contents, err := os.ReadFile(filepath.Join(gateRepoRoot(t), "migrations", "postgres", name))

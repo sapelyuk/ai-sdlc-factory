@@ -18,45 +18,16 @@ import (
 // TestPostgresStoreCRUD exercises the PostgresStore with a real PostgreSQL
 // container (issue #20). Skipped when Docker is unavailable.
 func TestPostgresStoreCRUD(t *testing.T) {
-	if output, err := exec.CommandContext(t.Context(), "docker", "info").CombinedOutput(); err != nil {
-		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
-			t.Fatalf("Docker required for PostgresStore integration test: %s", strings.TrimSpace(string(output)))
-		}
-		t.Skipf("Docker unavailable; skipping: %s", strings.TrimSpace(string(output)))
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	t.Cleanup(cancel)
-
-	container, err := postgrescontainer.Run(ctx, "pgvector/pgvector:pg18",
-		postgrescontainer.WithDatabase("gates_test"),
-		postgrescontainer.WithUsername("gates_test"),
-		postgrescontainer.WithPassword("gates_test"),
-		postgrescontainer.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(ctx) })
-
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	pool, err := pgxpool.New(ctx, dsn)
-	require.NoError(t, err)
-	t.Cleanup(pool.Close)
-
-	// Apply migrations.
-	migrations := []string{
+	pool := startGatesPostgres(t, "gates_test", []string{
 		"0001_init_squads_and_agents.up.sql",
 		"0002_init_tasks_and_sdlc.up.sql",
 		"0016_sdlc_gates.up.sql",
 		"0017_approvals_run_id.up.sql",
-	}
-	for _, name := range migrations {
-		contents, err := os.ReadFile(filepath.Join(repoRoot(t), "migrations", "postgres", name))
-		require.NoError(t, err, "read migration %s", name)
-		if _, err := pool.Exec(ctx, string(contents)); err != nil {
-			t.Fatalf("apply migration %s: %v", name, err)
-		}
-	}
+		"0018_approvals_run_id_set_null.up.sql",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
 
 	store := NewPostgresStore(pool)
 	ws := uuid.New()
@@ -141,41 +112,16 @@ func TestPostgresStoreCRUD(t *testing.T) {
 }
 
 func TestPostgresStoreWorkspaceIsolation(t *testing.T) {
-	if output, err := exec.CommandContext(t.Context(), "docker", "info").CombinedOutput(); err != nil {
-		t.Skipf("Docker unavailable; skipping: %s", strings.TrimSpace(string(output)))
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	t.Cleanup(cancel)
-
-	container, err := postgrescontainer.Run(ctx, "pgvector/pgvector:pg18",
-		postgrescontainer.WithDatabase("gates_iso"),
-		postgrescontainer.WithUsername("gates_iso"),
-		postgrescontainer.WithPassword("gates_iso"),
-		postgrescontainer.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(ctx) })
-
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	pool, err := pgxpool.New(ctx, dsn)
-	require.NoError(t, err)
-	t.Cleanup(pool.Close)
-
-	migrations := []string{
+	pool := startGatesPostgres(t, "gates_iso", []string{
 		"0001_init_squads_and_agents.up.sql",
 		"0002_init_tasks_and_sdlc.up.sql",
 		"0016_sdlc_gates.up.sql",
 		"0017_approvals_run_id.up.sql",
-	}
-	for _, name := range migrations {
-		contents, err := os.ReadFile(filepath.Join(repoRoot(t), "migrations", "postgres", name))
-		require.NoError(t, err, "read migration %s", name)
-		if _, err := pool.Exec(ctx, string(contents)); err != nil {
-			t.Fatalf("apply migration %s: %v", name, err)
-		}
-	}
+		"0018_approvals_run_id_set_null.up.sql",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
 
 	store := NewPostgresStore(pool)
 	ws1, ws2 := uuid.New(), uuid.New()
@@ -224,6 +170,157 @@ func TestPostgresStoreNilPool(t *testing.T) {
 
 	require.Error(t, s.Decide(context.Background(), uuid.New(), true, uuid.New(), ""))
 	require.Error(t, s.Expire(context.Background(), uuid.New()))
+}
+
+// TestApprovalSurvivesRunDeletion verifies that deleting a run does not cascade-delete
+// its approval. The approval must remain with run_id = NULL.
+//
+// Rationale: approval rows feed the audit trail (FR-OPS-1, hash chain in
+// packages/sdk-go/audit). Migration 0017 created approvals.run_id with
+// ON DELETE CASCADE, which would silently destroy that trail during run
+// cleanup. Migration 0018 replaces the FK with ON DELETE SET NULL.
+func TestApprovalSurvivesRunDeletion(t *testing.T) {
+	pool := startGatesPostgres(t, "gates_fk", []string{
+		"0001_init_squads_and_agents.up.sql",
+		"0002_init_tasks_and_sdlc.up.sql",
+		"0016_sdlc_gates.up.sql",
+		"0017_approvals_run_id.up.sql",
+		"0018_approvals_run_id_set_null.up.sql",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	store := NewPostgresStore(pool)
+	ws := uuid.New()
+	author := uuid.New()
+
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, true)`, ws.String())
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `INSERT INTO workspaces (id, name, owner_id) VALUES ($1, 'del-run', $2)`,
+		ws, author.String())
+	require.NoError(t, err)
+
+	// A run is the delete target; the approval points at it.
+	runID := uuid.New()
+	_, err = tx.Exec(ctx, `INSERT INTO runs (id, workspace_id, name) VALUES ($1, $2, 'run-to-delete')`,
+		runID, ws)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	req := BuildApprovalRequest(ws, GateProdApproved, author, time.Hour, map[string]any{
+		"from": "deploy", "to": "release",
+	})
+	req.RunID = &runID
+	require.NoError(t, store.Create(ctx, req))
+
+	// The link exists before the delete.
+	got, err := store.Get(ctx, req.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.RunID, "approval should reference the run before deletion")
+	require.Equal(t, runID, *got.RunID)
+
+	// Deleting the run must not remove the approval.
+	tx, err = pool.Begin(ctx)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `SELECT set_config('app.current_workspace_id', $1, true)`, ws.String())
+	require.NoError(t, err)
+	tag, err := tx.Exec(ctx, `DELETE FROM runs WHERE id = $1`, runID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), tag.RowsAffected(), "the run row should be deleted")
+	require.NoError(t, tx.Commit(ctx))
+
+	// The approval survives with run_id nulled out.
+	got, err = store.Get(ctx, req.ID)
+	require.NoError(t, err, "approval must survive deletion of the referenced run")
+	require.Nil(t, got.RunID, "run_id should be set to NULL, not cascade-deleted")
+	require.Equal(t, ApprovalPending, got.Status)
+
+	// The FK really carries SET NULL, not CASCADE. Read the rule back from the
+	// catalog so a silent migration no-op cannot pass this test.
+	//
+	// Scope matters: approvals already carries cascading FKs from 0002
+	// (task_run_id, stage_run_id, workspace_id), so a repo-wide "no cascade"
+	// assertion would be wrong. Only the reference to runs(id) is in question.
+	//
+	// Checking a single expected constraint name is not enough either: if 0017
+	// had auto-named the constraint differently, 0018's
+	// `DROP CONSTRAINT IF EXISTS` would be a silent no-op and `ADD CONSTRAINT`
+	// would leave TWO foreign keys on run_id, one still CASCADE. So assert that
+	// every FK pointing at runs has exactly one row and that it is SET NULL.
+	// In pg_constraint confdeltype is 'n' SET NULL, 'c' CASCADE, 'a' NO ACTION.
+	type fkInfo struct {
+		name string
+		rule string
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT c.conname, c.confdeltype
+		FROM pg_constraint c
+		JOIN pg_class r ON r.oid = c.confrelid
+		WHERE c.conrelid = 'approvals'::regclass
+		  AND c.contype = 'f'
+		  AND r.relname = 'runs'
+		ORDER BY c.conname`,
+	)
+	require.NoError(t, err)
+	var fks []fkInfo
+	for rows.Next() {
+		var info fkInfo
+		require.NoError(t, rows.Scan(&info.name, &info.rule))
+		fks = append(fks, info)
+	}
+	rows.Close()
+
+	require.Len(t, fks, 1, "approvals.run_id must carry exactly one FK to runs")
+	require.Equal(t, "approvals_run_id_fkey", fks[0].name,
+		"0018 must reuse the constraint name generated by 0017")
+	require.Equal(t, "n", fks[0].rule, "approvals_run_id_fkey must be ON DELETE SET NULL")
+}
+
+// startGatesPostgres starts a PostgreSQL container, applies the named migrations
+// and returns the connection pool.
+//
+// Docker availability is the only permitted skip reason, and never on CI: a
+// container that cannot start in CI fails the build instead of silently dropping
+// integration coverage to zero.
+func startGatesPostgres(t *testing.T, dbName string, migrations []string) *pgxpool.Pool {
+	t.Helper()
+
+	if output, err := exec.CommandContext(t.Context(), "docker", "info").CombinedOutput(); err != nil {
+		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
+			t.Fatalf("Docker required for integration test: %s", strings.TrimSpace(string(output)))
+		}
+		t.Skipf("Docker unavailable; skipping: %s", strings.TrimSpace(string(output)))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	container, err := postgrescontainer.Run(ctx, "pgvector/pgvector:pg18",
+		postgrescontainer.WithDatabase(dbName),
+		postgrescontainer.WithUsername(dbName),
+		postgrescontainer.WithPassword(dbName),
+		postgrescontainer.BasicWaitStrategies(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = container.Terminate(ctx) })
+
+	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+	pool, err := pgxpool.New(ctx, dsn)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	for _, name := range migrations {
+		contents, err := os.ReadFile(filepath.Join(repoRoot(t), "migrations", "postgres", name))
+		require.NoError(t, err, "read migration %s", name)
+		if _, err := pool.Exec(ctx, string(contents)); err != nil {
+			t.Fatalf("apply migration %s: %v", name, err)
+		}
+	}
+	return pool
 }
 
 // repoRoot walks up the directory tree to find the repository root.
