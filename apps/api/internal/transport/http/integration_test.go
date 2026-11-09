@@ -249,7 +249,7 @@ func TestIntegration_RBACWithJWT(t *testing.T) {
 	}
 
 	cfg := &config.Config{AllowLegacyAuth: false}
-	router := NewRouter(registryHandler, nil, cfg, jwtService, loginHandler)
+	router := NewRouter(registryHandler, nil, nil, cfg, jwtService, loginHandler)
 
 	// Login as viewer.
 	viewerToken := loginAsViewer(t, router)
@@ -332,7 +332,7 @@ func TestIntegration_MetricsEndpoint(t *testing.T) {
 	loginHandler := NewLoginHandler(userRepo, jwtService)
 	cfg := &config.Config{AllowLegacyAuth: false}
 
-	router := NewRouter(nil, nil, cfg, jwtService, loginHandler)
+	router := NewRouter(nil, nil, nil, cfg, jwtService, loginHandler)
 
 	// Make a request to generate metrics.
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -358,7 +358,7 @@ func TestIntegration_HealthWithoutToken(t *testing.T) {
 	loginHandler := NewLoginHandler(nil, jwtService)
 	cfg := &config.Config{AllowLegacyAuth: false}
 
-	router := NewRouter(nil, nil, cfg, jwtService, loginHandler)
+	router := NewRouter(nil, nil, nil, cfg, jwtService, loginHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	resp := httptest.NewRecorder()
@@ -448,7 +448,7 @@ func TestIntegration_ApproverFromJWT(t *testing.T) {
 	}
 
 	cfg := &config.Config{AllowLegacyAuth: false}
-	router := NewRouter(registryHandler, nil, cfg, jwtService, loginHandler)
+	router := NewRouter(registryHandler, nil, nil, cfg, jwtService, loginHandler)
 
 	// Login as admin (different from author).
 	adminToken := loginAsAdmin(t, router)

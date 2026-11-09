@@ -293,6 +293,27 @@ const AgentStepActivityName = "AgentStep"
 // AuditRecordActivityName is the registered name of the audit activity.
 const AuditRecordActivityName = "AuditRecord"
 
+// ── Gate activities (issue #20) ──────────────────────────────────────────
+
+// GateCheckActivityName is the registered name of the gate-check activity.
+const GateCheckActivityName = "GateCheck"
+
+// ApprovalCreateActivityName is the registered name of the approval-create
+// activity.
+const ApprovalCreateActivityName = "ApprovalCreate"
+
+// ApprovalPollActivityName is the registered name of the approval-poll
+// activity.
+const ApprovalPollActivityName = "ApprovalPoll"
+
+// ApprovalExpireActivityName is the registered name of the approval-expire
+// activity.
+const ApprovalExpireActivityName = "ApprovalExpire"
+
+// ApprovalDecideActivityName is the registered name of the approval-decide
+// activity.
+const ApprovalDecideActivityName = "ApprovalDecide"
+
 func auditIdempotencyKey(ctx workflow.Context) (string, error) {
 	var key string
 	if err := workflow.SideEffect(ctx, func(workflow.Context) any {
