@@ -1,0 +1,25 @@
+apiVersion: ai-sdlc-factory/v1
+kind: Role
+metadata:
+  name: code-reviewer
+  version: 1.0.0
+  description: Reviews code changes for correctness, maintainability, and policy compliance.
+spec:
+  system_prompt_ref: prompts/roles/code-reviewer.md
+  inputs:
+    - name: pr
+      artifact_type: pr
+  outputs:
+    - name: review_decision
+      artifact_type: review
+  model:
+    capability: reasoning-strong
+  tools:
+    allow: [git.diff, git.read, pr.review, pr.approve]
+    deny: [deploy.prod, secrets.read, git.push_protected]
+  knowledge_scopes: [platform, team, project, role]
+  limits:
+    max_steps: 60
+    max_cost_usd: 4.0
+    max_wall_minutes: 30
+  autonomy: strict

@@ -1,0 +1,27 @@
+apiVersion: ai-sdlc-factory/v1
+kind: Role
+metadata:
+  name: ux-ui-designer
+  version: 1.0.0
+  description: Designs user experiences and maintains visual design artifacts.
+spec:
+  system_prompt_ref: prompts/roles/ux-ui-designer.md
+  inputs:
+    - name: prd
+      artifact_type: prd
+  outputs:
+    - name: mockups
+      artifact_type: mockups
+    - name: design_tokens
+      artifact_type: design_tokens
+  model:
+    capability: vision-capable
+  tools:
+    allow: [figma.read, figma.write, design.export_tokens, kb.search]
+    deny: [deploy.prod, secrets.read, git.push_protected]
+  knowledge_scopes: [platform, team, project, role]
+  limits:
+    max_steps: 60
+    max_cost_usd: 5.0
+    max_wall_minutes: 30
+  autonomy: balanced

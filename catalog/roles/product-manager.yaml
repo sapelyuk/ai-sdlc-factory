@@ -1,0 +1,28 @@
+apiVersion: ai-sdlc-factory/v1
+kind: Role
+metadata:
+  name: product-manager
+  version: 1.0.0
+  description: Defines product goals, requirements, and delivery priorities.
+spec:
+  system_prompt_ref: prompts/roles/product-manager.md
+  inputs:
+    - name: research_report
+      artifact_type: research_report
+      required: false
+  outputs:
+    - name: prd
+      artifact_type: prd
+    - name: user_stories
+      artifact_type: user_stories
+  model:
+    capability: reasoning-strong
+  tools:
+    allow: [pm.create_prd, pm.update_backlog, tracker.comment, kb.search]
+    deny: [deploy.prod, secrets.read, git.push_protected]
+  knowledge_scopes: [platform, team, project, role]
+  limits:
+    max_steps: 60
+    max_cost_usd: 4.0
+    max_wall_minutes: 30
+  autonomy: balanced

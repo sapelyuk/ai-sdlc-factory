@@ -26,6 +26,7 @@ COPY --from=builder /api-server /app/api-server
 COPY --from=builder /seed /app/seed
 COPY packages/contracts/schemas /app/packages/contracts/schemas
 COPY packages/ontology/slp /app/packages/ontology/slp
+COPY catalog/roles /app/catalog/roles
 
 RUN chown -R appuser:appgroup /app
 

@@ -1,0 +1,27 @@
+apiVersion: ai-sdlc-factory/v1
+kind: Role
+metadata:
+  name: business-analyst
+  version: 1.0.0
+  description: Models product-domain entities and relationships in the semantic layer.
+spec:
+  system_prompt_ref: prompts/roles/business-analyst.md
+  inputs:
+    - name: prd
+      artifact_type: prd
+    - name: research_report
+      artifact_type: research_report
+  outputs:
+    - name: slpr_v1
+      artifact_type: slpr
+  model:
+    capability: reasoning-strong
+  tools:
+    allow: [slpr.propose_node, slpr.propose_edge, slpr.search, sem.query, kb.search]
+    deny: [deploy.prod, secrets.read, git.push_protected]
+  knowledge_scopes: [platform, team, project, role]
+  limits:
+    max_steps: 80
+    max_cost_usd: 6.0
+    max_wall_minutes: 45
+  autonomy: balanced

@@ -1,0 +1,29 @@
+apiVersion: ai-sdlc-factory/v1
+kind: Role
+metadata:
+  name: qa-engineer
+  version: 1.0.0
+  description: Validates changes against acceptance criteria and reports defects.
+spec:
+  system_prompt_ref: prompts/roles/qa-engineer.md
+  inputs:
+    - name: pr
+      artifact_type: pr
+    - name: acceptance_criteria
+      artifact_type: criteria
+  outputs:
+    - name: test_report
+      artifact_type: test_report
+    - name: coverage_report
+      artifact_type: report
+  model:
+    capability: code-fast
+  tools:
+    allow: [sandbox.exec, test.run, test.report, bug.open, kb.search]
+    deny: [deploy.prod, secrets.read, git.push_protected]
+  knowledge_scopes: [platform, team, project, role]
+  limits:
+    max_steps: 80
+    max_cost_usd: 5.0
+    max_wall_minutes: 45
+  autonomy: balanced

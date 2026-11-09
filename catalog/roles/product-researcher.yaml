@@ -1,0 +1,25 @@
+apiVersion: ai-sdlc-factory/v1
+kind: Role
+metadata:
+  name: product-researcher
+  version: 1.0.0
+  description: Researches product domains and summarizes trustworthy source material.
+spec:
+  system_prompt_ref: prompts/roles/product-researcher.md
+  inputs:
+    - name: hypothesis
+      artifact_type: hypothesis
+  outputs:
+    - name: research_report
+      artifact_type: research_report
+  model:
+    capability: long-context
+  tools:
+    allow: [web.search, web.fetch, research.summarize, kb.write_draft, kb.search]
+    deny: [git.*, deploy.prod, secrets.read, fs.*, git.push_protected]
+  knowledge_scopes: [platform, project]
+  limits:
+    max_steps: 80
+    max_cost_usd: 5.0
+    max_wall_minutes: 45
+  autonomy: strict
