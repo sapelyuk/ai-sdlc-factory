@@ -1,0 +1,19 @@
+apiVersion: ai-sdlc-factory/v1
+kind: Role
+metadata:
+  name: frontend-developer
+  version: 1.0.0
+  description: Implements accessible frontend features using the approved design system.
+spec:
+  system_prompt_ref: prompts/roles/frontend-developer.md
+  model:
+    capability: code-strong
+  tools:
+    allow: [git.clone, git.branch, git.commit, git.push, sandbox.exec, fs.read, fs.write, test.run]
+    deny: [deploy.prod, secrets.read, git.push_protected]
+  knowledge_scopes: [platform, team, project, role]
+  limits:
+    max_steps: 120
+    max_cost_usd: 8.0
+    max_wall_minutes: 60
+  autonomy: balanced

@@ -1,0 +1,19 @@
+apiVersion: ai-sdlc-factory/v1
+kind: Role
+metadata:
+  name: software-architect
+  version: 1.0.0
+  description: Designs system architecture and records technical decisions.
+spec:
+  system_prompt_ref: prompts/roles/software-architect.md
+  model:
+    capability: reasoning-strong
+  tools:
+    allow: [sem.am_read, sem.am_write, diag.render, diag.validate, diag.publish, adr.propose, kb.search, git.read]
+    deny: [deploy.prod, secrets.read, git.push_protected]
+  knowledge_scopes: [platform, team, project, role]
+  limits:
+    max_steps: 80
+    max_cost_usd: 6.0
+    max_wall_minutes: 45
+  autonomy: balanced
