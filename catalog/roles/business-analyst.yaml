@@ -6,6 +6,12 @@ metadata:
   description: Models product-domain entities and relationships in the semantic layer.
 spec:
   system_prompt_ref: prompts/roles/business-analyst.md
+  inputs:
+    - name: product_requirements
+      type: document
+  outputs:
+    - name: domain_model
+      type: document
   model:
     capability: reasoning-strong
   tools:

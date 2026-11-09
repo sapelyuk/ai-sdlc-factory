@@ -6,6 +6,12 @@ metadata:
   description: Validates changes against acceptance criteria and reports defects.
 spec:
   system_prompt_ref: prompts/roles/qa-engineer.md
+  inputs:
+    - name: implementation
+      type: code
+  outputs:
+    - name: test_report
+      type: document
   model:
     capability: code-fast
   tools:

@@ -6,6 +6,12 @@ metadata:
   description: Researches product domains and summarizes trustworthy source material.
 spec:
   system_prompt_ref: prompts/roles/product-researcher.md
+  inputs:
+    - name: research_question
+      type: document
+  outputs:
+    - name: research_brief
+      type: document
   model:
     capability: long-context
   tools:

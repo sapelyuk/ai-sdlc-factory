@@ -17,12 +17,19 @@ type roleDocument struct {
 		Name string `yaml:"name"`
 	} `yaml:"metadata"`
 	Spec struct {
-		Tools struct {
+		Inputs  []artifactDocument `yaml:"inputs"`
+		Outputs []artifactDocument `yaml:"outputs"`
+		Tools   struct {
 			Allow []string `yaml:"allow"`
 			Deny  []string `yaml:"deny"`
 		} `yaml:"tools"`
 		Autonomy string `yaml:"autonomy"`
 	} `yaml:"spec"`
+}
+
+type artifactDocument struct {
+	Name string `yaml:"name"`
+	Type string `yaml:"type"`
 }
 
 func TestRoleSchemaValidatesAllNineRoleFiles(t *testing.T) {
@@ -85,6 +92,9 @@ func TestRoleToolsAndAutonomy(t *testing.T) {
 			t.Fatalf("parse %s: %v", entry.Name(), err)
 		}
 		roles[role.Metadata.Name] = role
+		if len(role.Spec.Inputs) == 0 || len(role.Spec.Outputs) == 0 {
+			t.Errorf("%s must define at least one input and output artifact", role.Metadata.Name)
+		}
 		if role.Spec.Autonomy == "autonomous" {
 			t.Errorf("%s uses autonomous autonomy", role.Metadata.Name)
 		}
@@ -141,7 +151,14 @@ func TestRoleToolsFollowAntiInjectionSeparation(t *testing.T) {
 
 func TestValidateRoleDirectoryRejectsInvalidCatalogs(t *testing.T) {
 	schema := compileRoleSchema(t, filepath.Join(repositoryRoot(t), "packages", "contracts", "schemas", "role.schema.json"))
-	validRole := "apiVersion: ai-sdlc-factory/v1\nkind: Role\nmetadata:\n  name: test-role\n  version: 1.0.0\n  description: Test role.\nspec:\n  system_prompt_ref: prompts/roles/test-role.md\n  model:\n    capability: code-fast\n  tools:\n    allow: []\n    deny: []\n  knowledge_scopes: [platform]\n  limits:\n    max_steps: 1\n    max_cost_usd: 0\n    max_wall_minutes: 1\n  autonomy: strict\n"
+	validRole := "apiVersion: ai-sdlc-factory/v1\nkind: Role\nmetadata:\n  name: test-role\n  version: 1.0.0\n  description: Test role.\nspec:\n  system_prompt_ref: prompts/roles/test-role.md\n  inputs:\n    - name: request\n      type: document\n  outputs:\n    - name: result\n      type: document\n  model:\n    capability: code-fast\n  tools:\n    allow: []\n    deny: []\n  knowledge_scopes: [platform]\n  limits:\n    max_steps: 1\n    max_cost_usd: 0\n    max_wall_minutes: 1\n  autonomy: strict\n"
+	validDirectory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(validDirectory, "role.yaml"), []byte(validRole), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRoleDirectory(validDirectory, schema); err != nil {
+		t.Fatalf("ValidateRoleDirectory(valid role) error = %v", err)
+	}
 
 	for _, test := range []struct {
 		name        string

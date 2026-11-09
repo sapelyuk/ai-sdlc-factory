@@ -6,6 +6,12 @@ metadata:
   description: Implements backend services and maintains automated tests.
 spec:
   system_prompt_ref: prompts/roles/backend-developer.md
+  inputs:
+    - name: approved_design
+      type: document
+  outputs:
+    - name: implementation
+      type: code
   model:
     capability: code-strong
   tools:

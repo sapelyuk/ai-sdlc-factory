@@ -6,6 +6,12 @@ metadata:
   description: Implements accessible frontend features using the approved design system.
 spec:
   system_prompt_ref: prompts/roles/frontend-developer.md
+  inputs:
+    - name: approved_design
+      type: document
+  outputs:
+    - name: frontend_implementation
+      type: code
   model:
     capability: code-strong
   tools:

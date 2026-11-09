@@ -45,11 +45,25 @@
         "spec": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["system_prompt_ref", "model", "tools", "knowledge_scopes", "limits", "autonomy"],
+          "required": ["system_prompt_ref", "inputs", "outputs", "model", "tools", "knowledge_scopes", "limits", "autonomy"],
           "properties": {
             "system_prompt_ref": {
               "type": "string",
               "minLength": 1
+            },
+            "inputs": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/artifact"
+              }
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/artifact"
+              }
             },
             "model": {
               "type": "object",
@@ -126,6 +140,24 @@
               "minLength": 1
             }
           }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
         }
       }
     },

@@ -6,6 +6,12 @@ metadata:
   description: Designs user experiences and maintains visual design artifacts.
 spec:
   system_prompt_ref: prompts/roles/ux-ui-designer.md
+  inputs:
+    - name: user_requirements
+      type: document
+  outputs:
+    - name: design_specification
+      type: document
   model:
     capability: vision-capable
   tools:

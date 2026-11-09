@@ -28,5 +28,7 @@ if err := schema.Validate(data); err != nil {
 
 `role.schema.json` accepts both the full versioned Role resource used by
 `catalog/roles/*.yaml` and the existing Role spec payload used by the Registry
-API and SLP seed file. The Registry validates every catalog YAML file during
-handler initialization; prompt-reference files are not required to exist.
+API and SLP seed file. Catalog roles declare typed `inputs` and `outputs`;
+`inputs_schema_ref` and `outputs_schema_ref` may additionally point to external
+JSON Schemas. The Registry validates every catalog YAML file during handler
+initialization; prompt-reference files are not required to exist.

@@ -6,6 +6,12 @@ metadata:
   description: Designs system architecture and records technical decisions.
 spec:
   system_prompt_ref: prompts/roles/software-architect.md
+  inputs:
+    - name: approved_requirements
+      type: document
+  outputs:
+    - name: architecture_design
+      type: document
   model:
     capability: reasoning-strong
   tools:

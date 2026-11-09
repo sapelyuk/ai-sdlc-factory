@@ -6,6 +6,12 @@ metadata:
   description: Reviews code changes for correctness, maintainability, and policy compliance.
 spec:
   system_prompt_ref: prompts/roles/code-reviewer.md
+  inputs:
+    - name: code_changes
+      type: code
+  outputs:
+    - name: review_report
+      type: document
   model:
     capability: reasoning-strong
   tools:

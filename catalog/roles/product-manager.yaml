@@ -6,6 +6,12 @@ metadata:
   description: Defines product goals, requirements, and delivery priorities.
 spec:
   system_prompt_ref: prompts/roles/product-manager.md
+  inputs:
+    - name: product_goal
+      type: document
+  outputs:
+    - name: product_requirements
+      type: document
   model:
     capability: reasoning-strong
   tools:
