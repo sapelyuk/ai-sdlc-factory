@@ -23,3 +23,4 @@ spec:
     max_cost_usd: 5.0
     max_wall_minutes: 45
   autonomy: strict
+  tools_policy: read_only

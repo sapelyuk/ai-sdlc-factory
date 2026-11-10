@@ -26,3 +26,4 @@ spec:
     max_cost_usd: 4.0
     max_wall_minutes: 30
   autonomy: balanced
+  tools_policy: write_capable

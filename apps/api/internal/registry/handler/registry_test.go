@@ -190,7 +190,7 @@ func TestCreateRoleUsesTenantContextAndReturnsInitialVersion(t *testing.T) {
 	roles := &roleRepositoryStub{}
 	h := newTestRegistryHandler(t, roles, &teamRepositoryStub{}, &processRepositoryStub{})
 	workspaceID, authorID := uuid.New(), uuid.New()
-	body := `{"apiVersion":"ai-sdlc-factory/v1","kind":"Role","metadata":{"name":"backend-developer","category":"engineering"},"spec":{"description":"Builds backend services.","system_prompt_ref":"packages/ontology/prompts/backend-developer.yaml","inputs":[{"name":"requirements","type":"document"}],"outputs":[{"name":"implementation","type":"code"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":60,"max_cost_usd":3},"autonomy":"balanced"}}`
+	body := `{"apiVersion":"ai-sdlc-factory/v1","kind":"Role","metadata":{"name":"backend-developer","category":"engineering"},"spec":{"description":"Builds backend services.","system_prompt_ref":"packages/ontology/prompts/backend-developer.yaml","inputs":[{"name":"requirements","type":"document"}],"outputs":[{"name":"implementation","type":"code"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":60,"max_cost_usd":3},"autonomy":"balanced","tools_policy":"write_capable"}}`
 	request := tenantRequest(http.MethodPost, "/roles", body, workspaceID, authorID)
 	response := httptest.NewRecorder()
 	h.CreateRole(response, request)
@@ -281,7 +281,7 @@ func TestUpdateRoleSpecMapsImmutableToMethodNotAllowed(t *testing.T) {
 	roles := &roleRepositoryStub{updateErr: domain.ErrImmutable}
 	h := newTestRegistryHandler(t, roles, &teamRepositoryStub{}, &processRepositoryStub{})
 	id := uuid.NewString()
-	body := `{"spec":{"description":"Builds backend services.","system_prompt_ref":"packages/ontology/prompts/backend-developer.yaml","inputs":[{"name":"requirements","type":"document"}],"outputs":[{"name":"implementation","type":"code"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":60,"max_cost_usd":3},"autonomy":"balanced"}}`
+	body := `{"spec":{"description":"Builds backend services.","system_prompt_ref":"packages/ontology/prompts/backend-developer.yaml","inputs":[{"name":"requirements","type":"document"}],"outputs":[{"name":"implementation","type":"code"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":60,"max_cost_usd":3},"autonomy":"balanced","tools_policy":"write_capable"}}`
 	request := tenantRequest(http.MethodPatch, "/roles/"+id, body, uuid.New(), uuid.New())
 	response := httptest.NewRecorder()
 	router := chi.NewRouter()
@@ -318,7 +318,7 @@ func TestRoleReadUpdateCloneAndRevertHandlers(t *testing.T) {
 		}
 	}
 
-	roleSpec := `{"spec":{"description":"Builds backend services.","system_prompt_ref":"packages/ontology/prompts/backend-developer.yaml","inputs":[{"name":"requirements","type":"document"}],"outputs":[{"name":"implementation","type":"code"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":60,"max_cost_usd":3},"autonomy":"balanced"}}`
+	roleSpec := `{"spec":{"description":"Builds backend services.","system_prompt_ref":"packages/ontology/prompts/backend-developer.yaml","inputs":[{"name":"requirements","type":"document"}],"outputs":[{"name":"implementation","type":"code"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":60,"max_cost_usd":3},"autonomy":"balanced","tools_policy":"write_capable"}}`
 	for _, test := range []struct {
 		method, path, body string
 		status             int
