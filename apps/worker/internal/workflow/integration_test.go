@@ -167,6 +167,7 @@ func TestTaskRunWorkflow_Integration(t *testing.T) {
 		AgentID:           "0190f0e0-0000-7000-8000-000000000004",
 		Profile:           "code-fast",
 		TaskDescription:   "implement the feature",
+		Tools:             []client.ToolDef{{Name: "sandbox.exec"}},
 		DefaultMaxCostUSD: 3.0,
 		DefaultMaxSteps:   60,
 	}
