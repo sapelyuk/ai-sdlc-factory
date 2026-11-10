@@ -37,6 +37,8 @@ Monitoring --> Research (feedback loop)
 
 Each role declares `spec.inputs` and `spec.outputs` as an array of
 `{name, artifact_type, required, schema_ref?}` (see `packages/contracts/schemas/role.schema.json`).
+Each role also declares `spec.tools_policy` (`read_only` | `write_capable`) to classify
+its outbound capability for anti-injection enforcement (MCP_TOOLS.md §1, SYSTEM_DESIGN.md §10.2).
 
 - `artifact_type` refers to artifacts listed in the table above. In v1 it is a free string
   validated by pattern `^[a-z][a-z0-9_-]*$`; in v2 it will become an enum sourced from
