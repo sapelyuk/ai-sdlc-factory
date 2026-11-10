@@ -164,6 +164,65 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*TaskRunResult, 
 		maxSteps = input.MaxSteps
 	}
 
+	var effectiveHandoff *handoff.HandoffPackage
+	var effectiveTrusted bool
+	if input.IncomingHandoff != nil && input.ToolsPolicy == "write_capable" {
+		var idKey string
+		if err := workflow.SideEffect(ctx, func(workflow.Context) any {
+			return uuid.NewString()
+		}).Get(&idKey); err != nil {
+			return nil, fmt.Errorf("workflow: sanitize side effect: %w", err)
+		}
+		sanitizeInput := agent.StepInput{
+			TaskRunID:              input.TaskRunID,
+			RunID:                  input.RunID,
+			TaskID:                 input.TaskID,
+			AgentID:                input.AgentID,
+			StepIndex:              0,
+			IdempotencyKey:         idKey,
+			Profile:                input.Profile,
+			ProjectID:              input.ProjectID,
+			TaskDesc:               input.TaskDescription,
+			Tools:                  agent.FilterReadOnlyTools(input.Tools),
+			BudgetSnapshot:         agent.BudgetSnapshot{},
+			MaxCostUSD:             maxCost,
+			MaxSteps:               maxSteps,
+			IncomingHandoff:        input.IncomingHandoff,
+			IncomingFeedback:       input.IncomingFeedback,
+			SanitizeMode:           true,
+			IncomingHandoffTrusted: false,
+			ToolsPolicy:            input.ToolsPolicy,
+		}
+		var sanitizeResult agent.StepResult
+		if err := workflow.ExecuteActivity(ctx, AgentStepActivityName, sanitizeInput).Get(ctx, &sanitizeResult); err != nil {
+			return nil, fmt.Errorf("workflow: sanitize handoff: %w", err)
+		}
+		if sanitizeResult.SanitizedHandoff == nil {
+			return nil, fmt.Errorf("workflow: sanitize failed: injection suspected")
+		}
+		effectiveHandoff = sanitizeResult.SanitizedHandoff
+		effectiveTrusted = true
+		sanitizedKey, err := auditIdempotencyKey(ctx)
+		if err != nil {
+			return nil, err
+		}
+		recordAudit(auditCtx, audit.Event{
+			WorkspaceID:    input.WorkspaceID,
+			ActorID:        actor,
+			Action:         sdkaudit.ActionHandoffSanitized,
+			IdempotencyKey: sanitizedKey,
+			ResourceID:     input.TaskRunID,
+			Details: map[string]any{
+				"task_run_id": input.TaskRunID,
+				"agent_id":    input.AgentID,
+				"source":      input.IncomingHandoff.Metadata.GetSourceAgentID(),
+			},
+		})
+	} else {
+		effectiveHandoff = input.IncomingHandoff
+		effectiveTrusted = false
+	}
+
 	// Idempotency keys are generated per step via SideEffect. Temporal records
 	// the result in the workflow history, so an activity retry reuses the same
 	// key while every step gets a distinct one.
@@ -180,23 +239,25 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*TaskRunResult, 
 		}
 
 		activityInput := agent.StepInput{
-			TaskRunID:        input.TaskRunID,
-			RunID:            input.RunID,
-			TaskID:           input.TaskID,
-			AgentID:          input.AgentID,
-			StepIndex:        stepIndex,
-			IdempotencyKey:   idempotencyKey,
-			Messages:         messages,
-			Profile:          input.Profile,
-			ProjectID:        input.ProjectID,
-			TaskDesc:         input.TaskDescription,
-			Tools:            input.Tools,
-			BudgetSnapshot:   budgetSnap,
-			MaxCostUSD:       maxCost,
-			MaxSteps:         maxSteps,
-			RecentCalls:      recentCalls,
-			IncomingHandoff:  input.IncomingHandoff,
-			IncomingFeedback: input.IncomingFeedback,
+			TaskRunID:              input.TaskRunID,
+			RunID:                  input.RunID,
+			TaskID:                 input.TaskID,
+			AgentID:                input.AgentID,
+			StepIndex:              stepIndex,
+			IdempotencyKey:         idempotencyKey,
+			Messages:               messages,
+			Profile:                input.Profile,
+			ProjectID:              input.ProjectID,
+			TaskDesc:               input.TaskDescription,
+			Tools:                  input.Tools,
+			BudgetSnapshot:         budgetSnap,
+			MaxCostUSD:             maxCost,
+			MaxSteps:               maxSteps,
+			RecentCalls:            recentCalls,
+			IncomingHandoff:        effectiveHandoff,
+			IncomingFeedback:       input.IncomingFeedback,
+			IncomingHandoffTrusted: effectiveTrusted,
+			ToolsPolicy:            input.ToolsPolicy,
 		}
 
 		var result agent.StepResult
