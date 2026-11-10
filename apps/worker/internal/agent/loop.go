@@ -231,6 +231,16 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 		}
 		recent = updated
 
+		// Defense-in-depth: block tool calls outside the role allow-list
+		// before they reach the Tool Gateway (MCP_TOOLS.md §1).
+		if !isToolAllowed(input.Tools, tc.Name) {
+			msgs = append(msgs, client.ChatMessage{
+				Role:    "tool",
+				Content: fmt.Sprintf("error: tool %q is not permitted (MCP_TOOLS.md §1: role allow-list enforcement)", tc.Name),
+			})
+			continue
+		}
+
 		result, err := e.tool.Call(ctx, tc.Name, tc.Arguments, input.TaskRunID, input.IdempotencyKey)
 		if err != nil {
 			// Append error as tool result so LLM can recover.
