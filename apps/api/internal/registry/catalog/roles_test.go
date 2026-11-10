@@ -24,7 +24,8 @@ type roleDocument struct {
 			Allow []string `yaml:"allow"`
 			Deny  []string `yaml:"deny"`
 		} `yaml:"tools"`
-		Autonomy string `yaml:"autonomy"`
+		Autonomy    string `yaml:"autonomy"`
+		ToolsPolicy string `yaml:"tools_policy"`
 	} `yaml:"spec"`
 }
 
@@ -298,6 +299,72 @@ func TestValidateRoleDirectoryRejectsInvalidCatalogs(t *testing.T) {
 	}
 	if err := ValidateRoleDirectory(t.TempDir(), nil); err == nil || !strings.Contains(err.Error(), "role schema is required") {
 		t.Fatalf("nil schema error = %v", err)
+	}
+}
+
+// registryRoleSpecFixture returns a minimal registry role spec that satisfies
+// every required field except tools_policy, which callers set explicitly.
+func registryRoleSpecFixture() map[string]any {
+	return map[string]any{
+		"description":       "Test role.",
+		"system_prompt_ref": "packages/ontology/prompts/test.yaml",
+		"inputs":            []any{map[string]any{"name": "request", "artifact_type": "document"}},
+		"outputs":           []any{map[string]any{"name": "result", "artifact_type": "document"}},
+		"tools":             map[string]any{"allow": []any{"fs.read"}},
+		"model":             map[string]any{"capability": "code-fast"},
+		"limits":            map[string]any{"max_steps": 1, "max_cost_usd": 0},
+		"autonomy":          "strict",
+	}
+}
+
+// TestRegistryRoleSpecRequiresToolsPolicy guards the anti-injection contract
+// (MCP_TOOLS.md §1, issue #118-a): a registry role spec MUST declare
+// tools_policy, and the value MUST be one of read_only / write_capable.
+// `mixed` is not a valid value by construction.
+func TestRegistryRoleSpecRequiresToolsPolicy(t *testing.T) {
+	schema := compileRoleSchema(t, filepath.Join(repositoryRoot(t), "packages", "contracts", "schemas", "role.schema.json"))
+
+	if err := schema.Validate(registryRoleSpecFixture()); err == nil {
+		t.Fatal("registry role spec without tools_policy unexpectedly accepted")
+	}
+
+	for _, invalid := range []string{"mixed", "", "write", "READ_ONLY"} {
+		spec := registryRoleSpecFixture()
+		spec["tools_policy"] = invalid
+		if err := schema.Validate(spec); err == nil {
+			t.Errorf("registry role spec with tools_policy=%q unexpectedly accepted", invalid)
+		}
+	}
+
+	for _, valid := range []string{"read_only", "write_capable"} {
+		spec := registryRoleSpecFixture()
+		spec["tools_policy"] = valid
+		if err := schema.Validate(spec); err != nil {
+			t.Errorf("registry role spec with tools_policy=%q rejected: %v", valid, err)
+		}
+	}
+}
+
+// TestCatalogRolesDeclareToolsPolicy guards issue #118-a: every catalog role
+// declares its anti-injection class. The field is optional in the schema for v1
+// backward-compat, but the shipped catalog MUST declare it.
+func TestCatalogRolesDeclareToolsPolicy(t *testing.T) {
+	want := map[string]string{
+		"backend-developer":  "write_capable",
+		"frontend-developer": "write_capable",
+		"code-reviewer":      "write_capable",
+		"qa-engineer":        "write_capable",
+		"product-manager":    "write_capable",
+		"ux-ui-designer":     "write_capable",
+		"business-analyst":   "read_only",
+		"software-architect": "read_only",
+		"product-researcher": "read_only",
+	}
+	for name, policy := range want {
+		role := loadRole(t, name)
+		if role.Spec.ToolsPolicy != policy {
+			t.Errorf("%s tools_policy = %q, want %q", name, role.Spec.ToolsPolicy, policy)
+		}
 	}
 }
 

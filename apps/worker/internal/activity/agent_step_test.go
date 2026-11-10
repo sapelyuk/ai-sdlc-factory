@@ -91,6 +91,7 @@ func TestAgentStep_RetryDoesNotDuplicateToolCalls(t *testing.T) {
 		StepIndex:      1,
 		IdempotencyKey: "same-key",
 		Messages:       []client.ChatMessage{{Role: "user", Content: "do it"}},
+		Tools:          []client.ToolDef{{Name: "sandbox.exec"}},
 		MaxCostUSD:     3.0,
 		MaxSteps:       60,
 	}
@@ -127,6 +128,7 @@ func TestAgentStep_DifferentKeysExecuteTwice(t *testing.T) {
 		TaskRunID:  "0190f0e0-0000-7000-8000-000000000001",
 		StepIndex:  1,
 		Messages:   []client.ChatMessage{{Role: "user", Content: "do it"}},
+		Tools:      []client.ToolDef{{Name: "sandbox.exec"}},
 		MaxCostUSD: 3.0,
 		MaxSteps:   60,
 	}

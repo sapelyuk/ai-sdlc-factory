@@ -265,7 +265,7 @@ func TestIntegration_RBACWithJWT(t *testing.T) {
 	}
 
 	// POST /roles as viewer → 403.
-	roleBody := `{"apiVersion":"ai-sdlc-factory/v1","kind":"Role","metadata":{"name":"test-role","category":"engineering"},"spec":{"description":"Test.","system_prompt_ref":"packages/ontology/prompts/test.yaml","inputs":[{"name":"req","type":"document"}],"outputs":[{"name":"res","type":"document"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":10,"max_cost_usd":1},"autonomy":"balanced"}}`
+	roleBody := `{"apiVersion":"ai-sdlc-factory/v1","kind":"Role","metadata":{"name":"test-role","category":"engineering"},"spec":{"description":"Test.","system_prompt_ref":"packages/ontology/prompts/test.yaml","inputs":[{"name":"req","type":"document"}],"outputs":[{"name":"res","type":"document"}],"tools":{"allow":["fs.read"]},"model":{"capability":"code-strong"},"limits":{"max_steps":10,"max_cost_usd":1},"autonomy":"balanced","tools_policy":"read_only"}}`
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/registry/roles", bytes.NewReader([]byte(roleBody)))
 	req2.Header.Set("Authorization", "Bearer "+viewerToken)
 	req2.Header.Set("Content-Type", "application/json")

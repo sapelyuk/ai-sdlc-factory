@@ -26,6 +26,7 @@ roles:
         max_steps: 60
         max_cost_usd: 3.0
       autonomy: balanced
+      tools_policy: write_capable
       quality_checks: [requirements_traceable]
   - metadata:
       name: software-architect
@@ -50,6 +51,7 @@ roles:
         max_steps: 80
         max_cost_usd: 6.0
       autonomy: balanced
+      tools_policy: read_only
       quality_checks: [architecture_valid, dependencies_documented]
   - metadata:
       name: backend-developer
@@ -74,6 +76,7 @@ roles:
         max_steps: 80
         max_cost_usd: 5.0
       autonomy: balanced
+      tools_policy: write_capable
       quality_checks: [tests_pass, lint_pass]
   - metadata:
       name: qa-engineer
@@ -97,6 +100,7 @@ roles:
         max_steps: 60
         max_cost_usd: 3.0
       autonomy: balanced
+      tools_policy: write_capable
       quality_checks: [acceptance_criteria_covered]
   - metadata:
       name: devops-engineer
@@ -121,6 +125,7 @@ roles:
         max_steps: 60
         max_cost_usd: 3.0
       autonomy: balanced
+      tools_policy: write_capable
       quality_checks: [ci_green, deployment_health_checked]
 teams:
   - metadata:
