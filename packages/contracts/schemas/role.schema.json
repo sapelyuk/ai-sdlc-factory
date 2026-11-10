@@ -131,6 +131,11 @@
               "type": "string",
               "enum": ["strict", "balanced", "autonomous"]
             },
+            "tools_policy": {
+              "type": "string",
+              "enum": ["read_only", "write_capable"],
+              "description": "Anti-injection (MCP_TOOLS.md §1, SYSTEM_DESIGN.md §10.2). write_capable = role has an outbound channel (git.push, tracker.comment, deploy.*, pr.*, bug.open, figma.write, pm.*). mixed is not a valid value by construction. A write_capable role receives untrusted handoff only through the sanitize step added in #118-b."
+            },
             "inputs_schema_ref": {
               "type": "string",
               "minLength": 1
@@ -196,7 +201,7 @@
     "registryRoleSpec": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["description", "system_prompt_ref", "inputs", "outputs", "tools", "model", "limits", "autonomy"],
+      "required": ["description", "system_prompt_ref", "inputs", "outputs", "tools", "model", "limits", "autonomy", "tools_policy"],
       "properties": {
         "description": {
           "type": "string",
@@ -290,6 +295,11 @@
         "autonomy": {
           "type": "string",
           "enum": ["strict", "balanced", "autonomous"]
+        },
+        "tools_policy": {
+          "type": "string",
+          "enum": ["read_only", "write_capable"],
+          "description": "Anti-injection (MCP_TOOLS.md §1, SYSTEM_DESIGN.md §10.2). write_capable = role has an outbound channel (git.push, tracker.comment, deploy.*, pr.*, bug.open, figma.write, pm.*). mixed is not a valid value by construction. A write_capable role receives untrusted handoff only through the sanitize step added in #118-b."
         },
         "quality_checks": {
           "type": "array",
