@@ -91,6 +91,7 @@ type RoleSpec struct {
 	Knowledge       KnowledgeSpec  `json:"knowledge" yaml:"knowledge"`
 	Limits          LimitsSpec     `json:"limits" yaml:"limits"`
 	Autonomy        AutonomyLevel  `json:"autonomy" yaml:"autonomy"`
+	ToolsPolicy     string         `json:"tools_policy" yaml:"tools_policy"`
 	QualityChecks   []string       `json:"quality_checks,omitempty" yaml:"quality_checks,omitempty"`
 }
 
