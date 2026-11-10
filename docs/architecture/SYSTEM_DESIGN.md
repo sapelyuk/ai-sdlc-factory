@@ -199,6 +199,8 @@ Orchestrator -> Agent Runtime -> Semantic Service (subgraph) -> Knowledge Servic
 
 **Anti-injection — wrapping (issue #118-a).** Handoff content entering any agent prompt is wrapped in `<untrusted_data source="handoff">` and labelled as DATA, not instructions. The same agent must not simultaneously have private data, untrusted content, and an outbound channel (§10.2). For write-capable recipients, the two-phase sanitize step is added in #118-b.
 
+**Anti-injection — two-phase sanitize (issue #118-b).** When a handoff package enters a `write_capable` role, the workflow runs a sanitize step first: the payload is wrapped in `<untrusted_data source="handoff">`, only read-only tools are exposed, and the model is asked to extract only the structured fields (`goal`, `context_refs`, `acceptance_criteria`, `decisions_made`) while dropping free text. The sanitized package then enters the act phase with the role's full tool set, marked as trusted. If the sanitize step fails (invalid package or tool call attempt), the workflow aborts as a security failure rather than continuing.
+
 ### 8.3 Agent-to-agent handoff
 
 Agents do not exchange raw correspondence. All data passes through the semantic layer (SLPr) and knowledge bases (KB). Agents exchange only a strictly structured handoff package.
