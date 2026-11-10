@@ -103,6 +103,7 @@ func TestExecutor_ExecuteStep_DetectsRepeatedToolCallInOneResponse(t *testing.T)
 		StepIndex:      1,
 		IdempotencyKey: "key-1",
 		Messages:       []client.ChatMessage{{Role: "user", Content: "do it"}},
+		Tools:          []client.ToolDef{{Name: "sandbox.exec"}},
 		MaxCostUSD:     3.0,
 		MaxSteps:       60,
 	})
@@ -157,6 +158,7 @@ func TestExecutor_ExecuteStep_ForwardsIdempotencyAndAttribution(t *testing.T) {
 		StepIndex:      1,
 		IdempotencyKey: "key-1",
 		Messages:       []client.ChatMessage{{Role: "user", Content: "do it"}},
+		Tools:          []client.ToolDef{{Name: "sandbox.exec"}},
 		MaxCostUSD:     3.0,
 		MaxSteps:       60,
 	})

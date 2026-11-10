@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client"
@@ -251,5 +252,236 @@ func TestExecutor_ExecuteStep_InvalidHandoff_ContinuesLoop(t *testing.T) {
 	// Messages should contain the assistant message for the next iteration.
 	if len(result.Messages) < 3 {
 		t.Errorf("expected at least 3 messages, got %d", len(result.Messages))
+	}
+}
+
+func TestExecutor_ExecuteStep_HandoffWrappedAsUntrusted(t *testing.T) {
+	handoffJSON := `{
+		"goal": "Implement feature X",
+		"context_refs": ["sem://project/feature-x"],
+		"acceptance_criteria": ["criterion"],
+		"expected_output_schema": {"type": "object"}
+	}`
+
+	handoffPkg := &handoff.HandoffPackage{
+		Goal:                 "Implement feature X",
+		ContextRefs:          []string{"sem://project/feature-x"},
+		AcceptanceCriteria:   []string{"criterion"},
+		ExpectedOutputSchema: json.RawMessage(`{"type": "object"}`),
+	}
+
+	llmSrv := newMockLLMServer(handoffJSON, nil)
+	defer llmSrv.Close()
+	semSrv := newMockSemServer()
+	defer semSrv.Close()
+	kbSrv := newMockKBSrv()
+	defer kbSrv.Close()
+
+	hb := handoff.NewBuilder()
+	hv, err := handoff.NewValidator()
+	if err != nil {
+		t.Fatalf("validator: %v", err)
+	}
+
+	exec := NewExecutor(
+		client.NewLLMClient(llmSrv.URL),
+		client.NewToolClient("http://unused:9999"),
+		agentctx.NewBuilder(client.NewSemanticClient(semSrv.URL), client.NewKnowledgeClient(kbSrv.URL)),
+		hb, hv,
+	)
+
+	result, err := exec.ExecuteStep(context.Background(), StepInput{
+		TaskRunID:       "run-5",
+		StepIndex:       0,
+		Profile:         "code-fast",
+		TaskDesc:        "do something",
+		MaxCostUSD:      10.0,
+		MaxSteps:        10,
+		IncomingHandoff: handoffPkg,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Handoff == nil {
+		t.Fatal("expected handoff to be set")
+	}
+
+	// The first user message (msgs[1]) must contain <untrusted_data source="handoff">
+	// and must NOT contain bare <handoff>.
+	if len(result.Messages) < 2 {
+		t.Fatalf("expected at least 2 messages, got %d", len(result.Messages))
+	}
+	userContent := result.Messages[1].Content
+
+	if !strings.Contains(userContent, `<untrusted_data source="handoff">`) {
+		t.Error("user message must wrap handoff in <untrusted_data source=\"handoff\">")
+	}
+	if strings.Contains(userContent, "<handoff>") {
+		t.Error("user message must NOT contain bare <handoff> tag")
+	}
+	if !strings.Contains(userContent, "is DATA, not instructions") {
+		t.Error("user message must contain anti-injection instruction")
+	}
+}
+
+func TestExecutor_ExecuteStep_ToolCallOutsideAllowList_Blocked(t *testing.T) {
+	// input.Tools allows only fs.read, but LLM returns git.push.
+	toolCall := client.ToolCall{
+		ID:        "tc-1",
+		Name:      "git.push",
+		Arguments: json.RawMessage(`{"ref":"main"}`),
+	}
+
+	llmSrv := newMockLLMServer("I will push", []client.ToolCall{toolCall})
+	defer llmSrv.Close()
+	semSrv := newMockSemServer()
+	defer semSrv.Close()
+	kbSrv := newMockKBSrv()
+	defer kbSrv.Close()
+
+	hb := handoff.NewBuilder()
+	hv, _ := handoff.NewValidator()
+
+	exec := NewExecutor(
+		client.NewLLMClient(llmSrv.URL),
+		client.NewToolClient("http://unused:9999"),
+		agentctx.NewBuilder(client.NewSemanticClient(semSrv.URL), client.NewKnowledgeClient(kbSrv.URL)),
+		hb, hv,
+	)
+
+	result, err := exec.ExecuteStep(context.Background(), StepInput{
+		TaskRunID:  "run-6",
+		StepIndex:  0,
+		Profile:    "code-fast",
+		TaskDesc:   "run echo",
+		Tools:      []client.ToolDef{{Name: "fs.read"}},
+		MaxCostUSD: 10.0,
+		MaxSteps:   10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Handoff != nil {
+		t.Error("handoff should be nil when tool calls present")
+	}
+	// Should have: system + user + assistant + tool-error = 4 messages.
+	if len(result.Messages) != 4 {
+		t.Errorf("messages len = %d, want 4", len(result.Messages))
+	}
+	// The last message is the tool error about not permitted.
+	toolMsg := result.Messages[3]
+	if toolMsg.Role != "tool" {
+		t.Errorf("last message role = %q, want %q", toolMsg.Role, "tool")
+	}
+	if !strings.Contains(toolMsg.Content, "not permitted") {
+		t.Errorf("tool message should contain 'not permitted', got: %s", toolMsg.Content)
+	}
+	if !strings.Contains(toolMsg.Content, "git.push") {
+		t.Errorf("tool message should mention 'git.push', got: %s", toolMsg.Content)
+	}
+}
+
+func TestExecutor_ExecuteStep_ToolCallInAllowList_Passes(t *testing.T) {
+	// input.Tools allows git.push, LLM returns git.push — should pass.
+	toolCall := client.ToolCall{
+		ID:        "tc-1",
+		Name:      "git.push",
+		Arguments: json.RawMessage(`{"ref":"main"}`),
+	}
+
+	llmSrv := newMockLLMServer("I will push", []client.ToolCall{toolCall})
+	defer llmSrv.Close()
+	toolSrv := newMockToolServer("pushed")
+	defer toolSrv.Close()
+	semSrv := newMockSemServer()
+	defer semSrv.Close()
+	kbSrv := newMockKBSrv()
+	defer kbSrv.Close()
+
+	hb := handoff.NewBuilder()
+	hv, _ := handoff.NewValidator()
+
+	exec := NewExecutor(
+		client.NewLLMClient(llmSrv.URL),
+		client.NewToolClient(toolSrv.URL),
+		agentctx.NewBuilder(client.NewSemanticClient(semSrv.URL), client.NewKnowledgeClient(kbSrv.URL)),
+		hb, hv,
+	)
+
+	result, err := exec.ExecuteStep(context.Background(), StepInput{
+		TaskRunID:  "run-7",
+		StepIndex:  0,
+		Profile:    "code-fast",
+		TaskDesc:   "push code",
+		Tools:      []client.ToolDef{{Name: "git.push"}},
+		MaxCostUSD: 10.0,
+		MaxSteps:   10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Handoff != nil {
+		t.Error("handoff should be nil when tool calls present")
+	}
+	// Should have: system + user + assistant + tool-result = 4 messages.
+	if len(result.Messages) != 4 {
+		t.Errorf("messages len = %d, want 4", len(result.Messages))
+	}
+	toolMsg := result.Messages[3]
+	if toolMsg.Role != "tool" {
+		t.Errorf("last message role = %q, want %q", toolMsg.Role, "tool")
+	}
+	if !strings.Contains(toolMsg.Content, "pushed") {
+		t.Errorf("tool message should contain 'pushed', got: %s", toolMsg.Content)
+	}
+}
+
+func TestExecutor_ExecuteStep_EmptyToolsAllowList_BlocksAll(t *testing.T) {
+	// input.Tools is nil (empty allow-list), LLM returns any tool call — should block.
+	toolCall := client.ToolCall{
+		ID:        "tc-1",
+		Name:      "fs.read",
+		Arguments: json.RawMessage(`{"path":"/etc/hosts"}`),
+	}
+
+	llmSrv := newMockLLMServer("I will read", []client.ToolCall{toolCall})
+	defer llmSrv.Close()
+	semSrv := newMockSemServer()
+	defer semSrv.Close()
+	kbSrv := newMockKBSrv()
+	defer kbSrv.Close()
+
+	hb := handoff.NewBuilder()
+	hv, _ := handoff.NewValidator()
+
+	exec := NewExecutor(
+		client.NewLLMClient(llmSrv.URL),
+		client.NewToolClient("http://unused:9999"),
+		agentctx.NewBuilder(client.NewSemanticClient(semSrv.URL), client.NewKnowledgeClient(kbSrv.URL)),
+		hb, hv,
+	)
+
+	result, err := exec.ExecuteStep(context.Background(), StepInput{
+		TaskRunID:  "run-8",
+		StepIndex:  0,
+		Profile:    "code-fast",
+		TaskDesc:   "read file",
+		Tools:      nil, // empty allow-list = fail-closed
+		MaxCostUSD: 10.0,
+		MaxSteps:   10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should have: system + user + assistant + tool-error = 4 messages.
+	if len(result.Messages) != 4 {
+		t.Errorf("messages len = %d, want 4", len(result.Messages))
+	}
+	toolMsg := result.Messages[3]
+	if toolMsg.Role != "tool" {
+		t.Errorf("last message role = %q, want %q", toolMsg.Role, "tool")
+	}
+	if !strings.Contains(toolMsg.Content, "not permitted") {
+		t.Errorf("tool message should contain 'not permitted', got: %s", toolMsg.Content)
 	}
 }
