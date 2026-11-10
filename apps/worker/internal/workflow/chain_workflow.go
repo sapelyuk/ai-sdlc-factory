@@ -526,6 +526,11 @@ func runChainTaskRun(
 		profile = member.Profile
 	}
 
+	toolsPolicy := ""
+	if member := input.Team.FindMember(agentID); member != nil {
+		toolsPolicy = member.ToolsPolicy
+	}
+
 	taskInput := TaskRunInput{
 		TaskRunID:         taskRunID,
 		WorkspaceID:       input.WorkspaceID,
@@ -543,6 +548,7 @@ func runChainTaskRun(
 		ChainStep:         chainStep,
 		IncomingHandoff:   pkg,
 		IncomingFeedback:  feedback,
+		ToolsPolicy:       toolsPolicy,
 	}
 
 	cwo := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{

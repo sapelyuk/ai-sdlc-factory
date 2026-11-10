@@ -57,6 +57,10 @@ type TaskRunInput struct {
 	// IncomingFeedback carries the receiver diagnostics attached when the
 	// package was returned to its author for rework.
 	IncomingFeedback []string `json:"incoming_feedback,omitempty"`
+	// ToolsPolicy describes the role's tool exposure policy: write_capable
+	// roles receive incoming handoff through a sanitize phase before the act
+	// phase can use their full tool set.
+	ToolsPolicy string `json:"tools_policy,omitempty"`
 }
 
 // TaskRunResult is the outcome of one agent execution in a handoff chain.
