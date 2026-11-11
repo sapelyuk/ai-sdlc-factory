@@ -34,20 +34,21 @@ import (
 // Actions written to the global log. Values are part of the event contract:
 // queries, dashboards and policy checks filter on them.
 const (
-	ActionLLMCall         = "llm_call"
-	ActionToolCall        = "tool_call"
-	ActionSandboxExec     = "sandbox_exec"
-	ActionSandboxCreate   = "sandbox_create"
-	ActionSandboxDestroy  = "sandbox_destroy"
-	ActionRunStarted      = "run_started"
-	ActionTaskStarted     = "task_started"
-	ActionTaskCompleted   = "task_completed"
-	ActionHandoffCreated  = "handoff_created"
-	ActionHandoffRouted   = "handoff_routed"
-	ActionHandoffRejected = "handoff_rejected"
-	ActionChainAborted    = "chain_aborted"
-	ActionApprovalDecided = "approval_decided"
-	ActionGateChecked     = "gate_checked"
+	ActionLLMCall          = "llm_call"
+	ActionToolCall         = "tool_call"
+	ActionSandboxExec      = "sandbox_exec"
+	ActionSandboxCreate    = "sandbox_create"
+	ActionSandboxDestroy   = "sandbox_destroy"
+	ActionRunStarted       = "run_started"
+	ActionTaskStarted      = "task_started"
+	ActionTaskCompleted    = "task_completed"
+	ActionHandoffCreated   = "handoff_created"
+	ActionHandoffSanitized = "handoff_sanitized"
+	ActionHandoffRouted    = "handoff_routed"
+	ActionHandoffRejected  = "handoff_rejected"
+	ActionChainAborted     = "chain_aborted"
+	ActionApprovalDecided  = "approval_decided"
+	ActionGateChecked      = "gate_checked"
 )
 
 // Actor ID prefixes. An actor is "agent:<uuid>", "human:<uuid>",

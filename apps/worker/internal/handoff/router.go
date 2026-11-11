@@ -15,9 +15,10 @@ const (
 // LLM profile it should run under. The orchestrator resolves team roles to
 // concrete agents before starting the chain workflow.
 type TeamMember struct {
-	AgentID  string `json:"agent_id"`
-	RoleName string `json:"role_name"`
-	Profile  string `json:"profile"`
+	AgentID     string `json:"agent_id"`
+	RoleName    string `json:"role_name"`
+	Profile     string `json:"profile"`
+	ToolsPolicy string `json:"tools_policy,omitempty"`
 }
 
 // TeamConfig is the worker-side projection of a registry Team entity with

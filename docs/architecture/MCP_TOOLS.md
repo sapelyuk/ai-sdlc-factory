@@ -9,6 +9,7 @@
 - Secrets are injected by Tool Gateway (credential brokering).
 - Access rules: `Role.tools.allow` — whitelist; `Role.tools.deny` — blacklist, higher priority than `allow`.
 - `Role.spec.tools_policy` is mandatory in the registry role schema (`registryRoleSpec`); optional in catalog YAML for v1 backward-compat. Values: `read_only`, `write_capable`. `mixed` is not a valid value.
+- For `write_capable` roles, the workflow inserts a sanitize phase before the act step; see `SYSTEM_DESIGN.md §8.2`.
 
 **Role constraints (Anti-Injection):**
 When assigning tools to a role (see `spec.tools` in YAML), the separation of capabilities rule MUST be observed. No role must simultaneously have `web.*` (untrusted content), `secrets.read` / `fs.*` (private data), and `git.push` / `deploy.*` / `tracker.write` (outbound channel). If a role requires crossing these domains, the task must be decomposed into two steps (e.g., "Research" → Handoff → "Implementation").
