@@ -83,6 +83,8 @@ Condition: `human_approval` gate for prod; release notes in KB; DB migrations ve
 | `kb_published` | agent_review | Diagram → KB | Validator + review |
 | `semantic_valid` | auto | All SLPr/AM changes | Inference rules §7 |
 
+Implementation: `SDLCWorkflow` → `ChainWorkflow` → `WaitGate` (issue #126, #20; `SYSTEM_DESIGN.md §8.1`).
+
 ## 5. Blocking conditions
 
 A task is **blocked** when:

@@ -193,6 +193,8 @@ ARTIFACT ||--o| ADR : may_be
 
 Run (workflow) -> StageRun -> TaskRun -> AgentStep (activity). Each AgentStep is idempotent.
 
+**Gates in production (issue #126).** When a transition declares a gate (`SDLC_STATE_MACHINE.md §4`), `SDLCWorkflow` routes the run through `ChainWorkflow`, which evaluates the gate before accepting the output as the next stage's input. A failing gate aborts the chain (audit `gate_checked` with `result=rejected|timeout`). Without a gate, the run produces its handoff directly (backward-compat).
+
 ### 8.2 Agent loop
 
 Orchestrator -> Agent Runtime -> Semantic Service (subgraph) -> Knowledge Service (search) -> LLM Gateway (request) -> Tool Gateway (call) -> Policy Engine (check) -> Result
