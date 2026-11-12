@@ -898,6 +898,56 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  # ── Runs (kill switch) ────────────────────────────────────────────
+  /api/v1/runs/{id}/kill:
+    post:
+      operationId: killRun
+      summary: Force-stop a running Run (R3 kill switch)
+      description: |
+        Immediately terminates a running Run (all stages and tasks).
+        Requires owner or admin role. Writes audit event `run_killed`
+        before terminating the Temporal workflow.
+        ADR-013 (R3 — always human approve for destructive).
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason:
+                  type: string
+                  maxLength: 4096
+                  description: Optional reason for the kill (stored in audit event)
+      responses:
+        "200":
+          description: Run termination initiated. Workflow will be terminated asynchronously.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [terminating, not_found, already_completed]
+                  run_id:
+                    type: string
+                    format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   # ── LLM Gateway ───────────────────────────────────────────────────
   /v1/llm/chat:
     post:

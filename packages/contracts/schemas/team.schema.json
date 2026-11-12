@@ -54,6 +54,28 @@
         }
       }
     },
+    "budgets": {
+      "type": "object",
+      "description": "Multi-level cost and step budgets (NFR-9, ADR-013). 80% triggers warning; 100% hard-stops.",
+      "additionalProperties": false,
+      "properties": {
+        "run_max_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum cost across all TaskRuns in one Run. Enforced by ChainWorkflow mid-chain."
+        },
+        "run_max_steps": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum total steps across all TaskRuns in one Run."
+        },
+        "day_max_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum cost per workspace per calendar day (UTC). Checked before starting each Run or TaskRun."
+        }
+      }
+    },
     "review_matrix": {
       "type": "object",
       "additionalProperties": false,
