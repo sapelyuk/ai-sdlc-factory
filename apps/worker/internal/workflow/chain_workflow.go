@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/activity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/audit"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/gates"
@@ -68,9 +69,15 @@ type ChainInput struct {
 	MaxChainLength int `json:"max_chain_length,omitempty"`
 	// Profile is the fallback LLM profile for members that declare none.
 	Profile string `json:"profile,omitempty"`
-	// Per-run budget overrides (0 = use defaults).
+	// Per-run budget overrides (0 = use defaults). MaxCostUSD and MaxSteps are
+	// enforced by ChainWorkflow mid-chain across all TaskRuns of this Run
+	// (issue #23, NFR-9); they are also forwarded as per-TaskRun limits.
 	MaxCostUSD float64 `json:"max_cost_usd,omitempty"`
 	MaxSteps   int     `json:"max_steps,omitempty"`
+	// DayMaxCostUSD is the workspace day budget (TeamSpec.budgets.
+	// day_max_cost_usd). When positive the chain checks the day spend before
+	// starting (issue #23). 0 disables the check.
+	DayMaxCostUSD float64 `json:"day_max_cost_usd,omitempty"`
 	// Defaults are injected from the worker config.
 	DefaultMaxCostUSD float64 `json:"default_max_cost_usd"`
 	DefaultMaxSteps   int     `json:"default_max_steps"`
@@ -158,12 +165,51 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 	})
 	routerActor := sdkaudit.SystemActor("worker")
 
+	// Day-level budget gate (issue #23): a workspace that has already spent
+	// its day budget must not start new work. Checked once before the chain.
+	if input.DayMaxCostUSD > 0 {
+		var dayCheck activity.BudgetDailyCheckOutput
+		if err := workflow.ExecuteActivity(ctx, BudgetDailyCheckActivityName,
+			activity.BudgetDailyCheckInput{
+				WorkspaceID: input.WorkspaceID,
+				MaxDailyUSD: input.DayMaxCostUSD,
+			}).Get(ctx, &dayCheck); err != nil {
+			return nil, fmt.Errorf("workflow: day budget check: %w", err)
+		}
+		if dayCheck.Exceeded {
+			recordBudgetExceededAudit(auditCtx, input.WorkspaceID, routerActor, budgetExceededAuditInput{
+				Level:   "day",
+				Current: dayCheck.SpentToday,
+				Max:     input.DayMaxCostUSD,
+				Unit:    "usd",
+			})
+			return nil, fmt.Errorf("workflow: budget_exceeded_daily: spent %.4f >= day limit %.4f",
+				dayCheck.SpentToday, input.DayMaxCostUSD)
+		}
+		if dayCheck.Warning80 {
+			recordRunBudgetWarningAudit(auditCtx, input.WorkspaceID, routerActor, budgetWarningAuditInput{
+				Level:   "day",
+				Current: dayCheck.SpentToday,
+				Max:     input.DayMaxCostUSD,
+				Unit:    "usd",
+			})
+		}
+	}
+
 	// Chain state.
 	currentAgentID := startAgentID
 	currentPkg := input.InitialPackage
 	var feedback []string
 	var steps int
 	var totalCost float64
+	// totalSteps aggregates the ReAct steps of every TaskRun in the chain and
+	// is compared with the run-level MaxSteps budget (issue #23). Note it is
+	// distinct from the chain-length counter above.
+	var totalSteps int
+	// runCostWarned / runStepsWarned make the run-level 80% warning fire once
+	// per Run.
+	var runCostWarned bool
+	var runStepsWarned bool
 	// reviewedBy lists the reviewers that approved the current package. A
 	// rejection resets it because the reworked package starts a new review
 	// round.
@@ -192,6 +238,66 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 		}
 		steps++
 		totalCost += result.TotalCostUSD
+		totalSteps += result.Steps
+
+		// Run-level budget enforcement (issue #23, NFR-9): the chain stops as
+		// soon as the accumulated spend or step count reaches the Run limit.
+		// The check runs before routing so no further TaskRun is started.
+		if input.MaxCostUSD > 0 && totalCost >= input.MaxCostUSD {
+			recordChainAbortedAudit(auditCtx, input.WorkspaceID, routerActor, chainAbortInput{
+				FromAgentID: agentID,
+				ChainStep:   chainStep,
+				Goal:        chainGoal(result.Handoff, currentPkg),
+				Reason:      abortReasonRunBudgetExceededCost,
+			})
+			recordBudgetExceededAudit(auditCtx, input.WorkspaceID, routerActor, budgetExceededAuditInput{
+				Level:     "run",
+				Current:   totalCost,
+				Max:       input.MaxCostUSD,
+				Unit:      "usd",
+				ChainStep: chainStep,
+			})
+			return nil, fmt.Errorf("workflow: run budget exceeded (cost %.4f >= %.4f) at chain step %d",
+				totalCost, input.MaxCostUSD, chainStep)
+		}
+		if input.MaxSteps > 0 && totalSteps >= input.MaxSteps {
+			recordChainAbortedAudit(auditCtx, input.WorkspaceID, routerActor, chainAbortInput{
+				FromAgentID: agentID,
+				ChainStep:   chainStep,
+				Goal:        chainGoal(result.Handoff, currentPkg),
+				Reason:      abortReasonRunBudgetExceededSteps,
+			})
+			recordBudgetExceededAudit(auditCtx, input.WorkspaceID, routerActor, budgetExceededAuditInput{
+				Level:     "run",
+				Current:   float64(totalSteps),
+				Max:       float64(input.MaxSteps),
+				Unit:      "steps",
+				ChainStep: chainStep,
+			})
+			return nil, fmt.Errorf("workflow: run budget exceeded (steps %d >= %d) at chain step %d",
+				totalSteps, input.MaxSteps, chainStep)
+		}
+		// Run-level 80% warning (once per Run, once per threshold).
+		if input.MaxCostUSD > 0 && !runCostWarned && totalCost >= 0.8*input.MaxCostUSD {
+			runCostWarned = true
+			recordRunBudgetWarningAudit(auditCtx, input.WorkspaceID, routerActor, budgetWarningAuditInput{
+				Level:     "run",
+				Current:   totalCost,
+				Max:       input.MaxCostUSD,
+				Unit:      "usd",
+				ChainStep: chainStep,
+			})
+		}
+		if input.MaxSteps > 0 && !runStepsWarned && float64(totalSteps) >= 0.8*float64(input.MaxSteps) {
+			runStepsWarned = true
+			recordRunBudgetWarningAudit(auditCtx, input.WorkspaceID, routerActor, budgetWarningAuditInput{
+				Level:     "run",
+				Current:   float64(totalSteps),
+				Max:       float64(input.MaxSteps),
+				Unit:      "steps",
+				ChainStep: chainStep,
+			})
+		}
 
 		// The receiver found the package incomplete: return it to its
 		// author. The package itself is unchanged; the diagnostics travel
@@ -378,6 +484,97 @@ func ChainWorkflow(ctx workflow.Context, input ChainInput) (*ChainResult, error)
 // abortReasonReviewerNotFound is the chain_aborted reason written when the
 // review matrix cannot be satisfied.
 const abortReasonReviewerNotFound = "reviewer_not_found"
+
+// Run-level budget abort reasons (issue #23, NFR-9).
+const (
+	abortReasonRunBudgetExceededCost  = "run_budget_exceeded_cost"
+	abortReasonRunBudgetExceededSteps = "run_budget_exceeded_steps"
+)
+
+// chainGoal returns the goal of the produced package, falling back to the
+// goal of the package the agent received. It is nil-safe so the budget abort
+// can report a goal even for a rejected or empty handoff.
+func chainGoal(pkg, incoming *handoff.HandoffPackage) string {
+	if pkg != nil {
+		return pkg.Goal
+	}
+	if incoming != nil {
+		return incoming.Goal
+	}
+	return ""
+}
+
+// budgetWarningAuditInput carries the fields of one budget_warning event raised
+// by the chain (run- or day-level). The per-step warning is written by the
+// TaskRunWorkflow with the same action.
+type budgetWarningAuditInput struct {
+	Level     string
+	Current   float64
+	Max       float64
+	Unit      string
+	ChainStep int
+}
+
+// recordRunBudgetWarningAudit appends one budget_warning event for a run- or
+// day-level threshold crossing. The actor is the worker: the platform observed
+// the crossing, not the agent.
+func recordRunBudgetWarningAudit(ctx workflow.Context, workspaceID uuid.UUID, actor string, in budgetWarningAuditInput) {
+	key, err := auditIdempotencyKey(ctx)
+	if err != nil {
+		workflow.GetLogger(ctx).Warn("audit idempotency key failed", "error", err)
+		return
+	}
+	recordAudit(ctx, audit.Event{
+		WorkspaceID:    workspaceID,
+		ActorID:        actor,
+		Action:         sdkaudit.ActionBudgetWarning,
+		IdempotencyKey: key,
+		ResourceID:     in.Level,
+		Details: map[string]any{
+			"level":      in.Level,
+			"threshold":  "80",
+			"current":    in.Current,
+			"max":        in.Max,
+			"unit":       in.Unit,
+			"chain_step": in.ChainStep,
+		},
+	})
+}
+
+// budgetExceededAuditInput carries the fields of one budget_exceeded event
+// raised when a hard budget limit is reached.
+type budgetExceededAuditInput struct {
+	Level     string
+	Current   float64
+	Max       float64
+	Unit      string
+	ChainStep int
+}
+
+// recordBudgetExceededAudit appends one budget_exceeded event. It is written
+// before the workflow returns the abort error, so the stop is attributable in
+// the audit chain even though the workflow fails.
+func recordBudgetExceededAudit(ctx workflow.Context, workspaceID uuid.UUID, actor string, in budgetExceededAuditInput) {
+	key, err := auditIdempotencyKey(ctx)
+	if err != nil {
+		workflow.GetLogger(ctx).Warn("audit idempotency key failed", "error", err)
+		return
+	}
+	recordAudit(ctx, audit.Event{
+		WorkspaceID:    workspaceID,
+		ActorID:        actor,
+		Action:         sdkaudit.ActionBudgetExceeded,
+		IdempotencyKey: key,
+		ResourceID:     in.Level,
+		Details: map[string]any{
+			"level":      in.Level,
+			"current":    in.Current,
+			"max":        in.Max,
+			"unit":       in.Unit,
+			"chain_step": in.ChainStep,
+		},
+	})
+}
 
 // pkgSourceAgentID returns the package source from the runtime header, empty
 // when the package or header is absent.
