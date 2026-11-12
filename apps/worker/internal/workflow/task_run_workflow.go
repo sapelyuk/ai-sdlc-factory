@@ -270,8 +270,55 @@ func TaskRunWorkflow(ctx workflow.Context, input TaskRunInput) (*TaskRunResult, 
 		budgetSnap.Steps++
 		budgetSnap.TotalCost += result.Usage.TotalCostUSD
 
+		// Budget warning at 80% (NFR-9, issue #23): record it once per
+		// threshold and carry the fired flag in the snapshot so the guard
+		// rebuilt by the next activity does not warn again.
+		if result.BudgetWarning != nil {
+			switch result.BudgetWarning.Threshold {
+			case "cost_80":
+				budgetSnap.WarnedCost = true
+			case "steps_80":
+				budgetSnap.WarnedSteps = true
+			}
+			warningKey, err := auditIdempotencyKey(ctx)
+			if err != nil {
+				return nil, err
+			}
+			recordAudit(auditCtx, audit.Event{
+				WorkspaceID:    input.WorkspaceID,
+				ActorID:        actor,
+				Action:         sdkaudit.ActionBudgetWarning,
+				IdempotencyKey: warningKey,
+				ResourceID:     input.TaskRunID,
+				Details: map[string]any{
+					"task_run_id": input.TaskRunID,
+					"threshold":   result.BudgetWarning.Threshold,
+					"current":     result.BudgetWarning.Current,
+					"max":         result.BudgetWarning.Max,
+					"unit":        result.BudgetWarning.Unit,
+				},
+			})
+		}
+
 		// Hard stop on budget exceeded.
 		if result.BudgetExceeded {
+			exceededKey, err := auditIdempotencyKey(ctx)
+			if err != nil {
+				return nil, err
+			}
+			recordAudit(auditCtx, audit.Event{
+				WorkspaceID:    input.WorkspaceID,
+				ActorID:        actor,
+				Action:         sdkaudit.ActionBudgetExceeded,
+				IdempotencyKey: exceededKey,
+				ResourceID:     input.TaskRunID,
+				Details: map[string]any{
+					"task_run_id": input.TaskRunID,
+					"agent_id":    input.AgentID,
+					"step_index":  stepIndex,
+					"reason":      result.BudgetExceededReason,
+				},
+			})
 			return nil, fmt.Errorf("workflow: budget exceeded at step %d: %s", stepIndex, result.BudgetExceededReason)
 		}
 
@@ -378,6 +425,10 @@ const ApprovalExpireActivityName = "ApprovalExpire"
 // ApprovalDecideActivityName is the registered name of the approval-decide
 // activity.
 const ApprovalDecideActivityName = "ApprovalDecide"
+
+// BudgetDailyCheckActivityName is the registered name of the day-level budget
+// check activity (issue #23).
+const BudgetDailyCheckActivityName = "BudgetDailyCheck"
 
 func auditIdempotencyKey(ctx workflow.Context) (string, error) {
 	var key string
