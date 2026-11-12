@@ -908,6 +908,10 @@ paths:
         Requires owner or admin role. Writes audit event `run_killed`
         before terminating the Temporal workflow.
         ADR-013 (R3 — always human approve for destructive).
+
+        Contract-only in this change: the API handler is not wired yet
+        (it needs a Temporal client in the Platform API) and is tracked
+        in #137.
       parameters:
         - $ref: "#/components/parameters/ID"
       requestBody:
@@ -933,7 +937,7 @@ paths:
                 properties:
                   status:
                     type: string
-                    enum: [terminating, not_found, already_completed]
+                    enum: [terminating, already_completed]
                   run_id:
                     type: string
                     format: uuid

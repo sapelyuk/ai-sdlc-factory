@@ -41,38 +41,34 @@
     },
     "budget": {
       "type": "object",
+      "description": "Task, run and day budgets (NFR-9, ADR-013). 80% triggers a warning; 100% is a hard stop. The task budget is applied to every TaskRun; run and day limits are optional.",
       "additionalProperties": false,
       "required": ["max_cost_usd", "max_steps"],
       "properties": {
         "max_cost_usd": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "description": "Maximum cost of one TaskRun (task level)."
         },
         "max_steps": {
           "type": "integer",
-          "minimum": 1
-        }
-      }
-    },
-    "budgets": {
-      "type": "object",
-      "description": "Multi-level cost and step budgets (NFR-9, ADR-013). 80% triggers warning; 100% hard-stops.",
-      "additionalProperties": false,
-      "properties": {
+          "minimum": 1,
+          "description": "Maximum ReAct steps of one TaskRun (task level)."
+        },
         "run_max_cost_usd": {
           "type": "number",
           "minimum": 0,
-          "description": "Maximum cost across all TaskRuns in one Run. Enforced by ChainWorkflow mid-chain."
+          "description": "Maximum cost across all TaskRuns of one Run. Enforced by ChainWorkflow mid-chain."
         },
         "run_max_steps": {
           "type": "integer",
           "minimum": 0,
-          "description": "Maximum total steps across all TaskRuns in one Run."
+          "description": "Maximum total steps across all TaskRuns of one Run."
         },
         "day_max_cost_usd": {
           "type": "number",
           "minimum": 0,
-          "description": "Maximum cost per workspace per calendar day (UTC). Checked before starting each Run or TaskRun."
+          "description": "Maximum workspace cost per calendar day (UTC). Checked before a Run starts."
         }
       }
     },
