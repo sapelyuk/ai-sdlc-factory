@@ -30,13 +30,13 @@ type BudgetGuard struct {
 // BudgetWarning is emitted once when usage crosses the 80% threshold.
 type BudgetWarning struct {
 	// Threshold is either "cost_80" or "steps_80".
-	Threshold string
+	Threshold string `json:"threshold"`
 	// Current is the value that crossed the threshold.
-	Current float64
+	Current float64 `json:"current"`
 	// Max is the limit.
-	Max float64
+	Max float64 `json:"max"`
 	// Unit is "usd" or "steps".
-	Unit string
+	Unit string `json:"unit"`
 }
 
 // NewBudgetGuard creates a new budget guard with the given limits.
