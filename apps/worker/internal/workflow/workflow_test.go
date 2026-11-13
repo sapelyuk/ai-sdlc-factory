@@ -175,7 +175,9 @@ func (s *TaskRunSuite) TestTaskRunWorkflow_BudgetWarningAudit() {
 	warning := s.auditEvents.events[1]
 	s.Equal(sdkaudit.ActionBudgetWarning, warning.Action)
 	s.Equal("task", warning.Details["level"])
-	s.Equal("80", warning.Details["threshold"])
+	// threshold_pct is a JSON number (was the string "80"): Temporal's data
+	// converter decodes activity-argument numbers into float64, like "max".
+	s.Equal(float64(80), warning.Details["threshold_pct"])
 	s.Equal("usd", warning.Details["unit"])
 	s.Equal(2.5, warning.Details["current"])
 	s.Equal(float64(3), warning.Details["max"])

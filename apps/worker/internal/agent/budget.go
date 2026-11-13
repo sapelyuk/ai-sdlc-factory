@@ -66,6 +66,11 @@ func (b *BudgetGuard) Consume(usage client.LLMUsage) (*BudgetWarning, error) {
 	}
 
 	// 80% soft warnings (NFR-9): each threshold fires once per guard lifetime.
+	//
+	// Precedence: cost is checked before steps. If a single Consume crosses
+	// both 80% thresholds, only the cost warning is returned this call; the
+	// steps warning fires on the next Consume. This is intentional — warnings
+	// are informational (hard limits below are terminal).
 	if b.MaxCostUSD > 0 && !b.warnCost && b.totalCost >= 0.8*b.MaxCostUSD {
 		b.warnCost = true
 		return &BudgetWarning{Threshold: "cost_80", Current: b.totalCost, Max: b.MaxCostUSD, Unit: "usd"}, nil
