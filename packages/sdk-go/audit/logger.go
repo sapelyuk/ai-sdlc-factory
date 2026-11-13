@@ -49,6 +49,9 @@ const (
 	ActionChainAborted     = "chain_aborted"
 	ActionApprovalDecided  = "approval_decided"
 	ActionGateChecked      = "gate_checked"
+	ActionBudgetWarning    = "budget_warning"
+	ActionBudgetExceeded   = "budget_exceeded"
+	ActionRunKilled        = "run_killed"
 )
 
 // Actor ID prefixes. An actor is "agent:<uuid>", "human:<uuid>",

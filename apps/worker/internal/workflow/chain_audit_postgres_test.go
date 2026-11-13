@@ -2,23 +2,17 @@ package workflow_test
 
 import (
 	"context"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 	temporalactivity "go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 
 	workeractivity "github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/activity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/handoff"
+	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/testutil"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/workflow"
 	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 )
@@ -38,50 +32,8 @@ var chainMigrationFiles = []string{
 func setupChainAuditPostgres(t *testing.T) *sdkaudit.Logger {
 	t.Helper()
 
-	if output, err := exec.CommandContext(t.Context(), "docker", "info").CombinedOutput(); err != nil {
-		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
-			t.Fatalf("Docker is required for chain audit integration tests in CI: %s", strings.TrimSpace(string(output)))
-		}
-		t.Skipf("Docker is unavailable; skipping chain audit integration test: %s", strings.TrimSpace(string(output)))
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	t.Cleanup(cancel)
-
-	container, err := postgrescontainer.Run(ctx, "pgvector/pgvector:pg18",
-		postgrescontainer.WithDatabase("chain_audit_test"),
-		postgrescontainer.WithUsername("chain_audit_test"),
-		postgrescontainer.WithPassword("chain_audit_test"),
-		postgrescontainer.BasicWaitStrategies(),
-	)
-	if err != nil {
-		t.Skipf("failed to start PostgreSQL container: %v", err)
-	}
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatal(err)
-	}
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-
-	migrationsDir := filepath.Join("..", "..", "..", "..", "migrations", "postgres")
-	for _, name := range chainMigrationFiles {
-		contents, err := os.ReadFile(filepath.Join(migrationsDir, filepath.Base(name)))
-		if err != nil {
-			t.Skipf("read migration %s: %v", name, err)
-		}
-		if _, err := pool.Exec(ctx, string(contents)); err != nil {
-			t.Fatalf("apply migration %s: %v", name, err)
-		}
-	}
-
-	logger := sdkaudit.NewLogger(pool)
-	return logger
+	pool := testutil.StartPostgres(t, "chain_audit_test", chainMigrationFiles)
+	return sdkaudit.NewLogger(pool)
 }
 
 // newChainEnv builds a test workflow environment that persists audit events

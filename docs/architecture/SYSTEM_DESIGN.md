@@ -187,6 +187,8 @@ ARTIFACT ||--o| DIAGRAM : may_be
 ARTIFACT ||--o| ADR : may_be
 ```
 
+Budgets are declared per team version (`budget` in `packages/contracts/schemas/team.schema.json`): `max_cost_usd` / `max_steps` (task level) plus optional `run_max_cost_usd`, `run_max_steps`, `day_max_cost_usd`. Enforcement levels are described in §11.4 (issue #23).
+
 ## 8. Orchestration
 
 ### 8.1 Execution hierarchy
@@ -359,6 +361,14 @@ Budgets: step, task, run, day, month. Estimation before run. 80% — warning; ha
 
 When aggregating budgets, use `total_cost_usd` (real money). When displaying "task cost" — `final_cost_usd` (result).
 
+**Implementation (issue #23).** Budgets are enforced at three levels:
+
+- **Step / task** — `BudgetGuard` in the Agent Runtime checks `max_cost_usd` and `max_steps` after every LLM call. At 80% it emits a `budget_warning` audit event once per threshold; at 100% the call is blocked and `TaskRunWorkflow` records `budget_exceeded` before failing the run.
+- **Run** — `ChainWorkflow` aggregates steps and cost across all `TaskRun`s of the run. Reaching `run_max_cost_usd` or `run_max_steps` aborts the chain with reason `run_budget_exceeded_cost` / `run_budget_exceeded_steps` before the next agent is started; 80% warnings are emitted once per run.
+- **Day** — the `BudgetDailyCheck` activity sums `llm_logical_calls.total_cost_usd` for the workspace's current UTC day. A workspace that already reached `day_max_cost_usd` does not start a new chain (`budget_exceeded`, level `day`); crossing 80% emits `budget_warning`.
+
+Month-level budgets are not implemented in v1 (M3). The kill switch (`POST /api/v1/runs/{id}/kill`) is specified in `packages/contracts/openapi/platform-api.yaml`; wiring it requires a Temporal client in the Platform API and is tracked in #137.
+
 ### 11.5 Deployment profiles
 
 | Profile | Purpose | RAM | Composition |
@@ -516,6 +526,7 @@ Before completing a stage (see §14.1), verify:
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.12 | 2026-11-12 | §7.1 and §11.4: documented team budgets and budget enforcement levels (step/task, run, day); kill switch status (#23). |
 | 1.11 | 2026-10-30 | Added ADR-024 (data-only migrations) and ADR-025 (pinning exceptions). |
 | 1.10 | 27.10.2026 | Added ADR-023 (Sandbox isolation boundary: docker-socket-proxy, egress allowlist, gVisor). |
 | 1.9 | 22.10.2026 | Added ADR-022 (selection of `mark3labs/mcp-go` for Tool Gateway). §4.2, §11.1, and §12.1 reference ADR-022. (#83) |

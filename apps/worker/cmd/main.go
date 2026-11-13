@@ -104,6 +104,14 @@ func main() {
 		Name: wf.ApprovalDecideActivityName,
 	})
 
+	// Day-level budget check (issue #23): sums the workspace LLM spend of the
+	// current UTC day so a chain can fail fast before spending more.
+	w.RegisterActivityWithOptions(
+		activity.NewBudgetDailyCheckActivity(activity.NewPostgresDaySpendReader(pool)).Execute,
+		temporalactivity.RegisterOptions{
+			Name: wf.BudgetDailyCheckActivityName,
+		})
+
 	// Start health-check server in background.
 	go startHealthz()
 

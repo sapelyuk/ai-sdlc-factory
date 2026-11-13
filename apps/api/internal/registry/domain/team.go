@@ -24,9 +24,19 @@ type TeamMemberSpec struct {
 }
 
 // BudgetSpec defines budget configuration.
+//
+// The field set mirrors the "budget" object in
+// packages/contracts/schemas/team.schema.json: task-level limits
+// (max_cost_usd, max_steps) plus the optional run-level and day-level limits.
+// The registry handler decodes specs with DisallowUnknownFields, so every
+// schema property must have a matching struct field or a valid payload is
+// rejected (issue #23, NFR-9).
 type BudgetSpec struct {
-	MaxCostUSD float64 `json:"max_cost_usd" yaml:"max_cost_usd"`
-	MaxSteps   int     `json:"max_steps" yaml:"max_steps"`
+	MaxCostUSD    float64 `json:"max_cost_usd" yaml:"max_cost_usd"`
+	MaxSteps      int     `json:"max_steps" yaml:"max_steps"`
+	RunMaxCostUSD float64 `json:"run_max_cost_usd,omitempty" yaml:"run_max_cost_usd,omitempty"`
+	RunMaxSteps   int     `json:"run_max_steps,omitempty" yaml:"run_max_steps,omitempty"`
+	DayMaxCostUSD float64 `json:"day_max_cost_usd,omitempty" yaml:"day_max_cost_usd,omitempty"`
 }
 
 // ReviewMatrixSpec defines the review matrix for a team.

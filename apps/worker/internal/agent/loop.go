@@ -28,6 +28,9 @@ type StepResult struct {
 	BudgetExceeded bool `json:"budget_exceeded,omitempty"`
 	// BudgetExceededReason carries the error message when BudgetExceeded is true.
 	BudgetExceededReason string `json:"budget_exceeded_reason,omitempty"`
+	// BudgetWarning is set when this step crossed the 80% budget threshold.
+	// The workflow turns it into a budget_warning audit event (issue #23).
+	BudgetWarning *BudgetWarning `json:"budget_warning,omitempty"`
 	// RejectedMissing is set when the incoming handoff package is incomplete
 	// (SYSTEM_DESIGN.md §8.4): the receiver must not guess, the workflow
 	// returns the package to its sender with these diagnostics. No LLM budget
@@ -151,21 +154,22 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 			return nil, fmt.Errorf("agent: sanitize LLM call: %w", err)
 		}
 		guard := RestoreBudgetGuard(input.MaxCostUSD, input.MaxSteps, input.BudgetSnapshot)
-		if err := guard.Consume(llmResp.Usage); err != nil {
-			return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls, BudgetExceeded: true, BudgetExceededReason: err.Error()}, nil
+		warning, cErr := guard.Consume(llmResp.Usage)
+		if cErr != nil {
+			return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls, BudgetExceeded: true, BudgetExceededReason: cErr.Error()}, nil
 		}
 		if len(llmResp.ToolCalls) > 0 {
-			return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls}, nil
+			return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls, BudgetWarning: warning}, nil
 		}
 		msgs = append(msgs, client.ChatMessage{Role: "assistant", Content: llmResp.Content})
 		pkg, err := e.handoffBuilder.Build(llmResp.Content)
 		if err != nil {
-			return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls}, nil
+			return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls, BudgetWarning: warning}, nil
 		}
 		if err := e.handoffValidator.Validate(pkg); err != nil {
-			return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls}, nil
+			return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls, BudgetWarning: warning}, nil
 		}
-		return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls, SanitizedHandoff: pkg}, nil
+		return &StepResult{Messages: msgs, Usage: llmResp.Usage, RecentCalls: input.RecentCalls, SanitizedHandoff: pkg, BudgetWarning: warning}, nil
 	}
 
 	// On the first step, build context and prepend system message.
@@ -235,13 +239,14 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 
 	// Check budget.
 	guard := RestoreBudgetGuard(input.MaxCostUSD, input.MaxSteps, input.BudgetSnapshot)
-	if err := guard.Consume(llmResp.Usage); err != nil {
+	warning, bErr := guard.Consume(llmResp.Usage)
+	if bErr != nil {
 		return &StepResult{
 			Messages:             msgs,
 			Usage:                llmResp.Usage,
 			RecentCalls:          input.RecentCalls,
 			BudgetExceeded:       true,
-			BudgetExceededReason: err.Error(),
+			BudgetExceededReason: bErr.Error(),
 		}, nil
 	}
 
@@ -253,9 +258,10 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 			// Append assistant message and continue; the agent must regenerate.
 			msgs = append(msgs, client.ChatMessage{Role: "assistant", Content: llmResp.Content})
 			return &StepResult{
-				Messages:    msgs,
-				Usage:       llmResp.Usage,
-				RecentCalls: input.RecentCalls,
+				Messages:      msgs,
+				Usage:         llmResp.Usage,
+				RecentCalls:   input.RecentCalls,
+				BudgetWarning: warning,
 			}, nil
 		}
 		// Validate the handoff package.
@@ -263,16 +269,18 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 			// Invalid handoff: return error so the agent regenerates.
 			msgs = append(msgs, client.ChatMessage{Role: "assistant", Content: llmResp.Content})
 			return &StepResult{
-				Messages:    msgs,
-				Usage:       llmResp.Usage,
-				RecentCalls: input.RecentCalls,
+				Messages:      msgs,
+				Usage:         llmResp.Usage,
+				RecentCalls:   input.RecentCalls,
+				BudgetWarning: warning,
 			}, nil
 		}
 		return &StepResult{
-			Messages:    msgs,
-			Usage:       llmResp.Usage,
-			RecentCalls: input.RecentCalls,
-			Handoff:     pkg,
+			Messages:      msgs,
+			Usage:         llmResp.Usage,
+			RecentCalls:   input.RecentCalls,
+			Handoff:       pkg,
+			BudgetWarning: warning,
 		}, nil
 	}
 
@@ -313,9 +321,10 @@ func (e *Executor) ExecuteStep(ctx context.Context, input StepInput) (*StepResul
 	}
 
 	return &StepResult{
-		Messages:    msgs,
-		Usage:       llmResp.Usage,
-		RecentCalls: recent,
+		Messages:      msgs,
+		Usage:         llmResp.Usage,
+		RecentCalls:   recent,
+		BudgetWarning: warning,
 	}, nil
 }
 
