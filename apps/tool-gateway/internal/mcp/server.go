@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -20,6 +21,7 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/credentials"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/identity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/policy"
+	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
 )
 
 // ServerName and ServerVersion identify the MCP implementation.
@@ -69,25 +71,27 @@ func (StubExecutor) Execute(_ context.Context, call Call) (map[string]any, error
 
 // Options configures the gateway MCP server.
 type Options struct {
-	Catalog    *catalog.Catalog
-	Authorizer policy.Authorizer
-	Auditor    *audit.Logger
-	Broker     credentials.Broker
-	Redactor   *credentials.Redactor
-	Executor   Executor
-	Logger     *slog.Logger
+	Catalog          *catalog.Catalog
+	Authorizer       policy.Authorizer
+	Auditor          *audit.Logger
+	Broker           credentials.Broker
+	Redactor         *credentials.Redactor
+	Executor         Executor
+	Logger           *slog.Logger
+	IdempotencyCache *idempotency.Cache
 }
 
 // Server is the Tool Gateway MCP server.
 type Server struct {
-	catalog    *catalog.Catalog
-	authorizer policy.Authorizer
-	auditor    *audit.Logger
-	broker     credentials.Broker
-	redactor   *credentials.Redactor
-	executor   Executor
-	logger     *slog.Logger
-	mcp        *mcpsdk.MCPServer
+	catalog          *catalog.Catalog
+	authorizer       policy.Authorizer
+	auditor          *audit.Logger
+	broker           credentials.Broker
+	redactor         *credentials.Redactor
+	executor         Executor
+	logger           *slog.Logger
+	idempotencyCache *idempotency.Cache
+	mcp              *mcpsdk.MCPServer
 }
 
 // NewServer registers every catalog tool on a new MCP server.
@@ -112,13 +116,14 @@ func NewServer(opts Options) (*Server, error) {
 	}
 
 	s := &Server{
-		catalog:    opts.Catalog,
-		authorizer: opts.Authorizer,
-		auditor:    opts.Auditor,
-		broker:     opts.Broker,
-		redactor:   opts.Redactor,
-		executor:   opts.Executor,
-		logger:     opts.Logger,
+		catalog:          opts.Catalog,
+		authorizer:       opts.Authorizer,
+		auditor:          opts.Auditor,
+		broker:           opts.Broker,
+		redactor:         opts.Redactor,
+		executor:         opts.Executor,
+		logger:           opts.Logger,
+		idempotencyCache: opts.IdempotencyCache,
 	}
 
 	s.mcp = mcpsdk.NewMCPServer(
@@ -150,6 +155,27 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 		id, err := identity.From(ctx)
 		if err != nil {
 			return mcpgo.NewToolResultError("missing caller identity"), nil
+		}
+
+		// ── Extract idempotency key from _meta (issue #106) ──────
+		idempotencyKey := extractIdempotencyKey(request)
+
+		// ── Idempotency cache: claim ──────────────────────────────
+		if idempotencyKey != "" && s.idempotencyCache != nil {
+			entry, hit, err := s.idempotencyCache.Claim(ctx, "tool", id.WorkspaceID.String(), idempotencyKey, 60*time.Second)
+			if errors.Is(err, idempotency.ErrPending) {
+				return mcpgo.NewToolResultError("concurrent request with same idempotency key in progress"), nil
+			}
+			if err != nil {
+				// fail-open: proceed without cache
+			} else if hit && entry != nil {
+				// Return cached result
+				var cached map[string]any
+				if json.Unmarshal(entry.ResponseJSON, &cached) == nil {
+					return mcpgo.NewToolResultJSON(cached)
+				}
+				// If unmarshal fails, fall through to execute
+			}
 		}
 
 		decision, ok := policy.DecisionFrom(ctx)
@@ -185,14 +211,29 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 			Credentials: injected,
 		})
 		if err != nil {
+			// ── Idempotency cache: mark failed ──────────────────────
+			if idempotencyKey != "" && s.idempotencyCache != nil {
+				_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+			}
 			_ = s.record(ctx, id, tool, decision.RiskLevel, audit.ResultError, err.Error())
 			return mcpgo.NewToolResultError(s.redactor.Redact(err.Error())), nil
 		}
 
 		clean, err := s.sanitize(result)
 		if err != nil {
+			if idempotencyKey != "" && s.idempotencyCache != nil {
+				_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+			}
 			_ = s.record(ctx, id, tool, decision.RiskLevel, audit.ResultError, err.Error())
 			return nil, fmt.Errorf("sanitize tool result: %w", err)
+		}
+
+		// ── Idempotency cache: complete ────────────────────────────
+		if idempotencyKey != "" && s.idempotencyCache != nil {
+			respJSON, _ := json.Marshal(clean)
+			_ = s.idempotencyCache.Complete(ctx, "tool", id.WorkspaceID.String(), idempotencyKey, idempotency.Entry{
+				ResponseJSON: respJSON,
+			}, 1*time.Hour)
 		}
 
 		auditResult := s.auditResult()
@@ -204,6 +245,17 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 		}
 		return mcpgo.NewToolResultJSON(clean)
 	}
+}
+
+// extractIdempotencyKey reads _meta.idempotency_key from the CallToolRequest.
+func extractIdempotencyKey(request mcpgo.CallToolRequest) string {
+	if request.Params.Meta == nil {
+		return ""
+	}
+	if k, ok := request.Params.Meta.AdditionalFields["idempotency_key"].(string); ok {
+		return k
+	}
+	return ""
 }
 
 // auditResult returns the appropriate audit result for the configured executor.
