@@ -142,7 +142,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: docker.io/library/redis:7-alpine@sha256:cfb3c5629ec846b1665d348f8c82ed160c911cab5a2cc88053f4219ab4b5835c
+    image: docker.io/library/redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     container_name: ai-sdlc-factory-redis
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--save", ""]
     ports:
