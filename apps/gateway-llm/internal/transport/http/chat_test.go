@@ -9,16 +9,19 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/domain"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/identity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/routing"
 	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
+	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 	rediscontainer "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
@@ -513,6 +516,96 @@ func startTestRedis(t *testing.T) *idempotency.Cache {
 	return idempotency.New(client, nil, nil)
 }
 
+type logicalCallRouter struct {
+	pool        *pgxpool.Pool
+	workspaceID uuid.UUID
+	calls       int
+}
+
+func (r *logicalCallRouter) Chat(ctx context.Context, profileName string, req domain.ChatRequest, meta routing.CallMeta) (*routing.Result, error) {
+	r.calls++
+	var logicalCallID uuid.UUID
+	if err := r.pool.QueryRow(ctx, `
+		INSERT INTO llm_logical_calls
+			(workspace_id, run_id, task_id, agent_id, profile_name,
+			 model_id_used, provider_used, status, started_at)
+		VALUES ($1, $2, $3, $4, $5, 'claude-sonnet-4-20250101', 'anthropic', 'succeeded', $6)
+		RETURNING id`,
+		r.workspaceID, meta.RunID, meta.TaskID, meta.AgentID, profileName, time.Now().UTC()).Scan(&logicalCallID); err != nil {
+		return nil, err
+	}
+	return &routing.Result{
+		LogicalCall: &domain.LogicalCall{
+			ID:             logicalCallID,
+			WorkspaceID:    r.workspaceID,
+			ProfileName:    profileName,
+			ModelIDUsed:    "claude-sonnet-4-20250101",
+			ProviderUsed:   "anthropic",
+			Status:         "succeeded",
+			FinalTokensIn:  ptrInt(50),
+			FinalTokensOut: ptrInt(200),
+			FinalCostUSD:   ptrFloat(0.0008),
+			TotalTokensIn:  150,
+			TotalTokensOut: 200,
+			TotalCostUSD:   0.0044,
+		},
+		Content: "function sort(arr) {}",
+	}, nil
+}
+
+func startTestPostgres(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	if output, err := exec.CommandContext(t.Context(), "docker", "info").CombinedOutput(); err != nil {
+		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
+			t.Fatalf("Docker required for integration test: %s", strings.TrimSpace(string(output)))
+		}
+		t.Skipf("Docker unavailable; skipping: %s", strings.TrimSpace(string(output)))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	container, err := postgrescontainer.Run(ctx, "pgvector/pgvector:pg18",
+		postgrescontainer.WithDatabase("llm_gateway_test"),
+		postgrescontainer.WithUsername("llm_gateway_test"),
+		postgrescontainer.WithPassword("llm_gateway_test"),
+		postgrescontainer.BasicWaitStrategies(),
+	)
+	if err != nil {
+		t.Fatalf("start PostgreSQL container: %v", err)
+	}
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+
+	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		t.Fatalf("get PostgreSQL connection string: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, connStr)
+	if err != nil {
+		t.Fatalf("create PostgreSQL pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("connect to PostgreSQL container: %v", err)
+	}
+
+	migrationPath := filepath.Join("..", "..", "..", "..", "..", "migrations", "postgres", "0010_llm_gateway.up.sql")
+	contents, err := os.ReadFile(migrationPath)
+	if err != nil {
+		t.Fatalf("read migration file %s: %v", migrationPath, err)
+	}
+	if _, err := pool.Exec(ctx, string(contents)); err != nil {
+		t.Fatalf("apply migration %s: %v", migrationPath, err)
+	}
+	return pool
+}
+
+func ptrInt(v int) *int { return &v }
+func ptrFloat(v float64) *float64 { return &v }
+
 // newIdempotencyRequest builds a POST /v1/llm/chat with tenant + idempotency headers.
 func newIdempotencyRequest(t *testing.T, body, workspaceID, idemKey string) *http.Request {
 	t.Helper()
@@ -563,6 +656,38 @@ func TestChatHandler_IdempotencyKey_RetryDoesNotCallProviderTwice(t *testing.T) 
 	// Responses must be identical.
 	if w1.Body.String() != w2.Body.String() {
 		t.Errorf("responses differ:\n  first:  %s\n  second: %s", w1.Body.String(), w2.Body.String())
+	}
+}
+
+func TestChatHandler_IdempotencyKey_CachedRetryDoesNotCreateLogicalCall(t *testing.T) {
+	pool := startTestPostgres(t)
+	cache := startTestRedis(t)
+	wsID := uuid.New()
+	router := &logicalCallRouter{pool: pool, workspaceID: wsID}
+	handler := chatHandler(router, cache)
+	idemKey := "idem-" + uuid.New().String()
+
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsID.String(), idemKey))
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request: status = %d (body %s)", w1.Code, w1.Body.String())
+	}
+
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsID.String(), idemKey))
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second request: status = %d (body %s)", w2.Code, w2.Body.String())
+	}
+	if got := w2.Header().Get("X-Idempotency-Cache"); got != "hit" {
+		t.Fatalf("second X-Idempotency-Cache = %q, want hit", got)
+	}
+
+	var count int
+	if err := pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM llm_logical_calls").Scan(&count); err != nil {
+		t.Fatalf("COUNT(*) FROM llm_logical_calls: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("llm_logical_calls count = %d, want 1 (cached retry must not create a new logical call)", count)
 	}
 }
 

@@ -117,6 +117,36 @@ func (c *Cache) Claim(ctx context.Context, namespace, workspaceID, key string, p
 	return nil, false, fmt.Errorf("idempotency: claim race exhausted after %d attempts", maxClaimAttempts)
 }
 
+// Get returns a completed entry without reserving or mutating the key. This is
+// used to authorize cache replays before writing a fresh pending claim.
+func (c *Cache) Get(ctx context.Context, namespace, workspaceID, key string) (*Entry, bool, error) {
+	if c == nil {
+		return nil, false, nil
+	}
+	redisKey := c.redisKey(namespace, workspaceID, key)
+	raw, err := c.client.Get(ctx, redisKey).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, false, nil
+		}
+		c.metricsError(namespace, "get")
+		c.warn("idempotency cache get failed; proceeding without cache", "namespace", namespace, "error", err)
+		return nil, false, fmt.Errorf("idempotency: get: %w", err)
+	}
+	var entry Entry
+	if err := json.Unmarshal(raw, &entry); err != nil {
+		c.metricsError(namespace, "get_unmarshal")
+		c.warn("idempotency cache entry is corrupt; proceeding without cache", "namespace", namespace, "error", err)
+		return nil, false, fmt.Errorf("idempotency: get unmarshal: %w", err)
+	}
+	if entry.Status != "completed" {
+		c.metricsErrPending(namespace)
+		return nil, false, ErrPending
+	}
+	c.metricsHit(namespace)
+	return &entry, true, nil
+}
+
 // Complete stores the upstream response for a claimed key.
 // Called after provider success, before returning to caller.
 func (c *Cache) Complete(ctx context.Context, namespace, workspaceID, key string, entry Entry, completedTTL time.Duration) error {

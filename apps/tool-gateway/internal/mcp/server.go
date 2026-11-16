@@ -166,6 +166,36 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 				decision, ok = batch[tool.Name]
 			}
 		}
+
+		// If a completed entry already exists, re-check policy before replaying it.
+		if idempotencyKey != "" && s.idempotencyCache != nil {
+			entry, hit, err := s.idempotencyCache.Get(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+			if err != nil {
+				// fail-open: proceed without cache
+			} else if hit && entry != nil {
+				decision, err = s.authorize(ctx, id, tool)
+				if err != nil {
+					_ = s.record(ctx, id, tool, tool.RiskLevel, audit.ResultError, err.Error())
+					return mcpgo.NewToolResultError("policy engine unavailable"), nil
+				}
+				if !decision.Allow {
+					_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+					if err := s.record(ctx, id, tool, decision.RiskLevel, audit.ResultDenied, decision.Reason); err != nil {
+						return nil, fmt.Errorf("write audit record: %w", err)
+					}
+					return mcpgo.NewToolResultError("policy denied: " + decision.Reason), nil
+				}
+				if err := s.record(ctx, id, tool, decision.RiskLevel, audit.ResultSuccess, ""); err != nil {
+					return nil, fmt.Errorf("write audit record: %w", err)
+				}
+				var cached map[string]any
+				if json.Unmarshal(entry.ResponseJSON, &cached) == nil {
+					return mcpgo.NewToolResultJSON(cached)
+				}
+				// If unmarshal fails, fall through to execute
+			}
+		}
+
 		if !ok {
 			decision, err = s.authorize(ctx, id, tool)
 			if err != nil {
@@ -181,7 +211,7 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 			return mcpgo.NewToolResultError("policy denied: " + decision.Reason), nil
 		}
 
-		// ── Idempotency cache: claim only after authorization ──────────────
+		// Fresh requests authorize before reserving a cache slot.
 		if idempotencyKey != "" && s.idempotencyCache != nil {
 			entry, hit, err := s.idempotencyCache.Claim(ctx, "tool", id.WorkspaceID.String(), idempotencyKey, 60*time.Second)
 			if errors.Is(err, idempotency.ErrPending) {
@@ -197,7 +227,6 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 				if json.Unmarshal(entry.ResponseJSON, &cached) == nil {
 					return mcpgo.NewToolResultJSON(cached)
 				}
-				// If unmarshal fails, fall through to execute
 			}
 		}
 
