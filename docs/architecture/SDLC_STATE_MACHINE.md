@@ -114,6 +114,8 @@ Escalation to human when:
 | `max_wall_minutes` per TaskRun | 45 |
 | `deadline` per StageRun | 24 hours |
 
+The idempotency cache (ADR-026) supports circuit-breaker recovery: when a transient provider failure triggers a retry, the cache ensures the provider is not double-billed (LLM) or the side effect not duplicated (Tool). See `SYSTEM_DESIGN.md` §8.5, §11.1.
+
 ## 8. Risk levels and autonomy
 
 | Level | Actions | Gate |
