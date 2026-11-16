@@ -93,7 +93,7 @@ func decodeChat(t *testing.T, w *httptest.ResponseRecorder) chatResponse {
 
 func TestChatHandler_Success(t *testing.T) {
 	stub := &stubRouter{res: succeededResult()}
-	handler := chatHandler(stub)
+	handler := chatHandler(stub, nil)
 
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"sort an array"}]}`))
@@ -151,7 +151,7 @@ func TestChatHandler_Success(t *testing.T) {
 func TestChatHandler_AttributionPassthrough(t *testing.T) {
 	runID, taskID, agentID := uuid.New(), uuid.New(), uuid.New()
 	stub := &stubRouter{res: succeededResult()}
-	handler := chatHandler(stub)
+	handler := chatHandler(stub, nil)
 
 	body := `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}],"tools":[{"name":"run_tests"}],"run_id":"` +
 		runID.String() + `","task_id":"` + taskID.String() + `","agent_id":"` + agentID.String() + `"}`
@@ -188,7 +188,7 @@ func TestChatHandler_InvalidBody(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stub := &stubRouter{res: succeededResult()}
 			w := httptest.NewRecorder()
-			chatHandler(stub).ServeHTTP(w, newChatRequest(t, tt.body))
+			chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, tt.body))
 
 			if w.Code != http.StatusBadRequest {
 				t.Errorf("status = %d, want 400 (body %s)", w.Code, w.Body.String())
@@ -216,7 +216,7 @@ func TestChatHandler_MissingFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stub := &stubRouter{res: succeededResult()}
 			w := httptest.NewRecorder()
-			chatHandler(stub).ServeHTTP(w, newChatRequest(t, tt.body))
+			chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, tt.body))
 
 			if w.Code != http.StatusUnprocessableEntity {
 				t.Errorf("status = %d, want 422 (body %s)", w.Code, w.Body.String())
@@ -233,7 +233,7 @@ func TestChatHandler_MissingFields(t *testing.T) {
 func TestChatHandler_UnknownProfile(t *testing.T) {
 	stub := &stubRouter{err: domain.ErrUnknownProfile}
 	w := httptest.NewRecorder()
-	chatHandler(stub).ServeHTTP(w, newChatRequest(t, `{"profile":"does-not-exist","messages":[{"role":"user","content":"hi"}]}`))
+	chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, `{"profile":"does-not-exist","messages":[{"role":"user","content":"hi"}]}`))
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 (body %s)", w.Code, w.Body.String())
@@ -246,7 +246,7 @@ func TestChatHandler_UnknownProfile(t *testing.T) {
 func TestChatHandler_NoAvailableModels(t *testing.T) {
 	stub := &stubRouter{err: domain.ErrNoAvailable}
 	w := httptest.NewRecorder()
-	chatHandler(stub).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
+	chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503 (body %s)", w.Code, w.Body.String())
@@ -261,7 +261,7 @@ func TestChatHandler_MissingTenantContext(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/llm/chat",
 		strings.NewReader(`{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
 	w := httptest.NewRecorder()
-	chatHandler(stub).ServeHTTP(w, req)
+	chatHandler(stub, nil).ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401 (body %s)", w.Code, w.Body.String())
@@ -283,7 +283,7 @@ func TestChatHandler_AllFailed(t *testing.T) {
 
 	stub := &stubRouter{res: res, err: domain.ErrAllFailed}
 	w := httptest.NewRecorder()
-	chatHandler(stub).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
+	chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
 
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502 (body %s)", w.Code, w.Body.String())
@@ -318,7 +318,7 @@ func TestChatHandler_WrappedRoutingError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stub := &stubRouter{err: tt.err}
 			w := httptest.NewRecorder()
-			chatHandler(stub).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
+			chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
 			if w.Code != tt.wantCode {
 				t.Errorf("status = %d, want %d (body %s)", w.Code, tt.wantCode, w.Body.String())
 			}
@@ -330,7 +330,7 @@ func TestChatHandler_WrappedRoutingError(t *testing.T) {
 
 func TestHealthz(t *testing.T) {
 	stub := &stubPinger{err: errors.New("database down")}
-	handler := NewRouter(&stubRouter{res: succeededResult()}, stub).Handler()
+	handler := NewRouter(&stubRouter{res: succeededResult()}, stub, nil).Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -359,7 +359,7 @@ func TestReadyz(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := NewRouter(&stubRouter{res: succeededResult()}, &stubPinger{err: tt.err}).Handler()
+			handler := NewRouter(&stubRouter{res: succeededResult()}, &stubPinger{err: tt.err}, nil).Handler()
 
 			req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 			w := httptest.NewRecorder()
@@ -381,7 +381,7 @@ func TestReadyz(t *testing.T) {
 // TestReadyzDeadline checks the probe cannot outlive its 2 second budget when
 // the database stops answering.
 func TestReadyzDeadline(t *testing.T) {
-	handler := NewRouter(&stubRouter{res: succeededResult()}, blockingPinger{}).Handler()
+	handler := NewRouter(&stubRouter{res: succeededResult()}, blockingPinger{}, nil).Handler()
 
 	start := time.Now()
 	w := httptest.NewRecorder()
@@ -410,7 +410,7 @@ func (blockingPinger) Ping(ctx context.Context) error {
 // the tenant headers are what makes the route reachable.
 func TestChatRoute_RequiresTenantHeaders(t *testing.T) {
 	stub := &stubRouter{res: succeededResult()}
-	handler := NewRouter(stub, &stubPinger{}).Handler()
+	handler := NewRouter(stub, &stubPinger{}, nil).Handler()
 
 	body := `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`
 
@@ -442,7 +442,7 @@ func TestChatRoute_RequiresTenantHeaders(t *testing.T) {
 
 // TestChatRoute_MethodNotAllowed guards the 405 path of the chi mux.
 func TestChatRoute_MethodNotAllowed(t *testing.T) {
-	handler := NewRouter(&stubRouter{res: succeededResult()}, &stubPinger{}).Handler()
+	handler := NewRouter(&stubRouter{res: succeededResult()}, &stubPinger{}, nil).Handler()
 
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/llm/chat", nil))

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/identity"
+	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
 )
 
 // Router wraps chi.Mux with common middleware and routes.
@@ -25,7 +26,7 @@ type Pinger interface {
 }
 
 // NewRouter creates a new router with all routes.
-func NewRouter(chat ChatRouter, db Pinger) *Router {
+func NewRouter(chat ChatRouter, db Pinger, cache *idempotency.Cache) *Router {
 	r := chi.NewMux()
 
 	r.Use(middleware.RequestID)
@@ -34,7 +35,7 @@ func NewRouter(chat ChatRouter, db Pinger) *Router {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"https://*", "http://*"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Content-Type", "X-Workspace-ID", "X-Author-ID"},
+		AllowedHeaders:   []string{"Accept", "Content-Type", "X-Workspace-ID", "X-Author-ID", "X-Idempotency-Key"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
@@ -60,7 +61,7 @@ func NewRouter(chat ChatRouter, db Pinger) *Router {
 	// Tenant-context-protected LLM routes.
 	r.Group(func(r chi.Router) {
 		r.Use(TenantContextMiddleware)
-		r.Post("/v1/llm/chat", chatHandler(chat))
+		r.Post("/v1/llm/chat", chatHandler(chat, cache))
 	})
 
 	return &Router{r: r}
