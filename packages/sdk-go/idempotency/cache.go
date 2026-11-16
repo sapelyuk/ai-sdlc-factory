@@ -70,45 +70,51 @@ func (c *Cache) Claim(ctx context.Context, namespace, workspaceID, key string, p
 		return nil, false, nil
 	}
 	redisKey := c.redisKey(namespace, workspaceID, key)
-	pendingValue := `{"status":"pending"}`
-	ok, err := c.client.SetNX(ctx, redisKey, pendingValue, pendingTTL).Result()
-	if err != nil {
-		c.metricsError(namespace, "claim")
-		c.warn("idempotency cache claim failed; proceeding without cache", "namespace", namespace, "error", err)
-		return nil, false, fmt.Errorf("idempotency: claim: %w", err)
-	}
-	if ok {
-		// We won the claim — fresh call.
-		c.metricsMiss(namespace)
-		return nil, false, nil
-	}
-	// Key exists: GET to distinguish pending from completed.
-	raw, err := c.client.Get(ctx, redisKey).Bytes()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			// Race: between SetNX and Get, the pending marker expired.
-			// Treat as fresh attempt (loop retry is bounded to one pass,
-			// caller decides).
+	const maxClaimAttempts = 2
+	for attempt := 1; attempt <= maxClaimAttempts; attempt++ {
+		pendingValue := `{"status":"pending"}`
+		ok, err := c.client.SetNX(ctx, redisKey, pendingValue, pendingTTL).Result()
+		if err != nil {
+			c.metricsError(namespace, "claim")
+			c.warn("idempotency cache claim failed; proceeding without cache", "namespace", namespace, "error", err)
+			return nil, false, fmt.Errorf("idempotency: claim: %w", err)
+		}
+		if ok {
+			// We won the claim — fresh call.
 			c.metricsMiss(namespace)
 			return nil, false, nil
 		}
-		c.metricsError(namespace, "claim_get")
-		c.warn("idempotency cache get failed; proceeding without cache", "namespace", namespace, "error", err)
-		return nil, false, fmt.Errorf("idempotency: claim get: %w", err)
+
+		// Key exists: GET to distinguish pending from completed.
+		raw, err := c.client.Get(ctx, redisKey).Bytes()
+		if err != nil {
+			if errors.Is(err, redis.Nil) {
+				// Race: between SetNX and Get, the pending marker expired. Retry the
+				// claim atomically. Treating redis.Nil as fresh without owning the
+				// claim lets two concurrent callers both execute the upstream call.
+				continue
+			}
+			c.metricsError(namespace, "claim_get")
+			c.warn("idempotency cache get failed; proceeding without cache", "namespace", namespace, "error", err)
+			return nil, false, fmt.Errorf("idempotency: claim get: %w", err)
+		}
+		var entry Entry
+		if err := json.Unmarshal(raw, &entry); err != nil {
+			c.metricsError(namespace, "claim_unmarshal")
+			c.warn("idempotency cache entry is corrupt; proceeding without cache", "namespace", namespace, "error", err)
+			return nil, false, fmt.Errorf("idempotency: claim unmarshal: %w", err)
+		}
+		if entry.Status == "completed" {
+			c.metricsHit(namespace)
+			return &entry, true, nil
+		}
+		// status == "pending"
+		c.metricsErrPending(namespace)
+		return nil, false, ErrPending
 	}
-	var entry Entry
-	if err := json.Unmarshal(raw, &entry); err != nil {
-		c.metricsError(namespace, "claim_unmarshal")
-		c.warn("idempotency cache entry is corrupt; proceeding without cache", "namespace", namespace, "error", err)
-		return nil, false, fmt.Errorf("idempotency: claim unmarshal: %w", err)
-	}
-	if entry.Status == "completed" {
-		c.metricsHit(namespace)
-		return &entry, true, nil
-	}
-	// status == "pending"
-	c.metricsErrPending(namespace)
-	return nil, false, ErrPending
+
+	c.metricsError(namespace, "claim_race_exhausted")
+	return nil, false, fmt.Errorf("idempotency: claim race exhausted after %d attempts", maxClaimAttempts)
 }
 
 // Complete stores the upstream response for a claimed key.
