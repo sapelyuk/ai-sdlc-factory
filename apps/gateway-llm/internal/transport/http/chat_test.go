@@ -7,14 +7,19 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/domain"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/identity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/routing"
+	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
+	rediscontainer "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
 // ── Stubs ─────────────────────────────────────────────────────
@@ -464,4 +469,212 @@ func TestWriteJSONErrorOnUnencodableValue(t *testing.T) {
 	if _, err := io.ReadAll(w.Body); err != nil {
 		t.Errorf("read body: %v", err)
 	}
+}
+
+// ── Idempotency tests (issue #106) ─────────────────────────────
+
+// startTestRedis starts a Redis container for integration tests.
+func startTestRedis(t *testing.T) *idempotency.Cache {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	if output, err := exec.CommandContext(t.Context(), "docker", "info").CombinedOutput(); err != nil {
+		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
+			t.Fatalf("Docker required for integration test: %s", strings.TrimSpace(string(output)))
+		}
+		t.Skipf("Docker unavailable; skipping: %s", strings.TrimSpace(string(output)))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	container, err := rediscontainer.Run(ctx, "redis:7-alpine")
+	if err != nil {
+		t.Fatalf("failed to start Redis container: %v", err)
+	}
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+
+	connStr, err := container.ConnectionString(ctx)
+	if err != nil {
+		t.Fatalf("connection string: %v", err)
+	}
+
+	redisOpts, err := redis.ParseURL(connStr)
+	if err != nil {
+		t.Fatalf("parse URL %q: %v", connStr, err)
+	}
+	client := redis.NewClient(redisOpts)
+	t.Cleanup(func() { _ = client.Close() })
+
+	if err := client.FlushAll(ctx).Err(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	return idempotency.New(client, nil, nil)
+}
+
+// newIdempotencyRequest builds a POST /v1/llm/chat with tenant + idempotency headers.
+func newIdempotencyRequest(t *testing.T, body, workspaceID, idemKey string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/v1/llm/chat", strings.NewReader(body))
+	ctx := identity.WithTenant(req.Context(), uuid.MustParse(workspaceID), uuid.New())
+	req = req.WithContext(ctx)
+	if idemKey != "" {
+		req.Header.Set("X-Idempotency-Key", idemKey)
+	}
+	return req
+}
+
+const chatBody = `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`
+
+func TestChatHandler_IdempotencyKey_RetryDoesNotCallProviderTwice(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+	idemKey := "idem-" + uuid.New().String()
+
+	// First request: miss → provider called.
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request: status = %d (body %s)", w1.Code, w1.Body.String())
+	}
+	if stub.calls != 1 {
+		t.Fatalf("provider calls after first = %d, want 1", stub.calls)
+	}
+	if got := w1.Header().Get("X-Idempotency-Cache"); got != "miss" {
+		t.Errorf("first X-Idempotency-Cache = %q, want miss", got)
+	}
+
+	// Second request: same key → cache hit → provider NOT called.
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second request: status = %d (body %s)", w2.Code, w2.Body.String())
+	}
+	if stub.calls != 1 {
+		t.Fatalf("provider calls after second = %d, want 1 (must not be called twice)", stub.calls)
+	}
+	if got := w2.Header().Get("X-Idempotency-Cache"); got != "hit" {
+		t.Errorf("second X-Idempotency-Cache = %q, want hit", got)
+	}
+	// Responses must be identical.
+	if w1.Body.String() != w2.Body.String() {
+		t.Errorf("responses differ:\n  first:  %s\n  second: %s", w1.Body.String(), w2.Body.String())
+	}
+}
+
+func TestChatHandler_IdempotencyKey_NoKey_NoCache(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+
+	// Two requests without idempotency key → 2 provider calls.
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, newIdempotencyRequest(t, chatBody, wsID, ""))
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d: status = %d", i, w.Code)
+		}
+	}
+	if stub.calls != 2 {
+		t.Errorf("provider calls = %d, want 2 (no caching without key)", stub.calls)
+	}
+}
+
+func TestChatHandler_IdempotencyKey_DifferentKey_DifferentCache(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsID, "key-A"))
+
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsID, "key-B"))
+
+	if stub.calls != 2 {
+		t.Errorf("provider calls = %d, want 2 (different keys)", stub.calls)
+	}
+}
+
+func TestChatHandler_IdempotencyKey_WorkspaceIsolation(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	idemKey := "shared-key"
+	wsA := uuid.New().String()
+	wsB := uuid.New().String()
+
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsA, idemKey))
+
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsB, idemKey))
+
+	if stub.calls != 2 {
+		t.Errorf("provider calls = %d, want 2 (workspace isolation)", stub.calls)
+	}
+}
+
+func TestChatHandler_IdempotencyKey_ProviderError_MarksFailed(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{err: domain.ErrNoAvailable}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+	idemKey := "fail-" + uuid.New().String()
+
+	// First request: provider error.
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+	if w1.Code != http.StatusServiceUnavailable {
+		t.Fatalf("first request: status = %d, want 503", w1.Code)
+	}
+	if stub.calls != 1 {
+		t.Fatalf("provider calls = %d, want 1", stub.calls)
+	}
+
+	// Retry after error: cache was cleared, provider called again.
+	stub.err = nil
+	stub.res = succeededResult()
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+	if w2.Code != http.StatusOK {
+		t.Fatalf("retry: status = %d (body %s)", w2.Code, w2.Body.String())
+	}
+	if stub.calls != 2 {
+		t.Errorf("provider calls after retry = %d, want 2 (MarkFailed cleared cache)", stub.calls)
+	}
+}
+
+func TestChatHandler_RedisDown_FailOpen(t *testing.T) {
+	// Use an invalid Redis URL — the client will fail on first command.
+	// The handler must still work (fail-open).
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}) // port 1 = unreachable
+	cache := idempotency.New(client, nil, nil)
+
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+	idemKey := "failopen-" + uuid.New().String()
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("fail-open: status = %d (body %s), want 200", w.Code, w.Body.String())
+	}
+	if stub.calls != 1 {
+		t.Errorf("provider calls = %d, want 1 (cache skipped, provider called)", stub.calls)
+	}
+	_ = client.Close()
 }
