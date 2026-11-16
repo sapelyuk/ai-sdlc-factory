@@ -141,6 +141,21 @@ services:
       - sandbox-control
     restart: unless-stopped
 
+  redis:
+    image: docker.io/library/redis:7-alpine@sha256:cfb3c5629ec846b1665d348f8c82ed160c911cab5a2cc88053f4219ab4b5835c
+    container_name: ai-sdlc-factory-redis
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--save", ""]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.110.0
     container_name: ai-sdlc-factory-otel-collector
@@ -471,6 +486,7 @@ volumes:
   minio-data:
   nats-data:
   vault-data:
+  redis-data:
 
 networks:
   sandbox-control:
