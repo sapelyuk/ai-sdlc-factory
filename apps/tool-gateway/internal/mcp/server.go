@@ -160,24 +160,6 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 		// ── Extract idempotency key from _meta (issue #106) ──────
 		idempotencyKey := extractIdempotencyKey(request)
 
-		// ── Idempotency cache: claim ──────────────────────────────
-		if idempotencyKey != "" && s.idempotencyCache != nil {
-			entry, hit, err := s.idempotencyCache.Claim(ctx, "tool", id.WorkspaceID.String(), idempotencyKey, 60*time.Second)
-			if errors.Is(err, idempotency.ErrPending) {
-				return mcpgo.NewToolResultError("concurrent request with same idempotency key in progress"), nil
-			}
-			if err != nil {
-				// fail-open: proceed without cache
-			} else if hit && entry != nil {
-				// Return cached result
-				var cached map[string]any
-				if json.Unmarshal(entry.ResponseJSON, &cached) == nil {
-					return mcpgo.NewToolResultJSON(cached)
-				}
-				// If unmarshal fails, fall through to execute
-			}
-		}
-
 		decision, ok := policy.DecisionFrom(ctx)
 		if !ok {
 			if batch, hasBatch := policy.DecisionsFrom(ctx); hasBatch {
@@ -197,6 +179,26 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 				return nil, fmt.Errorf("write audit record: %w", err)
 			}
 			return mcpgo.NewToolResultError("policy denied: " + decision.Reason), nil
+		}
+
+		// ── Idempotency cache: claim only after authorization ──────────────
+		if idempotencyKey != "" && s.idempotencyCache != nil {
+			entry, hit, err := s.idempotencyCache.Claim(ctx, "tool", id.WorkspaceID.String(), idempotencyKey, 60*time.Second)
+			if errors.Is(err, idempotency.ErrPending) {
+				return mcpgo.NewToolResultError("concurrent request with same idempotency key in progress"), nil
+			}
+			if err != nil {
+				// fail-open: proceed without cache
+			} else if hit && entry != nil {
+				if err := s.record(ctx, id, tool, decision.RiskLevel, audit.ResultSuccess, ""); err != nil {
+					return nil, fmt.Errorf("write audit record: %w", err)
+				}
+				var cached map[string]any
+				if json.Unmarshal(entry.ResponseJSON, &cached) == nil {
+					return mcpgo.NewToolResultJSON(cached)
+				}
+				// If unmarshal fails, fall through to execute
+			}
 		}
 
 		injected, err := s.injectCredentials(ctx, tool)
