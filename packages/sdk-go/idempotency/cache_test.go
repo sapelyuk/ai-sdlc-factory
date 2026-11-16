@@ -3,9 +3,11 @@ package idempotency
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -258,6 +260,57 @@ type fakeLogger struct {
 }
 
 func (f *fakeLogger) Warn(string, ...any) { f.warnings++ }
+
+func TestCache_ConcurrentClaimAfterExpiry_ExactlyOneWins(t *testing.T) {
+	client := startRedis(t)
+	cache := New(client, nil, nil)
+	ctx := context.Background()
+
+	_, hit, err := cache.Claim(ctx, "llm", "ws-race", "race-key", 1*time.Millisecond)
+	if err != nil || hit {
+		t.Fatalf("initial claim: hit=%v err=%v", hit, err)
+	}
+	time.Sleep(10 * time.Millisecond)
+
+	results := make(chan string, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, hit, err := cache.Claim(ctx, "llm", "ws-race", "race-key", 60*time.Second)
+			switch {
+			case err == nil && !hit:
+				results <- "fresh"
+			case errors.Is(err, ErrPending):
+				results <- "pending"
+			case hit:
+				results <- "cached"
+			default:
+				results <- "error"
+			}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	freshCount, pendingCount := 0, 0
+	for r := range results {
+		switch r {
+		case "fresh":
+			freshCount++
+		case "pending":
+			pendingCount++
+		}
+	}
+
+	if freshCount != 1 {
+		t.Fatalf("fresh winners = %d, want 1", freshCount)
+	}
+	if pendingCount != 1 {
+		t.Fatalf("pending followers = %d, want 1", pendingCount)
+	}
+}
 
 func TestCache_MetricsCallbacks(t *testing.T) {
 	client := startRedis(t)
