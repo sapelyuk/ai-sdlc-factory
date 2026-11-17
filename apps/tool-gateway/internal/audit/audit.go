@@ -42,13 +42,18 @@ const (
 )
 
 // Entry is a tool call to be audited.
+// Action and IdempotencyKey are optional: when empty the entry defaults to
+// ActionToolCall and a nil idempotency key, preserving backward compatibility
+// with existing callers.
 type Entry struct {
-	WorkspaceID  uuid.UUID
-	AgentID      uuid.UUID
-	ToolName     string
-	RiskLevel    string
-	Result       string
-	ErrorMessage string
+	WorkspaceID    uuid.UUID
+	AgentID        uuid.UUID
+	ToolName       string
+	RiskLevel      string
+	Result         string
+	ErrorMessage   string
+	Action         string // optional; defaults to ActionToolCall
+	IdempotencyKey string // optional; included in hash chain
 }
 
 // Record is a persisted audit entry.
@@ -155,12 +160,24 @@ func fromSDK(rec sdkaudit.Record) Record {
 		out.Result = stringField(payload, detailResult, "")
 		out.ErrorMessage = stringField(payload, detailErrorMessage, "")
 	}
-	if rec.Action == sdkaudit.ActionToolCall {
+	// Every tool action carries an agent actor, so the agent id has to be
+	// recovered for all of them, not only for the generic tool_call event.
+	if isToolAction(rec.Action) {
 		if agent, err := parseAgentActor(rec.ActorID); err == nil {
 			out.AgentID = agent
 		}
 	}
 	return out
+}
+
+// isToolAction reports whether action belongs to the Tool Gateway vocabulary.
+func isToolAction(action string) bool {
+	switch action {
+	case sdkaudit.ActionToolCall, sdkaudit.ActionToolExecuted, sdkaudit.ActionToolReplayed:
+		return true
+	default:
+		return false
+	}
 }
 
 func stringField(payload map[string]any, key, fallback string) string {
@@ -212,17 +229,25 @@ func (l *Logger) Record(ctx context.Context, e Entry) (Record, error) {
 		if err != nil {
 			return Record{}, fmt.Errorf("audit: generate ID: %w", err)
 		}
+		// An empty Action keeps the generic tool_call event so existing callers
+		// are unaffected; the cache paths pass tool_executed / tool_replayed to
+		// make a replay distinguishable from a live call in the chain.
+		action := e.Action
+		if action == "" {
+			action = sdkaudit.ActionToolCall
+		}
 		rec := Record{
-			ID:           id,
-			WorkspaceID:  e.WorkspaceID,
-			ActorID:      sdkaudit.AgentActor(e.AgentID),
-			Action:       sdkaudit.ActionToolCall,
-			AgentID:      e.AgentID,
-			ToolName:     e.ToolName,
-			ResourceID:   e.ToolName,
-			RiskLevel:    e.RiskLevel,
-			Result:       e.Result,
-			ErrorMessage: e.ErrorMessage,
+			ID:             id,
+			WorkspaceID:    e.WorkspaceID,
+			ActorID:        sdkaudit.AgentActor(e.AgentID),
+			Action:         action,
+			IdempotencyKey: e.IdempotencyKey,
+			AgentID:        e.AgentID,
+			ToolName:       e.ToolName,
+			ResourceID:     e.ToolName,
+			RiskLevel:      e.RiskLevel,
+			Result:         e.Result,
+			ErrorMessage:   e.ErrorMessage,
 			// PostgreSQL timestamptz has microsecond precision. Truncate
 			// before hashing so a record read back from the database
 			// verifies against the same timestamp.

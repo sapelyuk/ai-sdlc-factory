@@ -6,11 +6,13 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/domain"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/identity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/routing"
+	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
 )
 
 // chatRequest is the POST /v1/llm/chat payload.
@@ -53,14 +55,14 @@ type ChatRouter interface {
 }
 
 // chatHandler handles POST /v1/llm/chat.
-func chatHandler(router ChatRouter) http.HandlerFunc {
+// The cache parameter is optional (nil = no caching, fail-open).
+func chatHandler(router ChatRouter, cache *idempotency.Cache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		workspaceID, err := identity.WorkspaceID(r.Context())
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
-		_ = workspaceID // tenant scope is enforced via RLS set_config in the repository.
 
 		var req chatRequest
 		if err := readBody(r.Body, &req); err != nil {
@@ -76,14 +78,73 @@ func chatHandler(router ChatRouter) http.HandlerFunc {
 			return
 		}
 
+		// ── Idempotency cache: claim ──────────────────────────────
+		idempotencyKey := r.Header.Get("X-Idempotency-Key")
+		if idempotencyKey != "" && cache != nil {
+			entry, hit, err := cache.Claim(r.Context(), "llm", workspaceID.String(), idempotencyKey, 60*time.Second)
+			if errors.Is(err, idempotency.ErrPending) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				_, _ = w.Write([]byte(`{"error":"concurrent request with same idempotency key in progress"}`))
+				return
+			}
+			if err != nil {
+				// fail-open: proceed without cache (metrics tracked by cache pkg)
+			} else if hit && entry != nil && len(entry.ResponseJSON) > 0 && json.Valid(entry.ResponseJSON) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("X-Idempotency-Cache", "hit")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(entry.ResponseJSON)
+				return
+			} else if hit && entry != nil {
+				// A completed entry with an empty or invalid payload must not be
+				// served as a success: drop it and run the call for real.
+				_ = cache.MarkFailed(r.Context(), "llm", workspaceID.String(), idempotencyKey)
+			}
+		}
+
 		chatReq := domain.ChatRequest{Messages: req.Messages, Tools: req.Tools}
 		meta := routing.CallMeta{RunID: req.RunID, TaskID: req.TaskID, AgentID: req.AgentID}
 
 		res, chatErr := router.Chat(r.Context(), req.Profile, chatReq, meta)
 
 		if chatErr == nil {
-			writeJSON(w, http.StatusOK, toChatResponse(res))
+			resp := toChatResponse(res)
+			respJSON, marshalErr := json.Marshal(resp)
+			if marshalErr != nil {
+				// An unencodable response must never be cached: an empty body
+				// would be replayed to every retry of this key as a success.
+				// Release the claim so the caller can retry immediately.
+				if idempotencyKey != "" && cache != nil {
+					_ = cache.MarkFailed(r.Context(), "llm", workspaceID.String(), idempotencyKey)
+				}
+				writeError(w, http.StatusInternalServerError, "failed to encode response")
+				return
+			}
+
+			// ── Idempotency cache: complete ────────────────────────
+			if idempotencyKey != "" && cache != nil {
+				// Complete logs and counts its own failures.
+				_ = cache.Complete(r.Context(), "llm", workspaceID.String(), idempotencyKey, idempotency.Entry{
+					LogicalCallID: res.LogicalCall.ID.String(),
+					ResponseJSON:  respJSON,
+					ProviderUsed:  res.LogicalCall.ProviderUsed,
+					ModelUsed:     res.LogicalCall.ModelIDUsed,
+				}, 24*time.Hour)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			if idempotencyKey != "" && cache != nil {
+				w.Header().Set("X-Idempotency-Cache", "miss")
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(respJSON)
 			return
+		}
+
+		// ── Idempotency cache: mark failed ───────────────────────
+		if idempotencyKey != "" && cache != nil {
+			_ = cache.MarkFailed(r.Context(), "llm", workspaceID.String(), idempotencyKey)
 		}
 
 		// Routing reached providers but every attempt failed → 502.

@@ -7,14 +7,22 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/domain"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/identity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/routing"
+	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
+	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
+	rediscontainer "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
 // ── Stubs ─────────────────────────────────────────────────────
@@ -93,7 +101,7 @@ func decodeChat(t *testing.T, w *httptest.ResponseRecorder) chatResponse {
 
 func TestChatHandler_Success(t *testing.T) {
 	stub := &stubRouter{res: succeededResult()}
-	handler := chatHandler(stub)
+	handler := chatHandler(stub, nil)
 
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"sort an array"}]}`))
@@ -151,7 +159,7 @@ func TestChatHandler_Success(t *testing.T) {
 func TestChatHandler_AttributionPassthrough(t *testing.T) {
 	runID, taskID, agentID := uuid.New(), uuid.New(), uuid.New()
 	stub := &stubRouter{res: succeededResult()}
-	handler := chatHandler(stub)
+	handler := chatHandler(stub, nil)
 
 	body := `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}],"tools":[{"name":"run_tests"}],"run_id":"` +
 		runID.String() + `","task_id":"` + taskID.String() + `","agent_id":"` + agentID.String() + `"}`
@@ -188,7 +196,7 @@ func TestChatHandler_InvalidBody(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stub := &stubRouter{res: succeededResult()}
 			w := httptest.NewRecorder()
-			chatHandler(stub).ServeHTTP(w, newChatRequest(t, tt.body))
+			chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, tt.body))
 
 			if w.Code != http.StatusBadRequest {
 				t.Errorf("status = %d, want 400 (body %s)", w.Code, w.Body.String())
@@ -216,7 +224,7 @@ func TestChatHandler_MissingFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stub := &stubRouter{res: succeededResult()}
 			w := httptest.NewRecorder()
-			chatHandler(stub).ServeHTTP(w, newChatRequest(t, tt.body))
+			chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, tt.body))
 
 			if w.Code != http.StatusUnprocessableEntity {
 				t.Errorf("status = %d, want 422 (body %s)", w.Code, w.Body.String())
@@ -233,7 +241,7 @@ func TestChatHandler_MissingFields(t *testing.T) {
 func TestChatHandler_UnknownProfile(t *testing.T) {
 	stub := &stubRouter{err: domain.ErrUnknownProfile}
 	w := httptest.NewRecorder()
-	chatHandler(stub).ServeHTTP(w, newChatRequest(t, `{"profile":"does-not-exist","messages":[{"role":"user","content":"hi"}]}`))
+	chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, `{"profile":"does-not-exist","messages":[{"role":"user","content":"hi"}]}`))
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 (body %s)", w.Code, w.Body.String())
@@ -246,7 +254,7 @@ func TestChatHandler_UnknownProfile(t *testing.T) {
 func TestChatHandler_NoAvailableModels(t *testing.T) {
 	stub := &stubRouter{err: domain.ErrNoAvailable}
 	w := httptest.NewRecorder()
-	chatHandler(stub).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
+	chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503 (body %s)", w.Code, w.Body.String())
@@ -261,7 +269,7 @@ func TestChatHandler_MissingTenantContext(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/llm/chat",
 		strings.NewReader(`{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
 	w := httptest.NewRecorder()
-	chatHandler(stub).ServeHTTP(w, req)
+	chatHandler(stub, nil).ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401 (body %s)", w.Code, w.Body.String())
@@ -283,7 +291,7 @@ func TestChatHandler_AllFailed(t *testing.T) {
 
 	stub := &stubRouter{res: res, err: domain.ErrAllFailed}
 	w := httptest.NewRecorder()
-	chatHandler(stub).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
+	chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
 
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502 (body %s)", w.Code, w.Body.String())
@@ -318,7 +326,7 @@ func TestChatHandler_WrappedRoutingError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stub := &stubRouter{err: tt.err}
 			w := httptest.NewRecorder()
-			chatHandler(stub).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
+			chatHandler(stub, nil).ServeHTTP(w, newChatRequest(t, `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`))
 			if w.Code != tt.wantCode {
 				t.Errorf("status = %d, want %d (body %s)", w.Code, tt.wantCode, w.Body.String())
 			}
@@ -330,7 +338,7 @@ func TestChatHandler_WrappedRoutingError(t *testing.T) {
 
 func TestHealthz(t *testing.T) {
 	stub := &stubPinger{err: errors.New("database down")}
-	handler := NewRouter(&stubRouter{res: succeededResult()}, stub).Handler()
+	handler := NewRouter(&stubRouter{res: succeededResult()}, stub, nil).Handler()
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -359,7 +367,7 @@ func TestReadyz(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := NewRouter(&stubRouter{res: succeededResult()}, &stubPinger{err: tt.err}).Handler()
+			handler := NewRouter(&stubRouter{res: succeededResult()}, &stubPinger{err: tt.err}, nil).Handler()
 
 			req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 			w := httptest.NewRecorder()
@@ -381,7 +389,7 @@ func TestReadyz(t *testing.T) {
 // TestReadyzDeadline checks the probe cannot outlive its 2 second budget when
 // the database stops answering.
 func TestReadyzDeadline(t *testing.T) {
-	handler := NewRouter(&stubRouter{res: succeededResult()}, blockingPinger{}).Handler()
+	handler := NewRouter(&stubRouter{res: succeededResult()}, blockingPinger{}, nil).Handler()
 
 	start := time.Now()
 	w := httptest.NewRecorder()
@@ -410,7 +418,7 @@ func (blockingPinger) Ping(ctx context.Context) error {
 // the tenant headers are what makes the route reachable.
 func TestChatRoute_RequiresTenantHeaders(t *testing.T) {
 	stub := &stubRouter{res: succeededResult()}
-	handler := NewRouter(stub, &stubPinger{}).Handler()
+	handler := NewRouter(stub, &stubPinger{}, nil).Handler()
 
 	body := `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`
 
@@ -442,7 +450,7 @@ func TestChatRoute_RequiresTenantHeaders(t *testing.T) {
 
 // TestChatRoute_MethodNotAllowed guards the 405 path of the chi mux.
 func TestChatRoute_MethodNotAllowed(t *testing.T) {
-	handler := NewRouter(&stubRouter{res: succeededResult()}, &stubPinger{}).Handler()
+	handler := NewRouter(&stubRouter{res: succeededResult()}, &stubPinger{}, nil).Handler()
 
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/llm/chat", nil))
@@ -463,5 +471,375 @@ func TestWriteJSONErrorOnUnencodableValue(t *testing.T) {
 	// status; it must not panic either.
 	if _, err := io.ReadAll(w.Body); err != nil {
 		t.Errorf("read body: %v", err)
+	}
+}
+
+// ── Idempotency tests (issue #106) ─────────────────────────────
+
+// redisImage pins the same digest as deploy/compose/docker-compose.yml so the
+// integration tests run against the exact image the stack ships (ADR-026).
+const redisImage = "docker.io/library/redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe"
+
+// startTestRedisClient starts a Redis container and exposes both the client and
+// the cache wrapper, so tests can seed or corrupt entries directly.
+func startTestRedisClient(t *testing.T) (*redis.Client, *idempotency.Cache) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	if output, err := exec.CommandContext(t.Context(), "docker", "info").CombinedOutput(); err != nil {
+		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
+			t.Fatalf("Docker required for integration test: %s", strings.TrimSpace(string(output)))
+		}
+		t.Skipf("Docker unavailable; skipping: %s", strings.TrimSpace(string(output)))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	container, err := rediscontainer.Run(ctx, redisImage)
+	if err != nil {
+		t.Fatalf("failed to start Redis container: %v", err)
+	}
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+
+	connStr, err := container.ConnectionString(ctx)
+	if err != nil {
+		t.Fatalf("connection string: %v", err)
+	}
+
+	redisOpts, err := redis.ParseURL(connStr)
+	if err != nil {
+		t.Fatalf("parse URL %q: %v", connStr, err)
+	}
+	client := redis.NewClient(redisOpts)
+	t.Cleanup(func() { _ = client.Close() })
+
+	if err := client.FlushAll(ctx).Err(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	return client, idempotency.New(client, nil, nil)
+}
+
+// startTestRedis starts a Redis container for integration tests.
+func startTestRedis(t *testing.T) *idempotency.Cache {
+	t.Helper()
+	_, cache := startTestRedisClient(t)
+	return cache
+}
+
+type logicalCallRouter struct {
+	pool        *pgxpool.Pool
+	workspaceID uuid.UUID
+	calls       int
+}
+
+func (r *logicalCallRouter) Chat(ctx context.Context, profileName string, req domain.ChatRequest, meta routing.CallMeta) (*routing.Result, error) {
+	r.calls++
+	var logicalCallID uuid.UUID
+	if err := r.pool.QueryRow(ctx, `
+		INSERT INTO llm_logical_calls
+			(workspace_id, run_id, task_id, agent_id, profile_name,
+			 model_id_used, provider_used, status, started_at)
+		VALUES ($1, $2, $3, $4, $5, 'claude-sonnet-4-20250101', 'anthropic', 'succeeded', $6)
+		RETURNING id`,
+		r.workspaceID, meta.RunID, meta.TaskID, meta.AgentID, profileName, time.Now().UTC()).Scan(&logicalCallID); err != nil {
+		return nil, err
+	}
+	return &routing.Result{
+		LogicalCall: &domain.LogicalCall{
+			ID:             logicalCallID,
+			WorkspaceID:    r.workspaceID,
+			ProfileName:    profileName,
+			ModelIDUsed:    "claude-sonnet-4-20250101",
+			ProviderUsed:   "anthropic",
+			Status:         "succeeded",
+			FinalTokensIn:  ptrInt(50),
+			FinalTokensOut: ptrInt(200),
+			FinalCostUSD:   ptrFloat(0.0008),
+			TotalTokensIn:  150,
+			TotalTokensOut: 200,
+			TotalCostUSD:   0.0044,
+		},
+		Content: "function sort(arr) {}",
+	}, nil
+}
+
+func startTestPostgres(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	if output, err := exec.CommandContext(t.Context(), "docker", "info").CombinedOutput(); err != nil {
+		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
+			t.Fatalf("Docker required for integration test: %s", strings.TrimSpace(string(output)))
+		}
+		t.Skipf("Docker unavailable; skipping: %s", strings.TrimSpace(string(output)))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	container, err := postgrescontainer.Run(ctx, "pgvector/pgvector:pg18",
+		postgrescontainer.WithDatabase("llm_gateway_test"),
+		postgrescontainer.WithUsername("llm_gateway_test"),
+		postgrescontainer.WithPassword("llm_gateway_test"),
+		postgrescontainer.BasicWaitStrategies(),
+	)
+	if err != nil {
+		t.Fatalf("start PostgreSQL container: %v", err)
+	}
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+
+	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		t.Fatalf("get PostgreSQL connection string: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, connStr)
+	if err != nil {
+		t.Fatalf("create PostgreSQL pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("connect to PostgreSQL container: %v", err)
+	}
+
+	migrationPath := filepath.Join("..", "..", "..", "..", "..", "migrations", "postgres", "0010_llm_gateway.up.sql")
+	contents, err := os.ReadFile(migrationPath)
+	if err != nil {
+		t.Fatalf("read migration file %s: %v", migrationPath, err)
+	}
+	if _, err := pool.Exec(ctx, string(contents)); err != nil {
+		t.Fatalf("apply migration %s: %v", migrationPath, err)
+	}
+	return pool
+}
+
+func ptrInt(v int) *int           { return &v }
+func ptrFloat(v float64) *float64 { return &v }
+
+// newIdempotencyRequest builds a POST /v1/llm/chat with tenant + idempotency headers.
+func newIdempotencyRequest(t *testing.T, body, workspaceID, idemKey string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/v1/llm/chat", strings.NewReader(body))
+	ctx := identity.WithTenant(req.Context(), uuid.MustParse(workspaceID), uuid.New())
+	req = req.WithContext(ctx)
+	if idemKey != "" {
+		req.Header.Set("X-Idempotency-Key", idemKey)
+	}
+	return req
+}
+
+const chatBody = `{"profile":"code-strong","messages":[{"role":"user","content":"hi"}]}`
+
+func TestChatHandler_IdempotencyKey_RetryDoesNotCallProviderTwice(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+	idemKey := "idem-" + uuid.New().String()
+
+	// First request: miss → provider called.
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request: status = %d (body %s)", w1.Code, w1.Body.String())
+	}
+	if stub.calls != 1 {
+		t.Fatalf("provider calls after first = %d, want 1", stub.calls)
+	}
+	if got := w1.Header().Get("X-Idempotency-Cache"); got != "miss" {
+		t.Errorf("first X-Idempotency-Cache = %q, want miss", got)
+	}
+
+	// Second request: same key → cache hit → provider NOT called.
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second request: status = %d (body %s)", w2.Code, w2.Body.String())
+	}
+	if stub.calls != 1 {
+		t.Fatalf("provider calls after second = %d, want 1 (must not be called twice)", stub.calls)
+	}
+	if got := w2.Header().Get("X-Idempotency-Cache"); got != "hit" {
+		t.Errorf("second X-Idempotency-Cache = %q, want hit", got)
+	}
+	// Responses must be identical.
+	if w1.Body.String() != w2.Body.String() {
+		t.Errorf("responses differ:\n  first:  %s\n  second: %s", w1.Body.String(), w2.Body.String())
+	}
+}
+
+func TestChatHandler_IdempotencyKey_CachedRetryDoesNotCreateLogicalCall(t *testing.T) {
+	pool := startTestPostgres(t)
+	cache := startTestRedis(t)
+	wsID := uuid.New()
+	router := &logicalCallRouter{pool: pool, workspaceID: wsID}
+	handler := chatHandler(router, cache)
+	idemKey := "idem-" + uuid.New().String()
+
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsID.String(), idemKey))
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request: status = %d (body %s)", w1.Code, w1.Body.String())
+	}
+
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsID.String(), idemKey))
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second request: status = %d (body %s)", w2.Code, w2.Body.String())
+	}
+	if got := w2.Header().Get("X-Idempotency-Cache"); got != "hit" {
+		t.Fatalf("second X-Idempotency-Cache = %q, want hit", got)
+	}
+
+	var count int
+	if err := pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM llm_logical_calls").Scan(&count); err != nil {
+		t.Fatalf("COUNT(*) FROM llm_logical_calls: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("llm_logical_calls count = %d, want 1 (cached retry must not create a new logical call)", count)
+	}
+}
+
+func TestChatHandler_IdempotencyKey_NoKey_NoCache(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+
+	// Two requests without idempotency key → 2 provider calls.
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, newIdempotencyRequest(t, chatBody, wsID, ""))
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d: status = %d", i, w.Code)
+		}
+	}
+	if stub.calls != 2 {
+		t.Errorf("provider calls = %d, want 2 (no caching without key)", stub.calls)
+	}
+}
+
+func TestChatHandler_IdempotencyKey_DifferentKey_DifferentCache(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsID, "key-A"))
+
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsID, "key-B"))
+
+	if stub.calls != 2 {
+		t.Errorf("provider calls = %d, want 2 (different keys)", stub.calls)
+	}
+}
+
+func TestChatHandler_IdempotencyKey_WorkspaceIsolation(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	idemKey := "shared-key"
+	wsA := uuid.New().String()
+	wsB := uuid.New().String()
+
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsA, idemKey))
+
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsB, idemKey))
+
+	if stub.calls != 2 {
+		t.Errorf("provider calls = %d, want 2 (workspace isolation)", stub.calls)
+	}
+}
+
+func TestChatHandler_IdempotencyKey_ProviderError_MarksFailed(t *testing.T) {
+	cache := startTestRedis(t)
+	stub := &stubRouter{err: domain.ErrNoAvailable}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+	idemKey := "fail-" + uuid.New().String()
+
+	// First request: provider error.
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+	if w1.Code != http.StatusServiceUnavailable {
+		t.Fatalf("first request: status = %d, want 503", w1.Code)
+	}
+	if stub.calls != 1 {
+		t.Fatalf("provider calls = %d, want 1", stub.calls)
+	}
+
+	// Retry after error: cache was cleared, provider called again.
+	stub.err = nil
+	stub.res = succeededResult()
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+	if w2.Code != http.StatusOK {
+		t.Fatalf("retry: status = %d (body %s)", w2.Code, w2.Body.String())
+	}
+	if stub.calls != 2 {
+		t.Errorf("provider calls after retry = %d, want 2 (MarkFailed cleared cache)", stub.calls)
+	}
+}
+
+func TestChatHandler_RedisDown_FailOpen(t *testing.T) {
+	// Use an invalid Redis URL — the client will fail on first command.
+	// The handler must still work (fail-open).
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}) // port 1 = unreachable
+	cache := idempotency.New(client, nil, nil)
+
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+	idemKey := "failopen-" + uuid.New().String()
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("fail-open: status = %d (body %s), want 200", w.Code, w.Body.String())
+	}
+	if stub.calls != 1 {
+		t.Errorf("provider calls = %d, want 1 (cache skipped, provider called)", stub.calls)
+	}
+	_ = client.Close()
+}
+
+func TestChatHandler_IdempotencyKey_CorruptPayload_FallsThrough(t *testing.T) {
+	client, cache := startTestRedisClient(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+	idemKey := "corrupt-" + uuid.New().String()
+
+	// Seed a completed entry with empty ResponseJSON directly into Redis.
+	// This simulates a cache entry corrupted at the payload level.
+	redisKey := "idempotency:llm:" + wsID + ":" + idemKey
+	entryJSON := `{"status":"completed","response_json":""}`
+	if err := client.Set(context.Background(), redisKey, entryJSON, 24*time.Hour).Err(); err != nil {
+		t.Fatalf("seed corrupt entry: %v", err)
+	}
+
+	// Request with the corrupt key → handler must fall through to provider.
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d (body %s), want 200", w.Code, w.Body.String())
+	}
+	if stub.calls != 1 {
+		t.Errorf("provider calls = %d, want 1 (corrupt payload must not be served as success)", stub.calls)
 	}
 }

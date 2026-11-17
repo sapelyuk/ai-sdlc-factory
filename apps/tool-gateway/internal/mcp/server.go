@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -20,6 +21,8 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/credentials"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/identity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/policy"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
+	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
 )
 
 // ServerName and ServerVersion identify the MCP implementation.
@@ -69,25 +72,27 @@ func (StubExecutor) Execute(_ context.Context, call Call) (map[string]any, error
 
 // Options configures the gateway MCP server.
 type Options struct {
-	Catalog    *catalog.Catalog
-	Authorizer policy.Authorizer
-	Auditor    *audit.Logger
-	Broker     credentials.Broker
-	Redactor   *credentials.Redactor
-	Executor   Executor
-	Logger     *slog.Logger
+	Catalog          *catalog.Catalog
+	Authorizer       policy.Authorizer
+	Auditor          *audit.Logger
+	Broker           credentials.Broker
+	Redactor         *credentials.Redactor
+	Executor         Executor
+	Logger           *slog.Logger
+	IdempotencyCache *idempotency.Cache
 }
 
 // Server is the Tool Gateway MCP server.
 type Server struct {
-	catalog    *catalog.Catalog
-	authorizer policy.Authorizer
-	auditor    *audit.Logger
-	broker     credentials.Broker
-	redactor   *credentials.Redactor
-	executor   Executor
-	logger     *slog.Logger
-	mcp        *mcpsdk.MCPServer
+	catalog          *catalog.Catalog
+	authorizer       policy.Authorizer
+	auditor          *audit.Logger
+	broker           credentials.Broker
+	redactor         *credentials.Redactor
+	executor         Executor
+	logger           *slog.Logger
+	idempotencyCache *idempotency.Cache
+	mcp              *mcpsdk.MCPServer
 }
 
 // NewServer registers every catalog tool on a new MCP server.
@@ -112,13 +117,14 @@ func NewServer(opts Options) (*Server, error) {
 	}
 
 	s := &Server{
-		catalog:    opts.Catalog,
-		authorizer: opts.Authorizer,
-		auditor:    opts.Auditor,
-		broker:     opts.Broker,
-		redactor:   opts.Redactor,
-		executor:   opts.Executor,
-		logger:     opts.Logger,
+		catalog:          opts.Catalog,
+		authorizer:       opts.Authorizer,
+		auditor:          opts.Auditor,
+		broker:           opts.Broker,
+		redactor:         opts.Redactor,
+		executor:         opts.Executor,
+		logger:           opts.Logger,
+		idempotencyCache: opts.IdempotencyCache,
 	}
 
 	s.mcp = mcpsdk.NewMCPServer(
@@ -152,12 +158,54 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 			return mcpgo.NewToolResultError("missing caller identity"), nil
 		}
 
+		// ── Extract idempotency key from _meta (issue #106) ──────
+		idempotencyKey := extractIdempotencyKey(request)
+
 		decision, ok := policy.DecisionFrom(ctx)
 		if !ok {
 			if batch, hasBatch := policy.DecisionsFrom(ctx); hasBatch {
 				decision, ok = batch[tool.Name]
 			}
 		}
+
+		// If a completed entry already exists, re-check policy before replaying it.
+		if idempotencyKey != "" && s.idempotencyCache != nil {
+			entry, hit, err := s.idempotencyCache.Get(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+			if err != nil {
+				// fail-open: proceed without cache
+			} else if hit && entry != nil {
+				decision, err = s.authorize(ctx, id, tool)
+				if err != nil {
+					_ = s.record(ctx, id, tool, tool.RiskLevel, audit.ResultError, err.Error())
+					return mcpgo.NewToolResultError("policy engine unavailable"), nil
+				}
+				if !decision.Allow {
+					_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+					if err := s.record(ctx, id, tool, decision.RiskLevel, audit.ResultDenied, decision.Reason); err != nil {
+						return nil, fmt.Errorf("write audit record: %w", err)
+					}
+					return mcpgo.NewToolResultError("policy denied: " + decision.Reason), nil
+				}
+
+				// Unmarshal before auditing so a corrupt cache value never
+				// produces a "replay-success" record followed by a second
+				// "execution-success" (double-record bug).
+				var cached map[string]any
+				if err := json.Unmarshal(entry.ResponseJSON, &cached); err != nil {
+					s.logger.Warn("corrupt cached response; re-executing", "error", err, "key", idempotencyKey)
+					_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+					// fall through to the fresh-execution path below
+				} else {
+					// ── Idempotency cache: audit replay ────────────────
+					if err := s.recordAction(ctx, id, tool, decision.RiskLevel, audit.ResultSuccess, "",
+						sdkaudit.ActionToolReplayed, idempotencyKey); err != nil {
+						return nil, fmt.Errorf("write audit record: %w", err)
+					}
+					return mcpgo.NewToolResultJSON(cached)
+				}
+			}
+		}
+
 		if !ok {
 			decision, err = s.authorize(ctx, id, tool)
 			if err != nil {
@@ -173,6 +221,31 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 			return mcpgo.NewToolResultError("policy denied: " + decision.Reason), nil
 		}
 
+		// Fresh requests authorize before reserving a cache slot.
+		if idempotencyKey != "" && s.idempotencyCache != nil {
+			entry, hit, err := s.idempotencyCache.Claim(ctx, "tool", id.WorkspaceID.String(), idempotencyKey, 60*time.Second)
+			if errors.Is(err, idempotency.ErrPending) {
+				return mcpgo.NewToolResultError("concurrent request with same idempotency key in progress"), nil
+			}
+			if err != nil {
+				// fail-open: proceed without cache
+			} else if hit && entry != nil {
+				// Same ordering as the Get path: decode first, audit second, so a
+				// corrupt value cannot be recorded as a successful replay.
+				var cached map[string]any
+				if err := json.Unmarshal(entry.ResponseJSON, &cached); err != nil {
+					s.logger.Warn("corrupt cached response; re-executing", "error", err, "key", idempotencyKey)
+					_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+				} else {
+					if err := s.recordAction(ctx, id, tool, decision.RiskLevel, audit.ResultSuccess, "",
+						sdkaudit.ActionToolReplayed, idempotencyKey); err != nil {
+						return nil, fmt.Errorf("write audit record: %w", err)
+					}
+					return mcpgo.NewToolResultJSON(cached)
+				}
+			}
+		}
+
 		injected, err := s.injectCredentials(ctx, tool)
 		if err != nil {
 			_ = s.record(ctx, id, tool, decision.RiskLevel, audit.ResultError, err.Error())
@@ -185,25 +258,65 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 			Credentials: injected,
 		})
 		if err != nil {
+			// ── Idempotency cache: mark failed ──────────────────────
+			if idempotencyKey != "" && s.idempotencyCache != nil {
+				_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+			}
 			_ = s.record(ctx, id, tool, decision.RiskLevel, audit.ResultError, err.Error())
 			return mcpgo.NewToolResultError(s.redactor.Redact(err.Error())), nil
 		}
 
 		clean, err := s.sanitize(result)
 		if err != nil {
+			if idempotencyKey != "" && s.idempotencyCache != nil {
+				_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+			}
 			_ = s.record(ctx, id, tool, decision.RiskLevel, audit.ResultError, err.Error())
 			return nil, fmt.Errorf("sanitize tool result: %w", err)
+		}
+
+		// ── Idempotency cache: complete ────────────────────────────
+		if idempotencyKey != "" && s.idempotencyCache != nil {
+			// An unencodable response must never reach the cache: an empty body
+			// would otherwise be replayed later as a successful result.
+			respJSON, err := json.Marshal(clean)
+			if err != nil {
+				s.logger.Warn("idempotency cache skipped: response not encodable", "error", err, "key", idempotencyKey)
+			} else {
+				// Complete already logs and counts its own failures.
+				_ = s.idempotencyCache.Complete(ctx, "tool", id.WorkspaceID.String(), idempotencyKey, idempotency.Entry{
+					ResponseJSON: respJSON,
+				}, 1*time.Hour)
+			}
 		}
 
 		auditResult := s.auditResult()
 		if status, ok := clean["status"].(string); ok && status == "error" {
 			auditResult = audit.ResultError
 		}
-		if err := s.record(ctx, id, tool, decision.RiskLevel, auditResult, ""); err != nil {
+		// A call that takes part in the idempotency cache is audited as
+		// tool_executed so it can be told apart from a tool_replayed retry.
+		if idempotencyKey != "" {
+			if err := s.recordAction(ctx, id, tool, decision.RiskLevel, auditResult, "",
+				sdkaudit.ActionToolExecuted, idempotencyKey); err != nil {
+				return nil, fmt.Errorf("write audit record: %w", err)
+			}
+		} else if err := s.record(ctx, id, tool, decision.RiskLevel, auditResult, ""); err != nil {
 			return nil, fmt.Errorf("write audit record: %w", err)
 		}
 		return mcpgo.NewToolResultJSON(clean)
 	}
+}
+
+// extractIdempotencyKey reads _meta.idempotency_key from the CallToolRequest.
+func extractIdempotencyKey(request mcpgo.CallToolRequest) string {
+	if request.Params.Meta == nil {
+		return ""
+	}
+	if k, ok := request.Params.Meta.AdditionalFields["idempotency_key"].(string); ok {
+		return k
+	}
+	return ""
 }
 
 // auditResult returns the appropriate audit result for the configured executor.
@@ -277,6 +390,24 @@ func (s *Server) record(ctx context.Context, id identity.Identity, tool catalog.
 		RiskLevel:    riskLevel,
 		Result:       result,
 		ErrorMessage: s.redactor.Redact(errMsg),
+	})
+	return err
+}
+
+// recordAction writes one audit record carrying an explicit action and the
+// idempotency key. Both fields are covered by the chain hash, so a replay
+// (tool_replayed) cannot be confused with a live execution (tool_executed)
+// without breaking the log.
+func (s *Server) recordAction(ctx context.Context, id identity.Identity, tool catalog.Tool, riskLevel, result, errMsg, action, idempotencyKey string) error {
+	_, err := s.auditor.Record(ctx, audit.Entry{
+		WorkspaceID:    id.WorkspaceID,
+		AgentID:        id.AgentID,
+		ToolName:       tool.Name,
+		RiskLevel:      riskLevel,
+		Result:         result,
+		ErrorMessage:   s.redactor.Redact(errMsg),
+		Action:         action,
+		IdempotencyKey: idempotencyKey,
 	})
 	return err
 }

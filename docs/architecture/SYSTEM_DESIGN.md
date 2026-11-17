@@ -244,6 +244,8 @@ This prevents flapping on a config error in one model (the whole provider remain
 
 This correctly accounts for NFR-9 (cost) on retries and mid-stream failover. See ADR-021.
 
+**Idempotency cache (issue #106, ADR-026).** When `X-Idempotency-Key` is present, the LLM Gateway stores the provider response in Redis (`idem:llm:<workspace>:<key>`) with a 24h TTL. Sequential retries with the same key return the cached response without calling the provider or creating a new `llm_logical_calls` row. Concurrent requests with the same key receive `409 Conflict` while the first is in flight (60s pending TTL). Fail-open: if Redis is unreachable, the call proceeds without caching.
+
 ## 9. Knowledge bases
 
 ### 9.1 Model and scopes
@@ -307,6 +309,8 @@ Error bodies below are actual middleware messages (`apps/api/internal/transport/
 ### 11.1 Integrations
 
 External systems are not duplicated inside the platform — they are sources and sinks of artifacts (§1.4 P3). All access to them goes through the Tool Gateway over MCP (ADR-005, ADR-022): the Tool Gateway loads tool schemas, filters them by `Role.tools.allow` / `Role.tools.deny`, checks policy, injects secrets, executes the call, and writes it to the audit log (`MCP_TOOLS.md` §5). Implementation: `mark3labs/mcp-go` (see ADR-022). Tool registry by role — `docs/architecture/MCP_TOOLS.md`.
+
+**Idempotency cache (issue #106, ADR-026).** When `_meta.idempotency_key` is present in the MCP tool call params, the Tool Gateway stores the result in Redis (`idem:tool:<workspace>:<key>`) with a 1h TTL. Sequential retries with the same key return the cached result without re-executing the tool. Concurrent requests receive `409 Conflict` (pending marker, 60s TTL). Fail-open: if Redis is unreachable, the call proceeds without caching.
 
 | Integration | What it gives the platform | Requirement | Tools (MCP) |
 |---|---|---|---|

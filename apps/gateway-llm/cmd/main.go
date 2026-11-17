@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/catalog"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/config"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/providers"
@@ -24,6 +26,7 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/routing"
 	httptransport "github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/transport/http"
 	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
+	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
 )
 
 func main() {
@@ -79,7 +82,21 @@ func main() {
 	// Every finished logical call is appended to the global tamper-evident
 	// audit log (issue #14).
 	rtr.WithAuditor(sdkaudit.NewLogger(pool))
-	httpRouter := httptransport.NewRouter(rtr, pool)
+
+	// Redis-backed idempotency cache (issue #106, ADR-026).
+	// NewClient succeeds even if Redis is unreachable; first command surfaces error.
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379/0"
+	}
+	redisOpts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Fatalf("redis url parse: %v", err)
+	}
+	redisClient := redis.NewClient(redisOpts)
+	cache := idempotency.New(redisClient, idempotency.NewSlogLogger(slog.Default()), nil)
+
+	httpRouter := httptransport.NewRouter(rtr, pool, cache)
 
 	// Start server.
 	addr := ":" + strconv.Itoa(cfg.Port)

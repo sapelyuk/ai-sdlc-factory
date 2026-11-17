@@ -18,6 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	mcpsdk "github.com/mark3labs/mcp-go/server"
+	"github.com/redis/go-redis/v9"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/audit"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/catalog"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/config"
@@ -26,6 +27,7 @@ import (
 	mcpserver "github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/mcp"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/policy"
 	httptransport "github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/transport/http"
+	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
 )
 
 func main() {
@@ -94,14 +96,27 @@ func run(logger *slog.Logger) error {
 		}()
 	}
 
+	// Redis-backed idempotency cache (issue #106, ADR-026).
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379/0"
+	}
+	redisOpts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return err
+	}
+	redisClient := redis.NewClient(redisOpts)
+	idemCache := idempotency.New(redisClient, idempotency.NewSlogLogger(logger), nil)
+
 	gateway, err := mcpserver.NewServer(mcpserver.Options{
-		Catalog:    cat,
-		Authorizer: authorizer,
-		Auditor:    auditor,
-		Broker:     broker,
-		Redactor:   redactor,
-		Executor:   executor,
-		Logger:     logger,
+		Catalog:          cat,
+		Authorizer:       authorizer,
+		Auditor:          auditor,
+		Broker:           broker,
+		Redactor:         redactor,
+		Executor:         executor,
+		Logger:           logger,
+		IdempotencyCache: idemCache,
 	})
 	if err != nil {
 		return err

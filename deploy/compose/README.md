@@ -47,6 +47,7 @@ make ps-local
 | NATS | 4222 (client), 8222 (monitoring) | Event bus (JetStream) | always |
 | Vault | 8200 | Secret management (dev mode) | always |
 | OPA | 8181 | Policy engine (Rego) | always |
+| Redis | 127.0.0.1:6379 | Idempotency cache (issue #106, ADR-026) | always |
 | Tool Gateway | 8030 | MCP proxy for agents | always |
 | Sandbox Manager | 8060 | Tenant-scoped isolated command execution | always |
 | Docker socket proxy | internal | Restricted Docker API access for Sandbox Manager | always |

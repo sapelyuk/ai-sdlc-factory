@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADR) — ai-sdlc-factory
 
-**Version 1.8 · 30.10.2026**
+**Version 1.9 · 16.11.2026**
 
 Format: MADR. Statuses: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
 
@@ -429,10 +429,56 @@ Currently affected providers: DeepSeek, Groq. Any future provider that does not 
 
 ---
 
+## ADR-026. Redis for idempotency caches in LLM and Tool Gateways
+
+**Status:** accepted.
+
+**Context.**
+Agent Runtime (#104) forwards `idempotency_key` to LLM Gateway (`X-Idempotency-Key`) and Tool Gateway (MCP `_meta.idempotency_key`). Issue #106 requires persistent caching keyed by these values so retries do not double-bill (LLM) or duplicate side effects (Tool). The cache must:
+- Provide **atomic claim** for concurrent requests with the same key.
+- Support **per-entry TTL** without a background cleanup job.
+- Have **sub-millisecond latency** on hit (cache hit should not dominate call latency).
+- Be **shared** across multiple gateway instances.
+
+**Decision.**
+Use **Redis 7** (`docker.io/library/redis:7-alpine`, pinned by digest) as the backing store for both idempotency caches.
+- **Single Redis instance** per environment. Key namespacing (not multiple logical databases):
+  - LLM: `idem:llm:<workspace_id>:<idempotency_key>`
+  - Tool: `idem:tool:<workspace_id>:<idempotency_key>`
+- **Claim** uses `SET key <pending-value> NX EX <short-ttl>`. Atomic by design; concurrent request with the same key receives `409 Conflict` while the first is in flight.
+- **Short pending TTL (60s)** for the in-flight marker, **long completed TTL** for the cached response (LLM 24h, Tool 1h). If the provider call crashes, the pending marker expires after 60s and a retry can claim fresh.
+- **Fail-open:** if Redis is unreachable, the gateway proceeds **without** cache. The upstream call happens; the response is returned; the cache write is skipped; a WARN is logged and a metric incremented. Availability over consistency for idempotency cache.
+- **Persistence:** `appendonly yes` + `appendfsync everysec`. If Redis restarts, up to 1s of recent writes can be lost; retries within that window may double-call. Accepted risk for cache semantics (see Consequences).
+
+**Alternatives considered.**
+- **PostgreSQL table** (rejected):
+  - Needs `expires_at` column + query filter + background cleanup job.
+  - Claim requires `INSERT ... ON CONFLICT DO NOTHING` + SELECT fallback, two statements in a transaction, less atomic for concurrent case.
+  - Latency: ~1–5ms per hit vs Redis ~0.1–0.5ms.
+  - Pros retained: same DB as `llm_logical_calls`, RLS reuse. Cons outweighed by TTL + atomicity.
+- **In-memory LRU per gateway instance** (rejected):
+  - Not shared across instances — retry may hit a different instance, cache miss, double-call.
+  - Lost on restart — violates "persistent cache" requirement.
+- **NATS JetStream KV** (rejected):
+  - Stack already has NATS (see README.md), but KV semantics in JetStream provide at-most-once per key by default; implementing true idempotency semantics requires a separate consumer pattern, more complex than Redis `SET NX`.
+  - TTL handling in JetStream KV is less ergonomic than Redis `EX`.
+
+**Consequences.**
+- New infrastructure dependency (`redis` service in `deploy/compose/`, CI job, prod deployment). One more thing to monitor, secure (no external port exposure), and back up (though the cache is ephemeral — no restore from backup is meaningful).
+- No RLS: workspace isolation is enforced by **key prefix**, not row-level policy. Tests MUST verify cross-workspace isolation (`RLSCrossWorkspaceIsolation` equivalent).
+- Cache durability is best-effort: Redis restart / AOF loss / fail-open means occasionally an idempotency key will be re-processed. This is acceptable — idempotency cache reduces double calls, not eliminates them (full exactly-once needs transactional coordination between gateway and provider, out of scope).
+- Concurrent claim latency: the second request gets 409 immediately, no wait-loop. If the caller retries, it hits the completed entry after the first finishes. Issue acceptance requires **sequential** retry correctness; concurrent wait-loop is a future enhancement.
+- ADR-024 (data-only migrations) not applicable: no schema change on PostgreSQL side.
+
+**References:** NFR-9, ADR-019 (PostgreSQL), ADR-021 (LLM attribution), Issue #106, `SYSTEM_DESIGN.md` §8.5.
+
+---
+
 ## Document changes
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.9 | 16.11.2026 | Added ADR-026 (Redis for idempotency caches). |
 | 1.8 | 30.10.2026 | Added ADR-024 (data-only migrations) and ADR-025 (pinning exceptions). |
 | 1.7 | 27.10.2026 | Added ADR-023 (Sandbox isolation boundary) (#101) |
 | 1.6 | 22.10.2026 | Added ADR-022 (selection of `mark3labs/mcp-go` for Tool Gateway) (#83) |
