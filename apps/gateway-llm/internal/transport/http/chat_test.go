@@ -476,6 +476,10 @@ func TestWriteJSONErrorOnUnencodableValue(t *testing.T) {
 
 // ── Idempotency tests (issue #106) ─────────────────────────────
 
+// redisImage pins the same digest as deploy/compose/docker-compose.yml so the
+// integration tests run against the exact image the stack ships (ADR-026).
+const redisImage = "docker.io/library/redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe"
+
 // startTestRedis starts a Redis container for integration tests.
 func startTestRedis(t *testing.T) *idempotency.Cache {
 	t.Helper()
@@ -492,7 +496,7 @@ func startTestRedis(t *testing.T) *idempotency.Cache {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
-	container, err := rediscontainer.Run(ctx, "redis:7-alpine")
+	container, err := rediscontainer.Run(ctx, redisImage)
 	if err != nil {
 		t.Fatalf("failed to start Redis container: %v", err)
 	}
@@ -603,7 +607,7 @@ func startTestPostgres(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func ptrInt(v int) *int { return &v }
+func ptrInt(v int) *int           { return &v }
 func ptrFloat(v float64) *float64 { return &v }
 
 // newIdempotencyRequest builds a POST /v1/llm/chat with tenant + idempotency headers.

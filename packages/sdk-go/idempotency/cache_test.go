@@ -15,6 +15,10 @@ import (
 	rediscontainer "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
+// redisImage pins the same digest as deploy/compose/docker-compose.yml so the
+// integration tests run against the exact image the stack ships (ADR-026).
+const redisImage = "docker.io/library/redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe"
+
 // startRedis starts a Redis container for integration tests.
 // Follows the same Docker detect guard pattern as apps/worker/internal/testutil/postgres.go.
 func startRedis(t *testing.T) *redis.Client {
@@ -33,7 +37,7 @@ func startRedis(t *testing.T) *redis.Client {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
-	container, err := rediscontainer.Run(ctx, "redis:7-alpine")
+	container, err := rediscontainer.Run(ctx, redisImage)
 	if err != nil {
 		t.Fatalf("failed to start Redis container: %v", err)
 	}
