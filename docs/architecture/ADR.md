@@ -479,6 +479,7 @@ Use **Redis 7** (`docker.io/library/redis:7-alpine`, pinned by digest) as the ba
 | Version | Date | Changes |
 |---|---|---|
 | 1.9 | 16.11.2026 | Added ADR-026 (Redis for idempotency caches). |
+| 1.8 | 30.10.2026 | Added ADR-024 (data-only migrations) and ADR-025 (pinning exceptions). |
 | 1.7 | 27.10.2026 | Added ADR-023 (Sandbox isolation boundary) (#101) |
 | 1.6 | 22.10.2026 | Added ADR-022 (selection of `mark3labs/mcp-go` for Tool Gateway) (#83) |
 | 1.5 | 22.10.2026 | Added ADR-021 (LLM Gateway: routing, fallback, cost attribution) (#73) |
