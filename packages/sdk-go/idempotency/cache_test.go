@@ -1,9 +1,11 @@
 package idempotency
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -264,6 +266,24 @@ type fakeLogger struct {
 }
 
 func (f *fakeLogger) Warn(string, ...any) { f.warnings++ }
+
+func TestNewSlogLogger_WritesWarn(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewSlogLogger(slog.New(slog.NewTextHandler(&buf, nil)))
+
+	logger.Warn("cache unavailable", "namespace", "llm", "error", "boom")
+
+	out := buf.String()
+	if !strings.Contains(out, "level=WARN") {
+		t.Fatalf("expected WARN level, got %q", out)
+	}
+	if !strings.Contains(out, "cache unavailable") {
+		t.Fatalf("expected message in output, got %q", out)
+	}
+	if !strings.Contains(out, "namespace=llm") {
+		t.Fatalf("expected kv pair in output, got %q", out)
+	}
+}
 
 func TestCache_ConcurrentClaimAfterExpiry_ExactlyOneWins(t *testing.T) {
 	client := startRedis(t)

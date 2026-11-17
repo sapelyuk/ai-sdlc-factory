@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -88,9 +89,12 @@ func main() {
 	if redisURL == "" {
 		redisURL = "redis://localhost:6379/0"
 	}
-	redisOpts, _ := redis.ParseURL(redisURL)
+	redisOpts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Fatalf("redis url parse: %v", err)
+	}
 	redisClient := redis.NewClient(redisOpts)
-	cache := idempotency.New(redisClient, nil, nil)
+	cache := idempotency.New(redisClient, idempotency.NewSlogLogger(slog.Default()), nil)
 
 	httpRouter := httptransport.NewRouter(rtr, pool, cache)
 

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -213,4 +214,17 @@ func (c *Cache) warn(msg string, kv ...any) {
 	if c.logger != nil {
 		c.logger.Warn(msg, kv...)
 	}
+}
+
+// slogAdapter bridges *slog.Logger to the cache Logger interface.
+type slogAdapter struct{ *slog.Logger }
+
+// Warn implements Logger.
+func (s slogAdapter) Warn(msg string, kv ...any) {
+	s.Logger.Warn(msg, kv...)
+}
+
+// NewSlogLogger creates a Logger from a *slog.Logger.
+func NewSlogLogger(l *slog.Logger) Logger {
+	return slogAdapter{l}
 }

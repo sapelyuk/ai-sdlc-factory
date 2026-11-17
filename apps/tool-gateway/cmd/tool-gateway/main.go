@@ -101,9 +101,12 @@ func run(logger *slog.Logger) error {
 	if redisURL == "" {
 		redisURL = "redis://localhost:6379/0"
 	}
-	redisOpts, _ := redis.ParseURL(redisURL)
+	redisOpts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return err
+	}
 	redisClient := redis.NewClient(redisOpts)
-	idemCache := idempotency.New(redisClient, nil, nil)
+	idemCache := idempotency.New(redisClient, idempotency.NewSlogLogger(logger), nil)
 
 	gateway, err := mcpserver.NewServer(mcpserver.Options{
 		Catalog:          cat,
