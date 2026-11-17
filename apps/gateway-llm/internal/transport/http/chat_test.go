@@ -480,8 +480,9 @@ func TestWriteJSONErrorOnUnencodableValue(t *testing.T) {
 // integration tests run against the exact image the stack ships (ADR-026).
 const redisImage = "docker.io/library/redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe"
 
-// startTestRedis starts a Redis container for integration tests.
-func startTestRedis(t *testing.T) *idempotency.Cache {
+// startTestRedisClient starts a Redis container and exposes both the client and
+// the cache wrapper, so tests can seed or corrupt entries directly.
+func startTestRedisClient(t *testing.T) (*redis.Client, *idempotency.Cache) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -517,7 +518,14 @@ func startTestRedis(t *testing.T) *idempotency.Cache {
 	if err := client.FlushAll(ctx).Err(); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
-	return idempotency.New(client, nil, nil)
+	return client, idempotency.New(client, nil, nil)
+}
+
+// startTestRedis starts a Redis container for integration tests.
+func startTestRedis(t *testing.T) *idempotency.Cache {
+	t.Helper()
+	_, cache := startTestRedisClient(t)
+	return cache
 }
 
 type logicalCallRouter struct {
@@ -806,4 +814,32 @@ func TestChatHandler_RedisDown_FailOpen(t *testing.T) {
 		t.Errorf("provider calls = %d, want 1 (cache skipped, provider called)", stub.calls)
 	}
 	_ = client.Close()
+}
+
+func TestChatHandler_IdempotencyKey_CorruptPayload_FallsThrough(t *testing.T) {
+	client, cache := startTestRedisClient(t)
+	stub := &stubRouter{res: succeededResult()}
+	handler := chatHandler(stub, cache)
+
+	wsID := uuid.New().String()
+	idemKey := "corrupt-" + uuid.New().String()
+
+	// Seed a completed entry with empty ResponseJSON directly into Redis.
+	// This simulates a cache entry corrupted at the payload level.
+	redisKey := "idempotency:llm:" + wsID + ":" + idemKey
+	entryJSON := `{"status":"completed","response_json":""}`
+	if err := client.Set(context.Background(), redisKey, entryJSON, 24*time.Hour).Err(); err != nil {
+		t.Fatalf("seed corrupt entry: %v", err)
+	}
+
+	// Request with the corrupt key → handler must fall through to provider.
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, newIdempotencyRequest(t, chatBody, wsID, idemKey))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d (body %s), want 200", w.Code, w.Body.String())
+	}
+	if stub.calls != 1 {
+		t.Errorf("provider calls = %d, want 1 (corrupt payload must not be served as success)", stub.calls)
+	}
 }

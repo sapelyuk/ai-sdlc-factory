@@ -90,12 +90,16 @@ func chatHandler(router ChatRouter, cache *idempotency.Cache) http.HandlerFunc {
 			}
 			if err != nil {
 				// fail-open: proceed without cache (metrics tracked by cache pkg)
-			} else if hit && entry != nil {
+			} else if hit && entry != nil && len(entry.ResponseJSON) > 0 && json.Valid(entry.ResponseJSON) {
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("X-Idempotency-Cache", "hit")
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write(entry.ResponseJSON)
 				return
+			} else if hit && entry != nil {
+				// A completed entry with an empty or invalid payload must not be
+				// served as a success: drop it and run the call for real.
+				_ = cache.MarkFailed(r.Context(), "llm", workspaceID.String(), idempotencyKey)
 			}
 		}
 
@@ -106,10 +110,21 @@ func chatHandler(router ChatRouter, cache *idempotency.Cache) http.HandlerFunc {
 
 		if chatErr == nil {
 			resp := toChatResponse(res)
-			respJSON, _ := json.Marshal(resp)
+			respJSON, marshalErr := json.Marshal(resp)
+			if marshalErr != nil {
+				// An unencodable response must never be cached: an empty body
+				// would be replayed to every retry of this key as a success.
+				// Release the claim so the caller can retry immediately.
+				if idempotencyKey != "" && cache != nil {
+					_ = cache.MarkFailed(r.Context(), "llm", workspaceID.String(), idempotencyKey)
+				}
+				writeError(w, http.StatusInternalServerError, "failed to encode response")
+				return
+			}
 
 			// ── Idempotency cache: complete ────────────────────────
 			if idempotencyKey != "" && cache != nil {
+				// Complete logs and counts its own failures.
 				_ = cache.Complete(r.Context(), "llm", workspaceID.String(), idempotencyKey, idempotency.Entry{
 					LogicalCallID: res.LogicalCall.ID.String(),
 					ResponseJSON:  respJSON,
