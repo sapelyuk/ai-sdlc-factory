@@ -36,8 +36,8 @@ import (
 const (
 	ActionLLMCall          = "llm_call"
 	ActionToolCall         = "tool_call"
-	ActionToolExecuted    = "tool_executed"
-	ActionToolReplayed    = "tool_replayed"
+	ActionToolExecuted     = "tool_executed"
+	ActionToolReplayed     = "tool_replayed"
 	ActionSandboxExec      = "sandbox_exec"
 	ActionSandboxCreate    = "sandbox_create"
 	ActionSandboxDestroy   = "sandbox_destroy"

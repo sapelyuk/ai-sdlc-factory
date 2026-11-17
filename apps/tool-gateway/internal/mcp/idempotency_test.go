@@ -18,6 +18,7 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/catalog"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/identity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/policy"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
 	rediscontainer "github.com/testcontainers/testcontainers-go/modules/redis"
 )
@@ -410,18 +411,40 @@ func TestMCP_CacheHit_IsAudited(t *testing.T) {
 	if counter.calls.Load() != 1 {
 		t.Fatalf("executor calls after second = %d, want 1", counter.calls.Load())
 	}
-	if got := len(store.Records()); got != 2 {
+	records := store.Records()
+	if got := len(records); got != 2 {
 		t.Fatalf("audit records after cache hit = %d, want 2 (first execution + replay)", got)
+	}
+	// The two records must be distinguishable by action: a consumer has to be
+	// able to tell the live call from the replayed one.
+	if got := records[0].Action; got != sdkaudit.ActionToolExecuted {
+		t.Errorf("first record action = %q, want %q", got, sdkaudit.ActionToolExecuted)
+	}
+	if got := records[1].Action; got != sdkaudit.ActionToolReplayed {
+		t.Fatalf("replay record action = %q, want %q", got, sdkaudit.ActionToolReplayed)
+	}
+	if records[1].Action == sdkaudit.ActionToolExecuted {
+		t.Error("cache hit must NOT emit ActionToolExecuted")
+	}
+	// Both records carry the key, which is covered by the chain hash.
+	for i, rec := range records {
+		if rec.IdempotencyKey != key {
+			t.Errorf("record %d idempotency_key = %q, want %q", i, rec.IdempotencyKey, key)
+		}
+	}
+	if err := audit.Verify(records); err != nil {
+		t.Errorf("audit chain must stay valid with explicit actions: %v", err)
 	}
 }
 
 func TestMCP_CacheMiss_IsAudited(t *testing.T) {
-	_, cache := startTestRedisClient(t)
+	client, cache := startTestRedisClient(t)
 	counter := &countingExecutor{result: map[string]any{"status": "success"}}
 	srv, store := newIdempotencyServerWithAuthorizer(t, counter, cache, nil)
 
 	ctx := identity.With(context.Background(), testIdentity("developer", "R1"))
-	meta := map[string]any{"idempotency_key": "audit-miss-" + uuid.New().String()}
+	key := "audit-miss-" + uuid.New().String()
+	meta := map[string]any{"idempotency_key": key}
 	res, err := callToolWithMeta(t, srv, ctx, "git.push", map[string]any{"repo": "test"}, meta)
 	if err != nil {
 		t.Fatalf("call: %v", err)
@@ -432,8 +455,87 @@ func TestMCP_CacheMiss_IsAudited(t *testing.T) {
 	if counter.calls.Load() != 1 {
 		t.Fatalf("executor calls = %d, want 1", counter.calls.Load())
 	}
-	if got := len(store.Records()); got != 1 {
+	records := store.Records()
+	if got := len(records); got != 1 {
 		t.Fatalf("audit records after cache miss = %d, want 1", got)
+	}
+	if got := records[0].Action; got != sdkaudit.ActionToolExecuted {
+		t.Fatalf("miss record action = %q, want %q", got, sdkaudit.ActionToolExecuted)
+	}
+	if records[0].Action == sdkaudit.ActionToolReplayed {
+		t.Error("cache miss must NOT emit ActionToolReplayed")
+	}
+	if got := records[0].IdempotencyKey; got != key {
+		t.Errorf("miss record idempotency_key = %q, want %q", got, key)
+	}
+	// The completed entry must be readable: proves the value was cached.
+	if err := client.Get(context.Background(), "idem:tool:11111111-1111-1111-1111-111111111111:"+key).Err(); err != nil {
+		t.Errorf("expected a completed cache entry after a miss, got %v", err)
+	}
+}
+
+// TestMCP_CorruptCache_ReExecutes pins the double-record fix: a cached entry
+// whose response payload cannot be decoded must not be audited as a successful
+// replay. The call falls through to a real execution, and the next retry gets a
+// healthy replay.
+func TestMCP_CorruptCache_ReExecutes(t *testing.T) {
+	client, cache := startTestRedisClient(t)
+	counter := &countingExecutor{result: map[string]any{"status": "success"}}
+	srv, store := newIdempotencyServerWithAuthorizer(t, counter, cache, nil)
+
+	ctx := identity.With(context.Background(), testIdentity("developer", "R1"))
+	key := "corrupt-" + uuid.New().String()
+	meta := map[string]any{"idempotency_key": key}
+	redisKey := "idem:tool:11111111-1111-1111-1111-111111111111:" + key
+
+	if _, err := callToolWithMeta(t, srv, ctx, "git.push", map[string]any{"repo": "test"}, meta); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	// Keep the entry decodable but make the cached response undecodable as a
+	// tool result object: response_json is a string, not a map.
+	if err := client.Set(ctx, redisKey, `{"status":"completed","response_json":"not-an-object"}`, time.Hour).Err(); err != nil {
+		t.Fatalf("corrupt seed: %v", err)
+	}
+
+	res, err := callToolWithMeta(t, srv, ctx, "git.push", map[string]any{"repo": "test"}, meta)
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("second call error (corrupt cache must fail open to execution): %s", resultText(t, res))
+	}
+	if counter.calls.Load() != 2 {
+		t.Fatalf("executor calls = %d, want 2 (corrupt entry must re-execute)", counter.calls.Load())
+	}
+	// Exactly one record per call: the corrupt replay must not add a second one.
+	records := store.Records()
+	if got := len(records); got != 2 {
+		t.Fatalf("audit records = %d, want 2 (no double-record on a corrupt entry)", got)
+	}
+	for i, rec := range records {
+		if rec.Action != sdkaudit.ActionToolExecuted {
+			t.Errorf("record %d action = %q, want %q (a corrupt entry is not a replay)", i, rec.Action, sdkaudit.ActionToolExecuted)
+		}
+	}
+
+	// The re-execution must have replaced the corrupt value, so a third call is
+	// a normal replay rather than another execution.
+	res, err = callToolWithMeta(t, srv, ctx, "git.push", map[string]any{"repo": "test"}, meta)
+	if err != nil {
+		t.Fatalf("third call: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("third call error: %s", resultText(t, res))
+	}
+	if counter.calls.Load() != 2 {
+		t.Errorf("executor calls after third = %d, want 2 (cache recovered)", counter.calls.Load())
+	}
+	records = store.Records()
+	if got := len(records); got != 3 {
+		t.Fatalf("audit records after third call = %d, want 3", got)
+	}
+	if got := records[2].Action; got != sdkaudit.ActionToolReplayed {
+		t.Errorf("third record action = %q, want %q", got, sdkaudit.ActionToolReplayed)
 	}
 }
 

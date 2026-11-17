@@ -21,6 +21,7 @@ import (
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/credentials"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/identity"
 	"github.com/sapelyuk/ai-sdlc-factory/apps/tool-gateway/internal/policy"
+	sdkaudit "github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/audit"
 	"github.com/sapelyuk/ai-sdlc-factory/packages/sdk-go/idempotency"
 )
 
@@ -185,14 +186,23 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 					}
 					return mcpgo.NewToolResultError("policy denied: " + decision.Reason), nil
 				}
-				if err := s.record(ctx, id, tool, decision.RiskLevel, audit.ResultSuccess, ""); err != nil {
-					return nil, fmt.Errorf("write audit record: %w", err)
-				}
+
+				// Unmarshal before auditing so a corrupt cache value never
+				// produces a "replay-success" record followed by a second
+				// "execution-success" (double-record bug).
 				var cached map[string]any
-				if json.Unmarshal(entry.ResponseJSON, &cached) == nil {
+				if err := json.Unmarshal(entry.ResponseJSON, &cached); err != nil {
+					s.logger.Warn("corrupt cached response; re-executing", "error", err, "key", idempotencyKey)
+					_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+					// fall through to the fresh-execution path below
+				} else {
+					// ── Idempotency cache: audit replay ────────────────
+					if err := s.recordAction(ctx, id, tool, decision.RiskLevel, audit.ResultSuccess, "",
+						sdkaudit.ActionToolReplayed, idempotencyKey); err != nil {
+						return nil, fmt.Errorf("write audit record: %w", err)
+					}
 					return mcpgo.NewToolResultJSON(cached)
 				}
-				// If unmarshal fails, fall through to execute
 			}
 		}
 
@@ -220,11 +230,17 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 			if err != nil {
 				// fail-open: proceed without cache
 			} else if hit && entry != nil {
-				if err := s.record(ctx, id, tool, decision.RiskLevel, audit.ResultSuccess, ""); err != nil {
-					return nil, fmt.Errorf("write audit record: %w", err)
-				}
+				// Same ordering as the Get path: decode first, audit second, so a
+				// corrupt value cannot be recorded as a successful replay.
 				var cached map[string]any
-				if json.Unmarshal(entry.ResponseJSON, &cached) == nil {
+				if err := json.Unmarshal(entry.ResponseJSON, &cached); err != nil {
+					s.logger.Warn("corrupt cached response; re-executing", "error", err, "key", idempotencyKey)
+					_ = s.idempotencyCache.MarkFailed(ctx, "tool", id.WorkspaceID.String(), idempotencyKey)
+				} else {
+					if err := s.recordAction(ctx, id, tool, decision.RiskLevel, audit.ResultSuccess, "",
+						sdkaudit.ActionToolReplayed, idempotencyKey); err != nil {
+						return nil, fmt.Errorf("write audit record: %w", err)
+					}
 					return mcpgo.NewToolResultJSON(cached)
 				}
 			}
@@ -261,17 +277,31 @@ func (s *Server) handle(tool catalog.Tool) mcpsdk.ToolHandlerFunc {
 
 		// ── Idempotency cache: complete ────────────────────────────
 		if idempotencyKey != "" && s.idempotencyCache != nil {
-			respJSON, _ := json.Marshal(clean)
-			_ = s.idempotencyCache.Complete(ctx, "tool", id.WorkspaceID.String(), idempotencyKey, idempotency.Entry{
-				ResponseJSON: respJSON,
-			}, 1*time.Hour)
+			// An unencodable response must never reach the cache: an empty body
+			// would otherwise be replayed later as a successful result.
+			respJSON, err := json.Marshal(clean)
+			if err != nil {
+				s.logger.Warn("idempotency cache skipped: response not encodable", "error", err, "key", idempotencyKey)
+			} else {
+				// Complete already logs and counts its own failures.
+				_ = s.idempotencyCache.Complete(ctx, "tool", id.WorkspaceID.String(), idempotencyKey, idempotency.Entry{
+					ResponseJSON: respJSON,
+				}, 1*time.Hour)
+			}
 		}
 
 		auditResult := s.auditResult()
 		if status, ok := clean["status"].(string); ok && status == "error" {
 			auditResult = audit.ResultError
 		}
-		if err := s.record(ctx, id, tool, decision.RiskLevel, auditResult, ""); err != nil {
+		// A call that takes part in the idempotency cache is audited as
+		// tool_executed so it can be told apart from a tool_replayed retry.
+		if idempotencyKey != "" {
+			if err := s.recordAction(ctx, id, tool, decision.RiskLevel, auditResult, "",
+				sdkaudit.ActionToolExecuted, idempotencyKey); err != nil {
+				return nil, fmt.Errorf("write audit record: %w", err)
+			}
+		} else if err := s.record(ctx, id, tool, decision.RiskLevel, auditResult, ""); err != nil {
 			return nil, fmt.Errorf("write audit record: %w", err)
 		}
 		return mcpgo.NewToolResultJSON(clean)
@@ -360,6 +390,24 @@ func (s *Server) record(ctx context.Context, id identity.Identity, tool catalog.
 		RiskLevel:    riskLevel,
 		Result:       result,
 		ErrorMessage: s.redactor.Redact(errMsg),
+	})
+	return err
+}
+
+// recordAction writes one audit record carrying an explicit action and the
+// idempotency key. Both fields are covered by the chain hash, so a replay
+// (tool_replayed) cannot be confused with a live execution (tool_executed)
+// without breaking the log.
+func (s *Server) recordAction(ctx context.Context, id identity.Identity, tool catalog.Tool, riskLevel, result, errMsg, action, idempotencyKey string) error {
+	_, err := s.auditor.Record(ctx, audit.Entry{
+		WorkspaceID:    id.WorkspaceID,
+		AgentID:        id.AgentID,
+		ToolName:       tool.Name,
+		RiskLevel:      riskLevel,
+		Result:         result,
+		ErrorMessage:   s.redactor.Redact(errMsg),
+		Action:         action,
+		IdempotencyKey: idempotencyKey,
 	})
 	return err
 }
