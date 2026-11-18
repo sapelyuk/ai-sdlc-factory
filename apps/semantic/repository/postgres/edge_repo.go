@@ -15,11 +15,15 @@ import (
 
 // EdgeRepository provides data access for sem_edges.
 type EdgeRepository struct {
-	pool *pgxpool.Pool
+	pool tenantPool
 }
 
 // NewEdgeRepository creates a new EdgeRepository.
 func NewEdgeRepository(pool *pgxpool.Pool) *EdgeRepository {
+	return newEdgeRepository(pool)
+}
+
+func newEdgeRepository(pool tenantPool) *EdgeRepository {
 	return &EdgeRepository{pool: pool}
 }
 
@@ -69,7 +73,11 @@ func (r *EdgeRepository) Delete(ctx context.Context, id uuid.UUID) error {
 // PostgreSQL utility statements (SET LOCAL) do not accept bind parameters in
 // the extended query protocol, so we use set_config(..., true) which is
 // semantically identical to SET LOCAL and works with parameterized queries.
-func inTenantTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx, uuid.UUID) error) error {
+type tenantPool interface {
+	Begin(context.Context) (pgx.Tx, error)
+}
+
+func inTenantTx(ctx context.Context, pool tenantPool, fn func(pgx.Tx, uuid.UUID) error) error {
 	workspaceID, err := identity.WorkspaceID(ctx)
 	if err != nil {
 		return err

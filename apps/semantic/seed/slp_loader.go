@@ -50,6 +50,10 @@ func LoadSLPv0(ctx context.Context, pool *pgxpool.Pool, workspaceID uuid.UUID) (
 		return 0, fmt.Errorf("parse SLP YAML: %w", err)
 	}
 
+	return loadSLPv0(ctx, pool, workspaceID, doc)
+}
+
+func loadSLPv0(ctx context.Context, pool seedPool, workspaceID uuid.UUID, doc SLPCoreDoc) (int, error) {
 	if doc.APIVersion != "ai-sdlc-factory/v1" || doc.Kind != "SLP" {
 		return 0, fmt.Errorf("SLP must declare apiVersion ai-sdlc-factory/v1 and kind SLP")
 	}
@@ -140,7 +144,11 @@ func findSLPFile() (string, error) {
 }
 
 // inSeedTx runs a function in a transaction with RLS context set.
-func inSeedTx(ctx context.Context, pool *pgxpool.Pool, workspaceID uuid.UUID, fn func(pgx.Tx) error) error {
+type seedPool interface {
+	Begin(context.Context) (pgx.Tx, error)
+}
+
+func inSeedTx(ctx context.Context, pool seedPool, workspaceID uuid.UUID, fn func(pgx.Tx) error) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin seed transaction: %w", err)
