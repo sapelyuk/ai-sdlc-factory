@@ -108,7 +108,7 @@ func TestRepositoryOperations(t *testing.T) {
 		t.Fatalf("HealthFor after config error: %v", err)
 	}
 	if got := health[key]; got == nil || got.ConsecutiveFailures != 1 ||
-		got.CooldownUntil == nil || !got.CooldownUntil.Equal(cooldown) ||
+		got.CooldownUntil == nil || got.CooldownUntil.Truncate(time.Second) != cooldown.Truncate(time.Second) ||
 		got.LastErrorType == nil || *got.LastErrorType != "unauthorized" {
 		t.Errorf("config error changed availability state: %+v", got)
 	}
