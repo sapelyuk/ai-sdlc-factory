@@ -136,14 +136,16 @@ func TestStartPostgresDockerCheck(t *testing.T) {
 			func(context.Context) ([]byte, error) { return []byte("daemon offline\n"), errors.New("unavailable") },
 			postgresRuntime{},
 		)
-		require.ErrorContains(t, err, "Docker required for integration test: daemon offline")
+		require.ErrorContains(t, err, "docker required for integration test: daemon offline")
 	})
 
 	t.Run("local skip", func(t *testing.T) {
 		t.Setenv("CI", "false")
-		startPostgresWithDockerCheck(t, "test", nil,
+		if _, err := startPostgresWithDockerCheck(t, "test", nil,
 			func(context.Context) ([]byte, error) { return []byte("daemon offline\n"), errors.New("unavailable") },
 			postgresRuntime{},
-		)
+		); err != nil {
+			t.Fatalf("startPostgresWithDockerCheck() error = %v", err)
+		}
 	})
 }

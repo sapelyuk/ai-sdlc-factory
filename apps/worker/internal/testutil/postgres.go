@@ -80,7 +80,7 @@ func startPostgresWithDockerCheck(
 
 	if output, err := dockerInfo(t.Context()); err != nil {
 		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
-			return nil, fmt.Errorf("Docker required for integration test: %s", strings.TrimSpace(string(output)))
+			return nil, fmt.Errorf("docker required for integration test: %s", strings.TrimSpace(string(output)))
 		}
 		t.Skipf("Docker unavailable; skipping: %s", strings.TrimSpace(string(output)))
 	}
