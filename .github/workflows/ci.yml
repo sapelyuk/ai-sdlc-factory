@@ -89,6 +89,57 @@ jobs:
         run: |
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
+      - name: Coverage gate (>=80% per package)
+        working-directory: ${{ matrix.app.dir }}
+        run: |
+          python3 - <<'PY'
+          import collections
+          import sys
+
+          threshold = 80.0
+          packages = collections.defaultdict(lambda: [0, 0])
+
+          with open("coverage.txt", "r", encoding="utf-8") as profile:
+              lines = [line.rstrip() for line in profile if not line.startswith("mode:")]
+
+          if not lines:
+              print("::error::coverage.txt is empty or malformed")
+              sys.exit(1)
+
+          for line in lines:
+              try:
+                  location, statements, count = line.rsplit(" ", 2)
+                  source = location.rsplit(":", 1)[0]
+                  package = source.rsplit("/", 1)[0]
+                  statement_count = int(statements)
+                  execution_count = int(count)
+              except ValueError:
+                  continue
+
+              if "/cmd/" in f"/{package}/" or package.endswith("/cmd"):
+                  continue
+
+              packages[package][1] += statement_count
+              if execution_count > 0:
+                  packages[package][0] += statement_count
+
+          failures = []
+          for package, (covered, total) in sorted(packages.items()):
+              if total == 0:
+                  continue
+              percentage = (covered * 100.0) / total
+              if percentage < threshold:
+                  failures.append((package, percentage))
+
+          if failures:
+              print("::error::Coverage below 80% per package:")
+              for package, percentage in failures:
+                  print(f"  {package}: {percentage:.1f}%")
+              sys.exit(1)
+
+          print("Coverage gate PASS: all non-cmd packages >= 80%")
+          PY
+
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
