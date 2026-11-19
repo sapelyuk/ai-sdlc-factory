@@ -1,0 +1,15 @@
+# Coverage exceptions for legacy packages below the 80% threshold.
+# When a package reaches >= 80%, remove its entry in the same PR that adds
+# the tests. Stale entries generate a CI warning. See CONTRIBUTING.md.
+# Format: <import-path> # <issue-ref> - <reason>
+github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/identity # #147 - legacy gap, 66.7%
+github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/repository/postgres # #147 - integration-only, no unit tests
+github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/identity # #149 - integration-only, no unit tests
+github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/repository # #149 - integration-only, no unit tests
+github.com/sapelyuk/ai-sdlc-factory/apps/semantic/internal/config # #148 - integration-only, no unit tests
+github.com/sapelyuk/ai-sdlc-factory/apps/semantic/internal/identity # #148 - integration-only, no unit tests
+github.com/sapelyuk/ai-sdlc-factory/apps/semantic/repository/postgres # #148 - legacy gap, 78.7%
+github.com/sapelyuk/ai-sdlc-factory/apps/semantic/seed # #148 - integration-only, no unit tests
+github.com/sapelyuk/ai-sdlc-factory/apps/semantic/service # #148 - integration-only, no unit tests
+github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/audit # #150 - integration-only, no unit tests
+github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client # #150 - legacy gap, 77.1%

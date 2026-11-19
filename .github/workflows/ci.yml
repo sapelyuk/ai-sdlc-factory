@@ -89,8 +89,127 @@ jobs:
         run: |
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
+      - name: Coverage gate (>=80% per package)
+        working-directory: ${{ matrix.app.dir }}
+        run: |
+          python3 - <<'PY'
+          import collections
+          import sys
+          from pathlib import Path
+
+          threshold = 80.0
+          packages = collections.defaultdict(lambda: [0, 0])
+
+          with open("coverage.txt", "r", encoding="utf-8") as profile:
+              lines = [line.rstrip() for line in profile if not line.startswith("mode:")]
+
+          if not lines:
+              print("::error::coverage.txt is empty or malformed")
+              sys.exit(1)
+
+          def find_exceptions_file():
+              for base in [Path.cwd(), *Path.cwd().parents]:
+                  candidate = base / ".github" / "coverage-exceptions.txt"
+                  if candidate.is_file():
+                      return candidate
+              return None
+
+          def load_exceptions(path):
+              if path is None:
+                  return {}
+              entries = {}
+              for raw in path.read_text(encoding="utf-8").splitlines():
+                  raw = raw.strip()
+                  if not raw or raw.startswith("#"):
+                      continue
+                  package, _, note = raw.partition("#")
+                  entries[package.strip()] = note.strip()
+              return entries
+
+          exceptions_path = find_exceptions_file()
+          exceptions = load_exceptions(exceptions_path)
+
+          module_prefix = ""
+          if exceptions_path is not None:
+              root = exceptions_path.parent.parent
+              try:
+                  module_prefix = Path.cwd().relative_to(root).as_posix() + "/"
+              except ValueError:
+                  module_prefix = ""
+
+          scoped_exceptions = {
+              package: note
+              for package, note in exceptions.items()
+              if not module_prefix or f"/{module_prefix}" in f"/{package}/"
+          }
+
+          for line in lines:
+              try:
+                  location, statements, count = line.rsplit(" ", 2)
+                  source = location.rsplit(":", 1)[0]
+                  package = source.rsplit("/", 1)[0]
+                  statement_count = int(statements)
+                  execution_count = int(count)
+              except ValueError:
+                  continue
+
+              if "/cmd/" in f"/{package}/" or package.endswith("/cmd"):
+                  continue
+
+              if package.endswith("/internal/testutil") or "/internal/testutil/" in f"/{package}/":
+                  continue
+
+              packages[package][1] += statement_count
+              if execution_count > 0:
+                  packages[package][0] += statement_count
+
+          failures = []
+          skipped = []
+          for package, (covered, total) in sorted(packages.items()):
+              if total == 0:
+                  continue
+              percentage = (covered * 100.0) / total
+              if percentage >= threshold:
+                  continue
+              if package in scoped_exceptions:
+                  skipped.append((package, percentage, scoped_exceptions[package]))
+              else:
+                  failures.append((package, percentage))
+
+          if failures:
+              print("::error::Coverage below 80% per package:")
+              for package, percentage in failures:
+                  print(f"  {package}: {percentage:.1f}%")
+              sys.exit(1)
+
+          stale = sorted(
+              package
+              for package in scoped_exceptions
+              if package in packages
+              and packages[package][1] > 0
+              and (packages[package][0] * 100.0) / packages[package][1] >= threshold
+          )
+          unknown = sorted(package for package in scoped_exceptions if package not in packages)
+
+          if skipped:
+              print("::warning::Coverage exceptions (tracked, below 80%):")
+              for package, percentage, note in skipped:
+                  print(f"  {package}: {percentage:.1f}% ({note})")
+          if stale:
+              print("::warning::Stale coverage exceptions (package now >= 80%, remove the entry):")
+              for package in stale:
+                  print(f"  {package}")
+          if unknown:
+              print("::warning::Coverage exceptions not found in this profile (typo or removed package):")
+              for package in unknown:
+                  print(f"  {package}")
+
+          print("Coverage gate PASS: all checked packages >= 80%")
+          PY
+
       - name: Upload coverage
         uses: codecov/codecov-action@v4
+        continue-on-error: true
         with:
           file: ./${{ matrix.app.dir }}/coverage.txt
           flags: ${{ matrix.app.name }}
