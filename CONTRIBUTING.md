@@ -96,6 +96,33 @@ packages in the same module. The threshold is defined in the
 Changing it requires an issue and owner approval; legacy packages below the
 threshold must be listed explicitly rather than excluded silently.
 
+Test infrastructure is excluded from the gate alongside `cmd/*` packages: any
+package whose import path ends with `/internal/testutil`. Such packages hold
+shared test helpers, where statement coverage carries no behavioral value.
+This exclusion is hardcoded in the gate step, not configurable per package.
+
+## Coverage exceptions
+
+Legacy packages below the 80% threshold must be listed explicitly in
+`.github/coverage-exceptions.txt`, one import path per line, each with a
+tracking issue reference:
+
+```
+<import-path> # <issue-ref> - <reason>
+```
+
+Silent exclusion (regex skip, `|| true`, broad `grep -v`) is prohibited.
+Matching is exact on the import path, so an entry never covers a similarly
+named package in another module.
+
+When a package reaches 80%, remove its entry in the same PR that adds the
+tests. Stale entries (package at or above 80% but still listed) and entries
+that match no package in the profile produce a CI warning, not a failure.
+
+New packages have no exceptions: they must ship at 80% or above per AGENTS.md
+code rule 2. The gate enforces this from the day it is active on `main`.
+
+
 ## Merge strategy
 
 - **Squash merge** into `main`.
