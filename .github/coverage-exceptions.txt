@@ -6,4 +6,3 @@ github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/repository # #149 
 github.com/sapelyuk/ai-sdlc-factory/apps/semantic/repository/postgres # #148 - legacy gap, 78.7%
 github.com/sapelyuk/ai-sdlc-factory/apps/semantic/seed # #148 - integration-only, no unit tests
 github.com/sapelyuk/ai-sdlc-factory/apps/semantic/service # #148 - integration-only, no unit tests
-github.com/sapelyuk/ai-sdlc-factory/apps/worker/internal/client # #150 - legacy gap, 77.1%

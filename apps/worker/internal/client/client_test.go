@@ -131,3 +131,114 @@ func TestKnowledgeClient_Search_SendsQueryAndTopK(t *testing.T) {
 	require.Len(t, frags, 1)
 	assert.Equal(t, SearchRequest{Query: "budget", TopK: 3}, body)
 }
+
+func TestKnowledgeClient_Search_DefaultTopK(t *testing.T) {
+	var body SearchRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+
+	fragments, err := NewKnowledgeClient(srv.URL).Search(context.Background(), "budget", 0)
+	require.NoError(t, err)
+	assert.Empty(t, fragments)
+	assert.Equal(t, SearchRequest{Query: "budget", TopK: 5}, body)
+}
+
+func TestKnowledgeClient_Search_ErrorResponses(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  int
+		body    string
+		wantErr string
+	}{
+		{name: "non-OK status", status: http.StatusBadGateway, body: "unavailable", wantErr: "knowledge service returned 502"},
+		{name: "invalid JSON", status: http.StatusOK, body: "{", wantErr: "unmarshal knowledge fragments"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			_, err := NewKnowledgeClient(srv.URL).Search(context.Background(), "budget", 1)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestLLMClient_Chat_ErrorResponses(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  int
+		body    string
+		wantErr string
+	}{
+		{name: "non-OK status", status: http.StatusBadGateway, body: "unavailable", wantErr: "LLM Gateway returned 502"},
+		{name: "invalid JSON", status: http.StatusOK, body: "{", wantErr: "unmarshal chat response"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			_, err := NewLLMClient(srv.URL).Chat(context.Background(), &ChatRequest{})
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestSemanticClient_GetSubgraph_WithoutRoot(t *testing.T) {
+	var query string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+
+	nodes, err := NewSemanticClient(srv.URL).GetSubgraph(context.Background(), "", 4)
+	require.NoError(t, err)
+	assert.Empty(t, nodes)
+	assert.Empty(t, query)
+}
+
+func TestSemanticClient_GetSubgraph_InvalidJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{"))
+	}))
+	defer srv.Close()
+
+	_, err := NewSemanticClient(srv.URL).GetSubgraph(context.Background(), "", 1)
+	require.ErrorContains(t, err, "unmarshal semantic nodes")
+}
+
+func TestToolClient_Call_RPCAndResultErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantErr string
+	}{
+		{name: "RPC error", body: `{"jsonrpc":"2.0","id":1,"error":{"code":-1,"message":"denied"}}`, wantErr: "tool RPC error -1: denied"},
+		{name: "invalid result", body: `{"jsonrpc":"2.0","id":1,"result":"invalid"}`, wantErr: "unmarshal tool result"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			_, err := NewToolClient(srv.URL).Call(context.Background(), "tool", nil, "", "")
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
