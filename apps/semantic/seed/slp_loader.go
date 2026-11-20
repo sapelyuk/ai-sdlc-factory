@@ -54,6 +54,11 @@ func LoadSLPv0(ctx context.Context, pool *pgxpool.Pool, workspaceID uuid.UUID) (
 		return 0, fmt.Errorf("SLP must declare apiVersion ai-sdlc-factory/v1 and kind SLP")
 	}
 
+	return loadSLPv0(ctx, pool, workspaceID, doc)
+}
+
+func loadSLPv0(ctx context.Context, pool seedPool, workspaceID uuid.UUID, doc SLPCoreDoc) (int, error) {
+
 	tenantCtx := identity.WithTenant(ctx, workspaceID, workspaceID)
 
 	count := 0
@@ -139,8 +144,13 @@ func findSLPFile() (string, error) {
 	return "", fmt.Errorf("could not locate slp-core.yaml; set SLP_PATH")
 }
 
+// seedPool abstracts pgxpool.Pool methods used by the seed loader.
+type seedPool interface {
+	Begin(context.Context) (pgx.Tx, error)
+}
+
 // inSeedTx runs a function in a transaction with RLS context set.
-func inSeedTx(ctx context.Context, pool *pgxpool.Pool, workspaceID uuid.UUID, fn func(pgx.Tx) error) error {
+func inSeedTx(ctx context.Context, pool seedPool, workspaceID uuid.UUID, fn func(pgx.Tx) error) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin seed transaction: %w", err)
