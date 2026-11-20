@@ -3,7 +3,6 @@
 # the tests. Stale entries generate a CI warning. See CONTRIBUTING.md.
 # Format: <import-path> # <issue-ref> - <reason>
 github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/identity # #147 - legacy gap, 66.7%
-github.com/sapelyuk/ai-sdlc-factory/apps/api/internal/repository/postgres # #147 - integration-only, no unit tests
 github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/identity # #149 - integration-only, no unit tests
 github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/repository # #149 - integration-only, no unit tests
 github.com/sapelyuk/ai-sdlc-factory/apps/semantic/internal/config # #148 - integration-only, no unit tests
