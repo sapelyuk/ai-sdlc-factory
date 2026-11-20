@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/testcontainers/testcontainers-go"
 	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
@@ -22,48 +25,105 @@ import (
 func StartPostgres(t *testing.T, dbName string, migrations []string) *pgxpool.Pool {
 	t.Helper()
 
-	if output, err := exec.CommandContext(t.Context(), "docker", "info").CombinedOutput(); err != nil {
+	pool, err := startPostgresWithDockerCheck(t, dbName, migrations, func(ctx context.Context) ([]byte, error) {
+		return exec.CommandContext(ctx, "docker", "info").CombinedOutput()
+	}, postgresRuntime{
+		run: func(ctx context.Context, name string) (postgresContainer, error) {
+			return postgrescontainer.Run(ctx, "pgvector/pgvector:pg18",
+				postgrescontainer.WithDatabase(name),
+				postgrescontainer.WithUsername(name),
+				postgrescontainer.WithPassword(name),
+				postgrescontainer.BasicWaitStrategies(),
+			)
+		},
+		newPool: func(ctx context.Context, dsn string) (postgresPool, error) {
+			return pgxpool.New(ctx, dsn)
+		},
+		readFile: os.ReadFile,
+		repoRoot: repoRoot,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pgxPool, ok := pool.(*pgxpool.Pool)
+	if !ok {
+		t.Fatalf("unexpected PostgreSQL pool type %T", pool)
+	}
+	return pgxPool
+}
+
+// postgresContainer abstracts the testcontainers postgres container.
+type postgresContainer interface {
+	Terminate(context.Context, ...testcontainers.TerminateOption) error
+	ConnectionString(context.Context, ...string) (string, error)
+}
+
+// postgresPool abstracts pgxpool.Pool methods used by StartPostgres.
+type postgresPool interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Close()
+}
+
+// postgresRuntime abstracts the container runtime (docker API surface).
+type postgresRuntime struct {
+	run      func(context.Context, string) (postgresContainer, error)
+	newPool  func(context.Context, string) (postgresPool, error)
+	readFile func(string) ([]byte, error)
+	repoRoot func(*testing.T) string
+}
+
+func startPostgresWithDockerCheck(
+	t *testing.T,
+	dbName string,
+	migrations []string,
+	dockerInfo func(context.Context) ([]byte, error),
+	runtime postgresRuntime,
+) (postgresPool, error) {
+	t.Helper()
+
+	if output, err := dockerInfo(t.Context()); err != nil {
 		if ci := os.Getenv("CI"); ci != "" && ci != "false" {
-			t.Fatalf("Docker required for integration test: %s", strings.TrimSpace(string(output)))
+			return nil, fmt.Errorf("docker required for integration test: %s", strings.TrimSpace(string(output)))
 		}
 		t.Skipf("Docker unavailable; skipping: %s", strings.TrimSpace(string(output)))
 	}
 
+	return startPostgres(t, dbName, migrations, runtime)
+}
+
+func startPostgres(t *testing.T, dbName string, migrations []string, runtime postgresRuntime) (postgresPool, error) {
+	t.Helper()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
-	container, err := postgrescontainer.Run(ctx, "pgvector/pgvector:pg18",
-		postgrescontainer.WithDatabase(dbName),
-		postgrescontainer.WithUsername(dbName),
-		postgrescontainer.WithPassword(dbName),
-		postgrescontainer.BasicWaitStrategies(),
-	)
+	container, err := runtime.run(ctx, dbName)
 	if err != nil {
-		t.Fatalf("failed to start PostgreSQL container: %v", err)
+		return nil, fmt.Errorf("failed to start PostgreSQL container: %w", err)
 	}
 	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
 
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	pool, err := pgxpool.New(ctx, dsn)
+	pool, err := runtime.newPool(ctx, dsn)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	t.Cleanup(pool.Close)
 
-	migrationsDir := repoRoot(t)
+	migrationsDir := runtime.repoRoot(t)
 	for _, name := range migrations {
-		contents, err := os.ReadFile(filepath.Join(migrationsDir, "migrations", "postgres", name))
+		contents, err := runtime.readFile(filepath.Join(migrationsDir, "migrations", "postgres", name))
 		if err != nil {
-			t.Fatalf("read migration %s: %v", name, err)
+			return nil, fmt.Errorf("read migration %s: %w", name, err)
 		}
 		if _, err := pool.Exec(ctx, string(contents)); err != nil {
-			t.Fatalf("apply migration %s: %v", name, err)
+			return nil, fmt.Errorf("apply migration %s: %w", name, err)
 		}
 	}
-	return pool
+	return pool, nil
 }
 
 // repoRoot walks up the directory tree to find the repository root.
