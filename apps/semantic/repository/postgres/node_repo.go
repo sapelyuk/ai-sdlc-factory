@@ -14,11 +14,15 @@ import (
 
 // NodeRepository provides data access for sem_nodes.
 type NodeRepository struct {
-	pool *pgxpool.Pool
+	pool tenantPool
 }
 
 // NewNodeRepository creates a new NodeRepository.
 func NewNodeRepository(pool *pgxpool.Pool) *NodeRepository {
+	return newNodeRepository(pool)
+}
+
+func newNodeRepository(pool tenantPool) *NodeRepository {
 	return &NodeRepository{pool: pool}
 }
 
