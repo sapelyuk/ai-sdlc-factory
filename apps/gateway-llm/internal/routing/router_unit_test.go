@@ -306,6 +306,9 @@ func TestRouterFallbackOn429_WithCooldown(t *testing.T) {
 	if h.CooldownUntil == nil {
 		t.Fatal("cooldown_until is nil, want a cooldown window")
 	}
+	if !h.IsCoolingDown(time.Now().UTC()) {
+		t.Errorf("cooldown_until = %v, want a timestamp in the future", *h.CooldownUntil)
+	}
 	if h.LastErrorType == nil || *h.LastErrorType != "failed_429" {
 		t.Errorf("last_error_type = %v, want failed_429", h.LastErrorType)
 	}
