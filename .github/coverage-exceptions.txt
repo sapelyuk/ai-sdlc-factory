@@ -2,4 +2,4 @@
 # When a package reaches >= 80%, remove its entry in the same PR that adds
 # the tests. Stale entries generate a CI warning. See CONTRIBUTING.md.
 # Format: <import-path> # <issue-ref> - <reason>
-github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/repository # #149 - integration-only, no unit tests
+github.com/sapelyuk/ai-sdlc-factory/apps/gateway-llm/internal/repository # #154 - deferred to -coverpkg spike (see #149 for legacy scope)
