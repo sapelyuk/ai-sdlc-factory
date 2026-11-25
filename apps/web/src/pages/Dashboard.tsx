@@ -26,8 +26,11 @@ export function Dashboard() {
               This is the Web UI scaffold for the ai-sdlc-factory platform.
             </p>
             <div className="flex gap-2 pt-2">
+              <Link to="/board">
+                <Button>Board</Button>
+              </Link>
               <Link to="/registry/roles">
-                <Button>Roles</Button>
+                <Button variant="outline">Roles</Button>
               </Link>
               <Link to="/registry/teams">
                 <Button variant="outline">Teams</Button>
