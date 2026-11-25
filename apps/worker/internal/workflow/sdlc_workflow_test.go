@@ -109,7 +109,10 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_NoGate_BackwardCompat() {
 	// TaskRunWorkflow .Once() expectation already guards the positive case in
 	// AfterTest; AssertWorkflowNumberOfCalls states it explicitly.
 	s.env.AssertWorkflowNumberOfCalls(s.T(), "TaskRunWorkflow", 1)
-	s.env.AssertNotCalled(s.T(), "ChainWorkflow", mock.Anything, mock.Anything)
+	// AssertWorkflowNotCalled, not AssertNotCalled: only the former consults
+	// the workflow mock registry, so it is the assertion that actually fails
+	// when a child workflow is started (issue #135 review blocker).
+	s.env.AssertWorkflowNotCalled(s.T(), "ChainWorkflow", mock.Anything, mock.Anything)
 }
 
 // TestSDLCWorkflow_WithGate_GoesThroughChainWorkflow verifies that when Gate
@@ -139,8 +142,9 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_WithGate_GoesThroughChainWorkflow()
 	// TaskRunWorkflow directly. Previously the test relied on TaskRunWorkflow
 	// being unregistered, so the Temporal test SDK would fail on an unexpected
 	// child call; that is implicit and breaks if a future suite registers a
-	// global TaskRunWorkflow mock. The explicit trap plus AssertNotCalled below
-	// keeps the regression caught regardless of suite setup (issue #135, gap 1).
+	// global TaskRunWorkflow mock. The explicit trap plus AssertWorkflowNotCalled
+	// below keeps the regression caught regardless of suite setup (issue #135,
+	// gap 1).
 	s.env.OnWorkflow(TaskRunWorkflow, mock.Anything, mock.Anything).
 		Return((*TaskRunResult)(nil), errors.New("direct path must not be taken")).Maybe()
 
@@ -182,8 +186,10 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_WithGate_GoesThroughChainWorkflow()
 	// Explicit negative assertion (issue #135, gap 1): the gated path must not
 	// start TaskRunWorkflow directly. The ChainWorkflow mock was set with
 	// .Once(); AssertExpectations in AfterTest verifies it was consumed, and
-	// AssertNotCalled states the direct-path-bypass expectation explicitly.
-	s.env.AssertNotCalled(s.T(), "TaskRunWorkflow", mock.Anything, mock.Anything)
+	// AssertWorkflowNotCalled states the direct-path-bypass expectation
+	// explicitly. AssertNotCalled would not do it: it is decorative because it
+	// does not consult the workflow mock registry (issue #135 review blocker).
+	s.env.AssertWorkflowNotCalled(s.T(), "TaskRunWorkflow", mock.Anything, mock.Anything)
 }
 
 // TestSDLCWorkflow_FailingGate_BlocksTransition verifies that when
@@ -323,6 +329,7 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_WithGate_RegistryResolvedTeam() {
 	s.NoError(s.env.GetWorkflowError())
 
 	s.Require().NotNil(capturedInput, "ChainWorkflow must have been called")
+	s.Require().NotNil(capturedInput.Team, "ChainInput.Team must be populated from SDLCInput.Team")
 	s.Equal("team-registry-1", capturedInput.Team.ID)
 	s.Require().Len(capturedInput.Team.Members, 1)
 	// The registry-derived ToolsPolicy propagated all the way into ChainInput.
@@ -330,5 +337,5 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_WithGate_RegistryResolvedTeam() {
 	s.NotNil(capturedInput.Team.Lead)
 	s.Equal("agent-dev", capturedInput.Team.Lead.AgentID)
 
-	s.env.AssertNotCalled(s.T(), "TaskRunWorkflow", mock.Anything, mock.Anything)
+	s.env.AssertWorkflowNotCalled(s.T(), "TaskRunWorkflow", mock.Anything, mock.Anything)
 }
