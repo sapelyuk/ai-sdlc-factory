@@ -35,6 +35,12 @@ type ReviewMatrixSpec struct {
 // TeamSpec is the worker-side mirror of a registry Team.spec. Only the fields
 // that project into TeamConfig are carried; budget and knowledge scopes are
 // enforced elsewhere (budgets by ChainWorkflow, scopes by the context builder).
+//
+// It is a one-way projection, not a round-trip-safe model of
+// team.schema.json: it silently drops the schema-required "description" field
+// and the optional "process_ref", and it carries neither "budget" nor any
+// future field. Do not use it to write a team back to the registry; read the
+// registry payload with the API domain types for that.
 type TeamSpec struct {
 	Topology     string           `json:"topology"`
 	Members      []TeamMemberSpec `json:"members"`
@@ -49,6 +55,12 @@ type TeamSpec struct {
 // roles by Name, so the caller supplies the name alongside the spec. ToolsPolicy
 // is propagated from here onto TeamMember.ToolsPolicy, which ChainWorkflow reads
 // into TaskRunInput.ToolsPolicy (issue #133 sanitize phase, issue #135).
+//
+// Profile is not part of the registry payload: neither domain.RoleSpec nor
+// role.schema.json has a "profile" field, so unmarshalling a registry role never
+// populates it. It is caller-derived from spec.model.capability (the capability
+// enum in role.schema.json, e.g. "code-fast") and exists here only so the caller
+// can pass the already-mapped value through to TeamMember.Profile.
 type RoleSpec struct {
 	Name        string `json:"name"`
 	Profile     string `json:"profile,omitempty"`
