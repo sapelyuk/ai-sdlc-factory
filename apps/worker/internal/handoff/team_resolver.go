@@ -91,6 +91,13 @@ var (
 	ErrDuplicateAgent = errors.New("handoff: duplicate agent id in team")
 	// ErrLeadRequired is returned when an orchestrated team has no single lead.
 	ErrLeadRequired = errors.New("handoff: orchestrated team requires exactly one lead")
+	// ErrInvalidRequiredReviewers is returned when review_matrix.required_reviewers
+	// is below the schema minimum of 1 (team.schema.json).
+	ErrInvalidRequiredReviewers = errors.New("handoff: review_matrix.required_reviewers must be >= 1")
+	// ErrNegativeMemberCount is returned when a team declares a negative member
+	// count. The registry schema requires count >= 1 (team.schema.json); zero is
+	// only the omitted-field default and is normalized to 1.
+	ErrNegativeMemberCount = errors.New("handoff: member count must be >= 1")
 )
 
 // ResolveTeamConfig projects a registry TeamSpec plus its role specs and the
@@ -98,7 +105,8 @@ var (
 //
 // It is a pure function: no database, no NATS, no Temporal. Validation failures
 // (unknown role, empty team, specification desync, unsupported topology,
-// missing lead) are returned as errors.
+// missing lead, invalid review matrix, negative member count) are returned as
+// errors.
 //
 // ToolsPolicy propagation is the core of issue #135 gap 2: each resolved member
 // copies ToolsPolicy from the role spec that matches its role name, so the
@@ -110,6 +118,12 @@ func ResolveTeamConfig(teamID string, spec TeamSpec, roles []RoleSpec, agents []
 	}
 	if len(spec.Members) == 0 {
 		return nil, ErrEmptyMembers
+	}
+	// review_matrix.required_reviewers is required by team.schema.json with
+	// minimum 1, so a value below 1 is an invalid registry payload, not a
+	// "no reviews needed" shortcut.
+	if spec.ReviewMatrix.RequiredReviewers < 1 {
+		return nil, fmt.Errorf("%w: got %d", ErrInvalidRequiredReviewers, spec.ReviewMatrix.RequiredReviewers)
 	}
 	// Reuse RouterFor as the single source of truth for routable topologies:
 	// a topology the worker cannot route must never reach a TeamConfig.
@@ -141,8 +155,14 @@ func ResolveTeamConfig(teamID string, spec TeamSpec, roles []RoleSpec, agents []
 		if _, ok := roleByName[member.RoleName]; !ok {
 			return nil, fmt.Errorf("%w: %s", ErrUnknownRole, member.RoleName)
 		}
+		// count is minimum 1 in team.schema.json; zero is only the default for
+		// an omitted field. A negative value is an invalid payload and must not
+		// be coerced into a one-member role.
+		if member.Count < 0 {
+			return nil, fmt.Errorf("%w: role %q declares %d", ErrNegativeMemberCount, member.RoleName, member.Count)
+		}
 		count := member.Count
-		if count <= 0 {
+		if count == 0 {
 			count = 1
 		}
 		entry, ok := declaredRoles[member.RoleName]

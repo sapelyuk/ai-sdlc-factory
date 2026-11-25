@@ -121,6 +121,7 @@ func TestResolveTeamConfig_DefaultCount(t *testing.T) {
 		Members: []TeamMemberSpec{
 			{RoleName: "analyst", Count: 0},
 		},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	roles := []RoleSpec{{Name: "analyst"}}
 	agents := []MemberAgent{{AgentID: "a1", RoleName: "analyst"}}
@@ -130,8 +131,9 @@ func TestResolveTeamConfig_DefaultCount(t *testing.T) {
 
 	// Count=2 should reject a single agent.
 	spec2 := TeamSpec{
-		Topology: "sequential",
-		Members:  []TeamMemberSpec{{RoleName: "analyst", Count: 2}},
+		Topology:     "sequential",
+		Members:      []TeamMemberSpec{{RoleName: "analyst", Count: 2}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	agents2 := []MemberAgent{{AgentID: "a1", RoleName: "analyst"}}
 	_, err = ResolveTeamConfig("team-dc2", spec2, roles, agents2)
@@ -140,21 +142,29 @@ func TestResolveTeamConfig_DefaultCount(t *testing.T) {
 
 // TestResolveTeamConfig_EmptyTeamID.
 func TestResolveTeamConfig_EmptyTeamID(t *testing.T) {
-	spec := TeamSpec{Topology: "sequential", Members: []TeamMemberSpec{{RoleName: "x"}}}
+	spec := TeamSpec{
+		Topology:     "sequential",
+		Members:      []TeamMemberSpec{{RoleName: "x"}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
+	}
 	_, err := ResolveTeamConfig("", spec, nil, nil)
 	assert.ErrorIs(t, err, ErrEmptyTeamID)
 }
 
 // TestResolveTeamConfig_EmptyMembers.
 func TestResolveTeamConfig_EmptyMembers(t *testing.T) {
-	spec := TeamSpec{Topology: "sequential"}
+	spec := TeamSpec{Topology: "sequential", ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1}}
 	_, err := ResolveTeamConfig("t1", spec, nil, nil)
 	assert.ErrorIs(t, err, ErrEmptyMembers)
 }
 
 // TestResolveTeamConfig_UnsupportedTopology.
 func TestResolveTeamConfig_UnsupportedTopology(t *testing.T) {
-	spec := TeamSpec{Topology: "collaborative", Members: []TeamMemberSpec{{RoleName: "x"}}}
+	spec := TeamSpec{
+		Topology:     "collaborative",
+		Members:      []TeamMemberSpec{{RoleName: "x"}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
+	}
 	_, err := ResolveTeamConfig("t1", spec, nil, nil)
 	assert.Error(t, err)
 }
@@ -162,8 +172,9 @@ func TestResolveTeamConfig_UnsupportedTopology(t *testing.T) {
 // TestResolveTeamConfig_UnknownRole.
 func TestResolveTeamConfig_UnknownRole(t *testing.T) {
 	spec := TeamSpec{
-		Topology: "sequential",
-		Members:  []TeamMemberSpec{{RoleName: "unknown-role"}},
+		Topology:     "sequential",
+		Members:      []TeamMemberSpec{{RoleName: "unknown-role"}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	roles := []RoleSpec{{Name: "known-role"}}
 	agents := []MemberAgent{{AgentID: "a1", RoleName: "unknown-role"}}
@@ -175,8 +186,9 @@ func TestResolveTeamConfig_UnknownRole(t *testing.T) {
 // TestResolveTeamConfig_DuplicateAgent.
 func TestResolveTeamConfig_DuplicateAgent(t *testing.T) {
 	spec := TeamSpec{
-		Topology: "sequential",
-		Members:  []TeamMemberSpec{{RoleName: "x", Count: 2}},
+		Topology:     "sequential",
+		Members:      []TeamMemberSpec{{RoleName: "x", Count: 2}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	roles := []RoleSpec{{Name: "x"}}
 	agents := []MemberAgent{
@@ -191,8 +203,9 @@ func TestResolveTeamConfig_DuplicateAgent(t *testing.T) {
 // TestResolveTeamConfig_AgentCountMismatch.
 func TestResolveTeamConfig_AgentCountMismatch(t *testing.T) {
 	spec := TeamSpec{
-		Topology: "sequential",
-		Members:  []TeamMemberSpec{{RoleName: "x", Count: 2}},
+		Topology:     "sequential",
+		Members:      []TeamMemberSpec{{RoleName: "x", Count: 2}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	roles := []RoleSpec{{Name: "x"}}
 	agents := []MemberAgent{{AgentID: "a1", RoleName: "x"}}
@@ -204,8 +217,9 @@ func TestResolveTeamConfig_AgentCountMismatch(t *testing.T) {
 // TestResolveTeamConfig_MemberWithoutAgent.
 func TestResolveTeamConfig_MemberWithoutAgent(t *testing.T) {
 	spec := TeamSpec{
-		Topology: "sequential",
-		Members:  []TeamMemberSpec{{RoleName: "x"}},
+		Topology:     "sequential",
+		Members:      []TeamMemberSpec{{RoleName: "x"}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	roles := []RoleSpec{{Name: "x"}}
 	agents := []MemberAgent{} // no agents for declared role
@@ -219,8 +233,9 @@ func TestResolveTeamConfig_MemberWithoutAgent(t *testing.T) {
 // exists in the registry specs but is absent from TeamSpec.members.
 func TestResolveTeamConfig_AgentNotInTeam(t *testing.T) {
 	spec := TeamSpec{
-		Topology: "sequential",
-		Members:  []TeamMemberSpec{{RoleName: "x"}},
+		Topology:     "sequential",
+		Members:      []TeamMemberSpec{{RoleName: "x"}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	roles := []RoleSpec{{Name: "x"}, {Name: "y"}}
 	agents := []MemberAgent{{AgentID: "a1", RoleName: "y"}}
@@ -233,8 +248,9 @@ func TestResolveTeamConfig_AgentNotInTeam(t *testing.T) {
 // exactly one lead, and sequential teams accept zero leads.
 func TestResolveTeamConfig_LeadRequired(t *testing.T) {
 	spec := TeamSpec{
-		Topology: "orchestrated",
-		Members:  []TeamMemberSpec{{RoleName: "x"}},
+		Topology:     "orchestrated",
+		Members:      []TeamMemberSpec{{RoleName: "x"}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	roles := []RoleSpec{{Name: "x"}}
 	agents := []MemberAgent{{AgentID: "a1", RoleName: "x"}} // no lead
@@ -248,8 +264,9 @@ func TestResolveTeamConfig_LeadRequired(t *testing.T) {
 		{AgentID: "a2", RoleName: "x", Lead: true},
 	}
 	spec2 := TeamSpec{
-		Topology: "orchestrated",
-		Members:  []TeamMemberSpec{{RoleName: "x", Count: 2}},
+		Topology:     "orchestrated",
+		Members:      []TeamMemberSpec{{RoleName: "x", Count: 2}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	_, err = ResolveTeamConfig("t2", spec2, roles, agents2)
 	assert.ErrorIs(t, err, ErrLeadRequired)
@@ -259,8 +276,9 @@ func TestResolveTeamConfig_LeadRequired(t *testing.T) {
 // works fine without a lead.
 func TestResolveTeamConfig_SequentialNoLead(t *testing.T) {
 	spec := TeamSpec{
-		Topology: "sequential",
-		Members:  []TeamMemberSpec{{RoleName: "x"}},
+		Topology:     "sequential",
+		Members:      []TeamMemberSpec{{RoleName: "x"}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
 	}
 	roles := []RoleSpec{{Name: "x", Profile: "code-fast", ToolsPolicy: "read_only"}}
 	agents := []MemberAgent{{AgentID: "a1", RoleName: "x"}}
@@ -269,4 +287,44 @@ func TestResolveTeamConfig_SequentialNoLead(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, team.Lead)
 	assert.Equal(t, "read_only", team.Members[0].ToolsPolicy)
+}
+
+// TestResolveTeamConfig_InvalidRequiredReviewers validates that a
+// review_matrix.required_reviewers below the team.schema.json minimum of 1 is
+// rejected instead of being silently accepted as "no reviews required".
+func TestResolveTeamConfig_InvalidRequiredReviewers(t *testing.T) {
+	roles := []RoleSpec{{Name: "x"}}
+	agents := []MemberAgent{{AgentID: "a1", RoleName: "x"}}
+
+	for _, reviewers := range []int{0, -1} {
+		spec := TeamSpec{
+			Topology:     "sequential",
+			Members:      []TeamMemberSpec{{RoleName: "x"}},
+			ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: reviewers},
+		}
+		_, err := ResolveTeamConfig("t1", spec, roles, agents)
+		require.ErrorIs(t, err, ErrInvalidRequiredReviewers, "required_reviewers=%d", reviewers)
+	}
+}
+
+// TestResolveTeamConfig_NegativeMemberCount validates that a negative member
+// count is a validation error rather than being coerced to a single member.
+// Zero stays valid: it is the schema default for an omitted count.
+func TestResolveTeamConfig_NegativeMemberCount(t *testing.T) {
+	spec := TeamSpec{
+		Topology:     "sequential",
+		Members:      []TeamMemberSpec{{RoleName: "x", Count: -1}},
+		ReviewMatrix: ReviewMatrixSpec{RequiredReviewers: 1},
+	}
+	roles := []RoleSpec{{Name: "x"}}
+	agents := []MemberAgent{{AgentID: "a1", RoleName: "x"}}
+
+	_, err := ResolveTeamConfig("t1", spec, roles, agents)
+	require.ErrorIs(t, err, ErrNegativeMemberCount)
+
+	// The zero default still resolves to one member.
+	spec.Members[0].Count = 0
+	team, err := ResolveTeamConfig("t2", spec, roles, agents)
+	require.NoError(t, err)
+	require.Len(t, team.Members, 1)
 }
