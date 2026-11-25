@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -75,6 +76,17 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_NoGate_BackwardCompat() {
 	s.env.OnWorkflow(TaskRunWorkflow, mock.Anything, mock.Anything).
 		Return(&TaskRunResult{Handoff: expectedHandoff, TotalCostUSD: 0.01}, nil).Once()
 
+	// Register ChainWorkflow as an optional trap. The no-gate path must never
+	// route through it. Marking it optional keeps AssertExpectations green when
+	// it is not called, while the explicit AssertWorkflowNotCalled below makes
+	// the "never called" expectation part of the test rather than an implicit
+	// consequence of ChainWorkflow being unregistered (issue #135, gap 1).
+	// AssertNotCalled would not do it: it does not consult the workflow mock
+	// registry, so it is decorative for child workflows (issue #135 review
+	// blocker).
+	s.env.OnWorkflow(ChainWorkflow, mock.Anything, mock.Anything).
+		Return((*ChainResult)(nil), errors.New("chain path must not be taken")).Maybe()
+
 	input := SDLCInput{
 		TaskRunID:         "sdlc-nogate-1",
 		WorkspaceID:       uuid.MustParse("11111111-1111-4111-8111-111111111111"),
@@ -95,9 +107,15 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_NoGate_BackwardCompat() {
 	s.Require().NotNil(result)
 	s.Equal("SDLC done", result.Goal)
 
-	// The mock was set with .Once(); AssertExpectations in AfterTest verifies
-	// it was consumed exactly once. ChainWorkflow is not mocked here, so if
-	// it had been called the test would have panicked.
+	// Explicit inverse assertions (issue #135, gap 1): the no-gate path calls
+	// TaskRunWorkflow exactly once and never calls ChainWorkflow. The
+	// TaskRunWorkflow .Once() expectation already guards the positive case in
+	// AfterTest; AssertWorkflowNumberOfCalls states it explicitly.
+	s.env.AssertWorkflowNumberOfCalls(s.T(), "TaskRunWorkflow", 1)
+	// AssertWorkflowNotCalled, not AssertNotCalled: only the former consults
+	// the workflow mock registry, so it is the assertion that actually fails
+	// when a child workflow is started (issue #135 review blocker).
+	s.env.AssertWorkflowNotCalled(s.T(), "ChainWorkflow", mock.Anything, mock.Anything)
 }
 
 // TestSDLCWorkflow_WithGate_GoesThroughChainWorkflow verifies that when Gate
@@ -121,6 +139,17 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_WithGate_GoesThroughChainWorkflow()
 			capturedInput = &in
 		}).
 		Return(chainResult, nil).Once()
+
+	// Register TaskRunWorkflow as an optional trap returning an error. The
+	// gated path must route through ChainWorkflow and never start
+	// TaskRunWorkflow directly. Previously the test relied on TaskRunWorkflow
+	// being unregistered, so the Temporal test SDK would fail on an unexpected
+	// child call; that is implicit and breaks if a future suite registers a
+	// global TaskRunWorkflow mock. The explicit trap plus AssertWorkflowNotCalled
+	// below keeps the regression caught regardless of suite setup (issue #135,
+	// gap 1).
+	s.env.OnWorkflow(TaskRunWorkflow, mock.Anything, mock.Anything).
+		Return((*TaskRunResult)(nil), errors.New("direct path must not be taken")).Maybe()
 
 	input := SDLCInput{
 		TaskRunID:         "sdlc-gate-1",
@@ -157,9 +186,13 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_WithGate_GoesThroughChainWorkflow()
 	s.Equal(gates.GateCIGreen, capturedInput.Gate.Name)
 	s.Equal(uuid.MustParse("33333333-3333-4333-8333-333333333333"), capturedInput.RequestedBy)
 
-	// TaskRunWorkflow was not called directly — ChainWorkflow mock was
-	// consumed instead. The ChainWorkflow mock was set with .Once();
-	// AssertExpectations in AfterTest verifies it was consumed.
+	// Explicit negative assertion (issue #135, gap 1): the gated path must not
+	// start TaskRunWorkflow directly. The ChainWorkflow mock was set with
+	// .Once(); AssertExpectations in AfterTest verifies it was consumed, and
+	// AssertWorkflowNotCalled states the direct-path-bypass expectation
+	// explicitly. AssertNotCalled would not do it: it is decorative because it
+	// does not consult the workflow mock registry (issue #135 review blocker).
+	s.env.AssertWorkflowNotCalled(s.T(), "TaskRunWorkflow", mock.Anything, mock.Anything)
 }
 
 // TestSDLCWorkflow_FailingGate_BlocksTransition verifies that when
@@ -241,4 +274,71 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_GatedPathReturnsNilHandoff_Error() 
 	err := s.env.GetWorkflowError()
 	s.Require().Error(err)
 	s.Contains(err.Error(), "produced no handoff")
+}
+
+// TestSDLCWorkflow_WithGate_RegistryResolvedTeam proves the wiring path for the
+// E2E enabler (#40): a registry-shaped TeamSpec + role specs + agent
+// assignments are resolved by handoff.ResolveTeamConfig into SDLCInput.Team, and
+// the resolved ToolsPolicy reaches ChainWorkflow. The gated path still must not
+// start TaskRunWorkflow directly (issue #135, gap 2).
+func (s *SDLCWorkflowSuite) TestSDLCWorkflow_WithGate_RegistryResolvedTeam() {
+	registrySpec := handoff.TeamSpec{
+		Topology: handoff.TopologyOrchestrated,
+		Members: []handoff.TeamMemberSpec{
+			{RoleName: "software-engineer", RoleVersion: "1.0.0", Count: 1},
+		},
+		ReviewMatrix: handoff.ReviewMatrixSpec{RequiredReviewers: 1, AllowedRoles: []string{"code-reviewer"}},
+	}
+	registryRoles := []handoff.RoleSpec{
+		{Name: "software-engineer", Profile: "code-fast", ToolsPolicy: "write_capable"},
+	}
+	agentAssignments := []handoff.MemberAgent{
+		{RoleName: "software-engineer", AgentID: "agent-dev", Lead: true},
+	}
+
+	team, err := handoff.ResolveTeamConfig("team-registry-1", registrySpec, registryRoles, agentAssignments)
+	s.Require().NoError(err)
+	s.Require().Equal("write_capable", team.Members[0].ToolsPolicy)
+
+	validPkg := sdlcPkg("registry gated output")
+	var capturedInput *ChainInput
+	s.env.OnWorkflow(ChainWorkflow, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			in := args.Get(1).(ChainInput)
+			capturedInput = &in
+		}).
+		Return(&ChainResult{FinalHandoff: validPkg, TerminalAgentID: "agent-dev", Steps: 1, Gate: &GateOutcome{Passed: true}}, nil).Once()
+
+	// Direct path must not be taken.
+	s.env.OnWorkflow(TaskRunWorkflow, mock.Anything, mock.Anything).
+		Return((*TaskRunResult)(nil), errors.New("direct path must not be taken")).Maybe()
+
+	input := SDLCInput{
+		TaskRunID:         "sdlc-registry-1",
+		WorkspaceID:       uuid.MustParse("44444444-4444-4444-8444-444444444444"),
+		RunID:             "run-registry",
+		TaskID:            "task-registry",
+		AgentID:           "agent-dev",
+		Profile:           "code-fast",
+		TaskDesc:          "implement feature",
+		DefaultMaxCostUSD: 10.0,
+		DefaultMaxSteps:   50,
+		Gate:              &GateSpec{Name: gates.GateCIGreen},
+		Team:              team,
+	}
+
+	s.env.ExecuteWorkflow(SDLCWorkflow, input)
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+
+	s.Require().NotNil(capturedInput, "ChainWorkflow must have been called")
+	s.Require().NotNil(capturedInput.Team, "ChainInput.Team must be populated from SDLCInput.Team")
+	s.Equal("team-registry-1", capturedInput.Team.ID)
+	s.Require().Len(capturedInput.Team.Members, 1)
+	// The registry-derived ToolsPolicy propagated all the way into ChainInput.
+	s.Equal("write_capable", capturedInput.Team.Members[0].ToolsPolicy)
+	s.NotNil(capturedInput.Team.Lead)
+	s.Equal("agent-dev", capturedInput.Team.Lead.AgentID)
+
+	s.env.AssertWorkflowNotCalled(s.T(), "TaskRunWorkflow", mock.Anything, mock.Anything)
 }
