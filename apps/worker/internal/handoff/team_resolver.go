@@ -109,7 +109,7 @@ var (
 	// ErrNegativeMemberCount is returned when a team declares a negative member
 	// count. The registry schema requires count >= 1 (team.schema.json); zero is
 	// only the omitted-field default and is normalized to 1.
-	ErrNegativeMemberCount = errors.New("handoff: member count must be >= 1")
+	ErrNegativeMemberCount = errors.New("handoff: member count must not be negative")
 )
 
 // ResolveTeamConfig projects a registry TeamSpec plus its role specs and the

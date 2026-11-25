@@ -78,9 +78,12 @@ func (s *SDLCWorkflowSuite) TestSDLCWorkflow_NoGate_BackwardCompat() {
 
 	// Register ChainWorkflow as an optional trap. The no-gate path must never
 	// route through it. Marking it optional keeps AssertExpectations green when
-	// it is not called, while the explicit AssertNotCalled below makes the
-	// "never called" expectation part of the test rather than an implicit
+	// it is not called, while the explicit AssertWorkflowNotCalled below makes
+	// the "never called" expectation part of the test rather than an implicit
 	// consequence of ChainWorkflow being unregistered (issue #135, gap 1).
+	// AssertNotCalled would not do it: it does not consult the workflow mock
+	// registry, so it is decorative for child workflows (issue #135 review
+	// blocker).
 	s.env.OnWorkflow(ChainWorkflow, mock.Anything, mock.Anything).
 		Return((*ChainResult)(nil), errors.New("chain path must not be taken")).Maybe()
 
