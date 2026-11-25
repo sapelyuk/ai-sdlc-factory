@@ -88,14 +88,24 @@ export function createFixtureBoardClient(seed: readonly Run[] = FIXTURE_RUNS): B
 /**
  * HTTP implementation of the same seam. It is not wired in yet: the runs
  * read/transition endpoints do not exist and their contract lands in #163.
- * Paths below are provisional and must follow that contract.
+ * Paths are injected by the caller so that no endpoint is hard-coded here
+ * before the contract exists.
  */
-export function createHttpBoardClient(baseUrl?: string): BoardClient {
-  const base = () => baseUrl ?? (import.meta.env.VITE_API_URL || '/api')
+export interface HttpBoardClientOptions {
+  /** Base URL of the platform API; defaults to VITE_API_URL or /api. */
+  baseUrl?: string
+  /** Path of the runs collection, taken from the #163 contract. */
+  runsPath: string
+  /** Builds the transition request path for a run, taken from the #163 contract. */
+  transitionPath: (runId: string) => string
+}
+
+export function createHttpBoardClient(options: HttpBoardClientOptions): BoardClient {
+  const base = options.baseUrl ?? (import.meta.env.VITE_API_URL || '/api')
 
   return {
     async listRuns(token: string): Promise<Run[]> {
-      const response = await fetch(`${base()}/v1/runs`, {
+      const response = await fetch(`${base}${options.runsPath}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
 
@@ -110,7 +120,7 @@ export function createHttpBoardClient(baseUrl?: string): BoardClient {
     },
 
     async recordTransition(token: string, runId: string, to: RunStatus): Promise<Run> {
-      const response = await fetch(`${base()}/v1/runs/${runId}/transitions`, {
+      const response = await fetch(`${base}${options.transitionPath(runId)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

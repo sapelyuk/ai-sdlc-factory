@@ -64,6 +64,12 @@ describe('fixture board client', () => {
 })
 
 describe('HTTP board client', () => {
+  const HTTP_OPTS = {
+    baseUrl: '/api',
+    runsPath: '/v1/runs',
+    transitionPath: (runId: string) => `/v1/runs/${runId}/transitions`,
+  }
+
   beforeEach(() => {
     useAuthStore.getState().setAuth('expired-token', {
       id: '1',
@@ -85,7 +91,7 @@ describe('HTTP board client', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const runs = await createHttpBoardClient('/api').listRuns('token-1')
+    const runs = await createHttpBoardClient(HTTP_OPTS).listRuns('token-1')
 
     expect(runs).toEqual([IN_DEV_RUN])
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/runs', {
@@ -96,7 +102,7 @@ describe('HTTP board client', () => {
   it('clears auth when listing runs responds with 401', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })))
 
-    await expect(createHttpBoardClient('/api').listRuns('expired-token')).rejects.toThrow('HTTP 401')
+    await expect(createHttpBoardClient(HTTP_OPTS).listRuns('expired-token')).rejects.toThrow('HTTP 401')
     expect(useAuthStore.getState().token).toBeNull()
     expect(useAuthStore.getState().user).toBeNull()
   })
@@ -104,7 +110,7 @@ describe('HTTP board client', () => {
   it('propagates other list errors without clearing auth', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 500 })))
 
-    await expect(createHttpBoardClient('/api').listRuns('expired-token')).rejects.toThrow('HTTP 500')
+    await expect(createHttpBoardClient(HTTP_OPTS).listRuns('expired-token')).rejects.toThrow('HTTP 500')
     expect(useAuthStore.getState().token).toBe('expired-token')
   })
 
@@ -112,7 +118,7 @@ describe('HTTP board client', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await createHttpBoardClient().listRuns('token-1')
+    await createHttpBoardClient({ ...HTTP_OPTS, baseUrl: undefined }).listRuns('token-1')
 
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/runs', {
       headers: { Authorization: 'Bearer token-1' },
@@ -124,7 +130,7 @@ describe('HTTP board client', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(updated), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await createHttpBoardClient('/api').recordTransition(
+    const result = await createHttpBoardClient(HTTP_OPTS).recordTransition(
       'token-1',
       IN_DEV_RUN.id,
       'code_review',
@@ -145,7 +151,7 @@ describe('HTTP board client', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })))
 
     await expect(
-      createHttpBoardClient('/api').recordTransition('expired-token', IN_DEV_RUN.id, 'code_review'),
+      createHttpBoardClient(HTTP_OPTS).recordTransition('expired-token', IN_DEV_RUN.id, 'code_review'),
     ).rejects.toThrow('HTTP 401')
     expect(useAuthStore.getState().token).toBeNull()
   })
@@ -154,7 +160,7 @@ describe('HTTP board client', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 422 })))
 
     await expect(
-      createHttpBoardClient('/api').recordTransition('expired-token', IN_DEV_RUN.id, 'code_review'),
+      createHttpBoardClient(HTTP_OPTS).recordTransition('expired-token', IN_DEV_RUN.id, 'code_review'),
     ).rejects.toThrow('HTTP 422')
     expect(useAuthStore.getState().token).toBe('expired-token')
   })
