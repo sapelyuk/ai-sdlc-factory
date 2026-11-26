@@ -1,0 +1,158 @@
+{
+  "version": "1.0",
+  "description": "Authoritative machine-readable SDLC state machine of ai-sdlc-factory: the 15 runs.status states and the 15 legal transitions between them. State order is the order of the runs.status CHECK constraint in migrations/postgres/0002_init_tasks_and_sdlc.up.sql. docs/architecture/SDLC_STATE_MACHINE.md section 3 mirrors this file and the migration tests fail when the two drift. Initiators: run_workflow (advanced by the run workflow), human_approval (a decision recorded in the approval queue), external_evidence (a fact produced outside the platform, for example CI result or deploy healthcheck), scheduled (a time-based trigger). Error semantics: error.status is always stay_in_state (a rejected transition never moves the run), error.audit is always true (every rejected attempt is written to audit_log), error.escalation is none, max_rounds (the review loop reached max_rounds, section 7) or max_steps_or_cost (the workflow passed its step or budget limit, section 6). Every transition is additionally bounded by the StageRun deadline and the circuit breakers of section 7.",
+  "states": [
+    { "id": "idea", "label": "Idea" },
+    { "id": "research", "label": "Research" },
+    { "id": "requirements", "label": "Requirements" },
+    { "id": "requirements_review", "label": "RequirementsReview" },
+    { "id": "design", "label": "Design" },
+    { "id": "architecture", "label": "Architecture" },
+    { "id": "architecture_review", "label": "ArchitectureReview" },
+    { "id": "planning", "label": "Planning" },
+    { "id": "in_dev", "label": "InDev" },
+    { "id": "code_review", "label": "CodeReview" },
+    { "id": "qa", "label": "QA" },
+    { "id": "build", "label": "Build" },
+    { "id": "release", "label": "Release" },
+    { "id": "deploy", "label": "Deploy" },
+    { "id": "monitoring", "label": "Monitoring" }
+  ],
+  "transitions": [
+    {
+      "id": "3.1",
+      "from": "idea",
+      "to": "research",
+      "initiator": "run_workflow",
+      "gate": null,
+      "condition": "Run started with the owner goal; the problem description is captured (section 2).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.2",
+      "from": "research",
+      "to": "requirements",
+      "initiator": "run_workflow",
+      "gate": null,
+      "condition": "Research report produced from the hypothesis; findings recorded (section 2).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.3",
+      "from": "requirements",
+      "to": "requirements_review",
+      "initiator": "run_workflow",
+      "gate": null,
+      "condition": "PRD, SLPr v1 and user stories produced (section 2).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.4",
+      "from": "requirements_review",
+      "to": "design",
+      "initiator": "human_approval",
+      "gate": "requirements_approved",
+      "condition": "requirements_approved gate passes: approve plus resolved comments (section 4). A rejection returns the notes to the PM.",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "none" }
+    },
+    {
+      "id": "3.5",
+      "from": "design",
+      "to": "architecture",
+      "initiator": "run_workflow",
+      "gate": null,
+      "condition": "Mockups and prototypes produced (section 2).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.6",
+      "from": "architecture",
+      "to": "architecture_review",
+      "initiator": "run_workflow",
+      "gate": "semantic_valid",
+      "condition": "AM v1, C4 diagrams and ADR produced (section 2); the AM change passes the semantic_valid inference rules (section 4).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.7",
+      "from": "architecture_review",
+      "to": "planning",
+      "initiator": "human_approval",
+      "gate": "architecture_approved",
+      "condition": "architecture_approved gate passes: approve plus a valid AM (section 4). A rejection returns the notes to the architect.",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "none" }
+    },
+    {
+      "id": "3.8",
+      "from": "planning",
+      "to": "in_dev",
+      "initiator": "run_workflow",
+      "gate": null,
+      "condition": "Epics, tasks and the sprint plan produced (section 2).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.9",
+      "from": "in_dev",
+      "to": "code_review",
+      "initiator": "external_evidence",
+      "gate": "ci_green",
+      "condition": "PR opened; ci_green gate passes: all CI checks green (section 4); new code coverage >= 80%; Conventional Commits observed.",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.10",
+      "from": "code_review",
+      "to": "qa",
+      "initiator": "run_workflow",
+      "gate": "review_approved",
+      "condition": "review_approved gate passes: approval from a reviewer that is not the PR author (section 4); max_rounds=3 (section 7). Changes requested return the notes to the author.",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_rounds" }
+    },
+    {
+      "id": "3.12",
+      "from": "qa",
+      "to": "build",
+      "initiator": "run_workflow",
+      "gate": "qa_passed",
+      "condition": "qa_passed gate passes: all test levels green, coverage thresholds met, critical/high bugs closed (section 4). Critical defects or test failures block the run (section 5).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.11",
+      "from": "build",
+      "to": "release",
+      "initiator": "external_evidence",
+      "gate": "sbom_signed",
+      "condition": "Image, RC and SBOM produced (section 2); sbom_signed gate passes: SBOM present and image signed (section 4).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.15",
+      "from": "release",
+      "to": "deploy",
+      "initiator": "human_approval",
+      "gate": "prod_approved",
+      "condition": "prod_approved gate passes: human approve (R3); release notes in KB; DB migrations verified (section 4). A rejection returns the notes to the release manager.",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "none" }
+    },
+    {
+      "id": "3.13",
+      "from": "deploy",
+      "to": "monitoring",
+      "initiator": "external_evidence",
+      "gate": "deploy_healthy",
+      "condition": "deploy_healthy gate passes: healthcheck plus metrics normal (section 4).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "max_steps_or_cost" }
+    },
+    {
+      "id": "3.14",
+      "from": "monitoring",
+      "to": "research",
+      "initiator": "scheduled",
+      "gate": null,
+      "condition": "Monitoring reports produced feedback tasks; the scheduled feedback review starts the next Research cycle (feedback loop of section 1).",
+      "error": { "status": "stay_in_state", "audit": true, "escalation": "none" }
+    }
+  ]
+}

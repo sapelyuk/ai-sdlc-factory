@@ -17,5 +17,26 @@ enum RunEventType {
   RUN_EVENT_TYPE_RUN_STARTED = 1;
   RUN_EVENT_TYPE_RUN_COMPLETED = 2;
   RUN_EVENT_TYPE_RUN_FAILED = 3;
-  RUN_EVENT_TYPE_STAGE_TRANSITION = 4; // Reserved for #40.
+  // Payload: StageTransitionPayload serialized into RunEvent.payload.
+  RUN_EVENT_TYPE_STAGE_TRANSITION = 4;
+}
+
+// StageTransitionPayload is the typed payload of
+// RUN_EVENT_TYPE_STAGE_TRANSITION events. It is carried in RunEvent.payload
+// (google.protobuf.Struct) as its JSON form, so the RunEvent envelope and the
+// existing field numbers stay backward compatible.
+message StageTransitionPayload {
+  // Run and stage identifiers.
+  string run_id = 1;
+  string stage_run_id = 2;
+  // SDLC statuses from the runs.status CHECK constraint.
+  string from = 3;
+  string to = 4;
+  // Actor that caused the transition: "human:<uuid>", "agent:<uuid>",
+  // "system:<service>" or "service:<name>" (audit actor contract).
+  string actor = 5;
+  // Gate that allowed the transition; empty when the transition has no gate.
+  string gate = 6;
+  // Human-readable reason for the transition or rejection.
+  string reason = 7;
 }
