@@ -5,7 +5,9 @@ import {
   isKnownStatus,
   isLegalTransition,
   stateLabel,
+  type RunStatus,
 } from '@/lib/sdlc'
+import sdlcContract from '../../../../packages/contracts/state-machine/sdlc_transitions.json'
 
 // Values copied verbatim from the runs.status CHECK constraint in
 // migrations/postgres/0002_init_tasks_and_sdlc.up.sql.
@@ -63,26 +65,25 @@ describe('SDLC state model', () => {
     expect(stateLabel('archived')).toBe('archived')
   })
 
-  it('allows only the four transitions documented in section 3', () => {
-    expect(LEGAL_TRANSITIONS).toEqual({
-      in_dev: 'code_review',
-      code_review: 'qa',
-      qa: 'build',
-      release: 'deploy',
-    })
+  it('allows exactly the 15 transitions from the machine-readable contract', () => {
+    const expected = Object.fromEntries(
+      sdlcContract.transitions.map((transition) => [transition.from, transition.to]),
+    )
 
-    expect(isLegalTransition('in_dev', 'code_review')).toBe(true)
-    expect(isLegalTransition('code_review', 'qa')).toBe(true)
-    expect(isLegalTransition('qa', 'build')).toBe(true)
-    expect(isLegalTransition('release', 'deploy')).toBe(true)
+    expect(LEGAL_TRANSITIONS).toEqual(expected)
+    expect(Object.keys(LEGAL_TRANSITIONS)).toHaveLength(15)
+
+    for (const transition of sdlcContract.transitions) {
+      expect(isLegalTransition(transition.from as RunStatus, transition.to as RunStatus)).toBe(true)
+    }
   })
 
-  it('rejects every undocumented transition', () => {
-    expect(isLegalTransition('idea', 'research')).toBe(false)
+  it('rejects every transition outside the contract', () => {
+    expect(isLegalTransition('idea', 'design')).toBe(false)
+    expect(isLegalTransition('research', 'idea')).toBe(false)
     expect(isLegalTransition('in_dev', 'qa')).toBe(false)
     expect(isLegalTransition('code_review', 'build')).toBe(false)
-    expect(isLegalTransition('deploy', 'monitoring')).toBe(false)
-    expect(isLegalTransition('monitoring', 'research')).toBe(false)
+    expect(isLegalTransition('monitoring', 'requirements')).toBe(false)
     expect(isLegalTransition('qa', 'qa')).toBe(false)
   })
 })
