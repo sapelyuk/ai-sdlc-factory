@@ -80,7 +80,7 @@ StageRun deadline and the circuit breakers of section 7.
 | 3.11 | Build → Release | external evidence | Image, RC and SBOM produced (§2); `sbom_signed` passes: SBOM present and image signed (§4). | `sbom_signed` | Stay in Build; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
 | 3.15 | Release → Deploy | human approval | `prod_approved` passes: human approve (R3); release notes in KB; DB migrations verified (§4). A rejection returns the notes to the release manager. | `prod_approved` | Stay in Release; audit; timeout blocks; no escalation. |
 | 3.13 | Deploy → Monitoring | external evidence | `deploy_healthy` passes: healthcheck plus metrics normal (§4). | `deploy_healthy` | Stay in Deploy; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
-| 3.14 | Monitoring → Research | scheduled | Monitoring reports produced feedback tasks; the scheduled feedback review starts the next Research cycle (feedback loop of §1). | — | Stay in Monitoring; audit; no escalation. |
+| 3.14 | Monitoring → Research | scheduled | Monitoring reports produced feedback tasks; the scheduled feedback review starts the next Research cycle (same run: a new Research StageRun of the same run, not a new run; feedback loop of §1). | — | Stay in Monitoring; audit; no escalation. |
 
 Error semantics in the table are the three dimensions of the contract:
 `stay in state` (the run never moves on a rejected transition), `audit` (the

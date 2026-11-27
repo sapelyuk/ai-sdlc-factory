@@ -151,7 +151,7 @@
       "to": "research",
       "initiator": "scheduled",
       "gate": null,
-      "condition": "Monitoring reports produced feedback tasks; the scheduled feedback review starts the next Research cycle (feedback loop of section 1).",
+      "condition": "Monitoring reports produced feedback tasks; the scheduled feedback review starts the next Research cycle (same run: a new Research StageRun of the same run, not a new run; feedback loop of section 1).",
       "error": { "status": "stay_in_state", "audit": true, "escalation": "none" }
     }
   ]

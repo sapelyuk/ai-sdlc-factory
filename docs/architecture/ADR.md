@@ -525,7 +525,10 @@ that does not match the executed transition.
    one StageRun per state, not one per `Process.stages[]` entry. A
    `Process.stages` entry may map to one or several SDLC statuses; the mapping
    is deferred until the Registry exposes a process-to-SDLC mapping. That
-   mapping is the explicit revisit condition for this decision.
+   mapping is the explicit revisit condition for this decision. One SDLC state
+   may therefore have several `stage_runs` rows for the same run across
+   feedback cycles; `(run_id, status)` is not unique, ordering is by creation
+   time.
 
 **Consequences.**
 - The API is stateless with respect to run status and cannot diverge from the
