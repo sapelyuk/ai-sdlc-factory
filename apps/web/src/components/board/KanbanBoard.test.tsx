@@ -223,7 +223,7 @@ describe('KanbanBoard', () => {
 
   it('rejects an undocumented drop and keeps the card in place', async () => {
     // Uses the real fixture client: run-0001 is in_dev and in_dev -> qa is not
-    // one of the four documented transitions.
+    // one of the 15 documented transitions.
     renderBoard()
 
     const inDevColumn = await screen.findByTestId('column-in_dev')

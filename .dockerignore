@@ -1,0 +1,14 @@
+# Build context for the images defined in deploy/compose/docker-compose.yml is
+# the repository root. Keep the context small and reproducible: exclude VCS
+# data, installed dependencies and local build artifacts. Nothing listed here
+# is COPYed by any Dockerfile in the repository.
+.git
+.github
+.gigacode
+.tmp
+.semantic-indexer
+**/node_modules
+**/dist
+**/coverage
+**/coverage.txt
+**/*.exe

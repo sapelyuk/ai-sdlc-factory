@@ -465,7 +465,11 @@ services:
 
   web:
     build:
-      context: ../../apps/web
+      # The repository root is the build context: apps/web/src/lib/sdlc.ts
+      # imports packages/contracts/state-machine/sdlc_transitions.json, so the
+      # context must contain both apps/web and packages/contracts.
+      context: ../..
+      dockerfile: apps/web/Dockerfile
     container_name: ai-sdlc-factory-web
     ports:
       - "${WEB_PORT:-3000}:3000"

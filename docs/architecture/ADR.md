@@ -507,7 +507,8 @@ that does not match the executed transition.
    an additive migration in Stage 2 of #169.
 4. **Transition history comes from the audit log.** Every accepted transition
    writes an `audit_log` row with action `run_status_changed` and details
-   `{run_id, from, to, actor, gate, reason}`. There is no separate
+   `{run_id, stage_run_id, from, to, actor, gate, reason}`, aligned with the
+   `StageTransitionPayload` of `run_events.proto`. There is no separate
    `run_transitions` table. The audit log is append-only, hash-chained and
    workspace-scoped, so it already provides tamper-evident history.
 5. **Who starts a run.** The run-start endpoint lands in #163. `apps/api`

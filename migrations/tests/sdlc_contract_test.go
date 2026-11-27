@@ -172,7 +172,7 @@ func TestSDLCContractMatchesStateMachineDoc(t *testing.T) {
 	doc := readRepoFile(t, "docs/architecture/SDLC_STATE_MACHINE.md")
 
 	section3 := extractMarkdownSection(t, doc, "## 3. Transitions and conditions")
-	rowRe := regexp.MustCompile(`(?m)^\|\s*(3\.\d+)\s*\|\s*([A-Za-z]+)\s*→\s*([A-Za-z]+)\s*\|`)
+	rowRe := regexp.MustCompile(`(?m)^\|\s*(3\.\d+)\s*\|(.+)$`)
 	rows := rowRe.FindAllStringSubmatch(section3, -1)
 	require.Len(t, rows, 15, "section 3 must contain 15 transition rows")
 
@@ -181,19 +181,80 @@ func TestSDLCContractMatchesStateMachineDoc(t *testing.T) {
 		labelToID[state.Label] = state.ID
 	}
 
+	// Human-readable cells of section 3 mapped to the machine-readable values.
+	initiatorLabels := map[string]string{
+		"run workflow":                  "run_workflow",
+		"run workflow (reviewer agent)": "run_workflow",
+		"human approval":                "human_approval",
+		"external evidence":             "external_evidence",
+		"scheduled":                     "scheduled",
+	}
+	gateCellRe := regexp.MustCompile("^`([a-z_]+)`$")
+
 	type markdownTransition struct {
-		from string
-		to   string
+		from      string
+		to        string
+		initiator string
+		gate      string
+		errStatus string
+		errAudit  bool
+		errEsc    string
 	}
 	markdown := make(map[string]markdownTransition, len(rows))
 	for _, row := range rows {
-		id, fromLabel, toLabel := row[1], row[2], row[3]
-		from, ok := labelToID[fromLabel]
+		id := row[1]
+		// Columns: transition | initiator | condition | gate | on error.
+		cells := strings.Split(row[2], "|")
+		require.Len(t, cells, 6, "section 3 row %s: expected 5 data columns plus the trailing empty part", id)
+
+		fromLabel, toLabel, ok := strings.Cut(strings.TrimSpace(cells[0]), "→")
+		require.True(t, ok, "section 3 row %s: transition cell has no arrow", id)
+		from, ok := labelToID[strings.TrimSpace(fromLabel)]
 		require.True(t, ok, "section 3 row %s: unknown from label %q", id, fromLabel)
-		to, ok := labelToID[toLabel]
+		to, ok := labelToID[strings.TrimSpace(toLabel)]
 		require.True(t, ok, "section 3 row %s: unknown to label %q", id, toLabel)
+
+		initiatorLabel := strings.TrimSpace(cells[1])
+		initiator, ok := initiatorLabels[initiatorLabel]
+		require.True(t, ok, "section 3 row %s: unknown initiator %q", id, initiatorLabel)
+
+		gate := ""
+		gateCell := strings.TrimSpace(cells[3])
+		if gateCell != "—" {
+			gateMatch := gateCellRe.FindStringSubmatch(gateCell)
+			require.Len(t, gateMatch, 2, "section 3 row %s: malformed gate cell %q", id, gateCell)
+			gate = gateMatch[1]
+		}
+
+		onError := strings.TrimSpace(cells[4])
+		require.True(t, strings.HasPrefix(onError, "Stay in "),
+			"section 3 row %s: on-error must start with %q, got %q", id, "Stay in", onError)
+		errAudit := strings.Contains(onError, "; audit;")
+		require.True(t, errAudit, "section 3 row %s: on-error must contain %q", id, "; audit;")
+
+		var errEsc string
+		switch {
+		case strings.Contains(onError, "no escalation"):
+			errEsc = "none"
+		case strings.Contains(onError, "max_rounds"):
+			errEsc = "max_rounds"
+		case strings.Contains(onError, "`max_steps`") && strings.Contains(onError, "`max_cost_usd`"):
+			errEsc = "max_steps_or_cost"
+		default:
+			require.Failf(t, "unknown escalation",
+				"section 3 row %s: on-error cell %q has no recognised escalation", id, onError)
+		}
+
 		require.NotContains(t, markdown, id, "duplicate section 3 row %s", id)
-		markdown[id] = markdownTransition{from: from, to: to}
+		markdown[id] = markdownTransition{
+			from:      from,
+			to:        to,
+			initiator: initiator,
+			gate:      gate,
+			errStatus: "stay_in_state",
+			errAudit:  errAudit,
+			errEsc:    errEsc,
+		}
 	}
 
 	for _, transition := range contract.Transitions {
@@ -201,6 +262,15 @@ func TestSDLCContractMatchesStateMachineDoc(t *testing.T) {
 		require.True(t, ok, "transition %s is missing from section 3", transition.ID)
 		assert.Equal(t, transition.From, md.from, "%s: from state differs", transition.ID)
 		assert.Equal(t, transition.To, md.to, "%s: to state differs", transition.ID)
+		assert.Equal(t, transition.Initiator, md.initiator, "%s: initiator differs", transition.ID)
+		expectedGate := ""
+		if transition.Gate != nil {
+			expectedGate = *transition.Gate
+		}
+		assert.Equal(t, expectedGate, md.gate, "%s: gate differs", transition.ID)
+		assert.Equal(t, transition.Error.Status, md.errStatus, "%s: error.status differs", transition.ID)
+		assert.Equal(t, transition.Error.Audit, md.errAudit, "%s: error.audit differs", transition.ID)
+		assert.Equal(t, transition.Error.Escalation, md.errEsc, "%s: error.escalation differs", transition.ID)
 	}
 	assert.Len(t, markdown, len(contract.Transitions), "section 3 has rows not present in the contract")
 
@@ -230,12 +300,19 @@ func TestSDLCContractMatchesStateMachineDoc(t *testing.T) {
 }
 
 // TestRunEventsProtoStageTransitionPayload guards the STAGE_TRANSITION payload
-// shape and field numbers against accidental renumbering.
+// shape and field numbers against accidental renumbering. The field checks are
+// scoped to the StageTransitionPayload body: the RunEvent envelope also
+// declares run_id, so a whole-file search would not notice the field being
+// removed from the payload.
 func TestRunEventsProtoStageTransitionPayload(t *testing.T) {
 	proto := readRepoFile(t, "packages/contracts/events/run_events.proto")
 
 	assert.Contains(t, proto, "RUN_EVENT_TYPE_STAGE_TRANSITION = 4;")
-	assert.Contains(t, proto, "message StageTransitionPayload {")
+
+	payloadRe := regexp.MustCompile(`(?s)message StageTransitionPayload \{(.*?)\n\}`)
+	match := payloadRe.FindStringSubmatch(proto)
+	require.Len(t, match, 2, "message StageTransitionPayload not found in run_events.proto")
+	payload := match[1]
 
 	for _, field := range []string{
 		"string run_id = 1;",
@@ -246,6 +323,6 @@ func TestRunEventsProtoStageTransitionPayload(t *testing.T) {
 		"string gate = 6;",
 		"string reason = 7;",
 	} {
-		assert.Contains(t, proto, field)
+		assert.Contains(t, payload, field)
 	}
 }

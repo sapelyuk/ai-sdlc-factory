@@ -36,6 +36,7 @@ coverage/
 *.sock
 .docker/
 .dockerignore
+!/.dockerignore
 !/.dockerenv
 
 # IDE

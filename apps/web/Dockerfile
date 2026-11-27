@@ -1,25 +1,32 @@
 # Build stage
+#
+# The build context is the repository root (see deploy/compose/docker-compose.yml),
+# not apps/web: src/lib/sdlc.ts imports
+# ../../../../packages/contracts/state-machine/sdlc_transitions.json, so the
+# layout inside the image must mirror the repository. Keeping a single copy of
+# the contract in packages/contracts avoids a second source of truth.
 FROM node:20-alpine AS builder
 
-WORKDIR /app
+WORKDIR /src
 
 # Copy package files first for caching
-COPY package*.json ./
+COPY apps/web/package*.json ./apps/web/
 
 # Install dependencies
-RUN npm ci
+RUN cd apps/web && npm ci
 
-# Copy source code
-COPY . .
+# Copy source code and the contract it imports
+COPY apps/web ./apps/web
+COPY packages/contracts/state-machine/sdlc_transitions.json ./packages/contracts/state-machine/sdlc_transitions.json
 
 # Build the application
-RUN npm run build
+RUN cd apps/web && npm run build
 
 # Production stage
 FROM nginx:alpine
 
 # Copy built assets
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /src/apps/web/dist /usr/share/nginx/html
 
 # Nginx configuration
 RUN cat > /etc/nginx/conf.d/default.conf <<'EOF'
