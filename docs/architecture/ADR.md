@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADR) — ai-sdlc-factory
 
-**Version 1.9 · 16.11.2026**
+**Version 1.10 · 26.11.2026**
 
 Format: MADR. Statuses: `proposed` | `accepted` | `superseded` | `deprecated` | `requires_review`.
 
@@ -474,10 +474,89 @@ Use **Redis 7** (`docker.io/library/redis:7-alpine`, pinned by digest) as the ba
 
 ---
 
+## ADR-027. Run state authority and persistence
+
+**Status:** accepted.
+
+**Context.**
+`runs.status` is the single source of truth for where a run is in the SDLC
+state machine (`SDLC_STATE_MACHINE.md` §2, §3). Today no production code
+writes `runs.status`: the board uses a fixture client, the API has no run
+endpoints, and the gate path stops at the handoff. Issues #169, #163 and #164
+add the write path, so the authority and persistence rules must be fixed
+before any code is written. Without a single writer, an API request, a retried
+activity and a workflow replay could each update the row and produce a status
+that does not match the executed transition.
+
+**Decision.**
+
+1. **Single writer.** Only `RunWorkflow` updates `runs.status`. The API and
+   every other service send a command or a Temporal signal; they never execute
+   `UPDATE runs SET status = ...`. The workflow validates the transition
+   against the machine-readable table
+   (`packages/contracts/state-machine/sdlc_transitions.json`), evaluates the
+   gate, and only then persists the new status.
+2. **Optimistic locking.** The status update is guarded:
+   `UPDATE runs SET status = $to, updated_at = now() WHERE id = $1 AND status = $from`.
+   A zero-row result is a conflict: the workflow re-reads the row, re-evaluates
+   the transition and does not retry the same write blindly.
+3. **Outcome is separate from status.** `runs.outcome` records how the run
+   ended: `running`, `succeeded`, `failed` or `cancelled` (`TEXT` with a CHECK
+   constraint, default `running`). The `runs.status` CHECK constraint is not
+   changed: the 15 SDLC states remain the only values. The column is added by
+   an additive migration in Stage 2 of #169.
+4. **Transition history comes from the audit log.** Every accepted transition
+   writes an `audit_log` row with action `run_status_changed` and details
+   `{run_id, stage_run_id, from, to, actor, gate, reason}`, aligned with the
+   `StageTransitionPayload` of `run_events.proto`. There is no separate
+   `run_transitions` table. The audit log is append-only, hash-chained and
+   workspace-scoped, so it already provides tamper-evident history.
+5. **Who starts a run.** The run-start endpoint lands in #163. `apps/api`
+   obtains a Temporal client and starts `RunWorkflow`; it does not create the
+   run row itself. The workflow owns the run lifecycle from the first status
+   write.
+6. **Version snapshots.** `runs.specs_snapshot` (JSONB) stores the pinned
+   versions the run executes against (`role_versions[]`, `team_version`,
+   `process_version`, `model_profiles[]`, `knowledge_snapshot_id`,
+   `slp_version`, `slpr_version`, `am_version`, per `SDLC_STATE_MACHINE.md`
+   §9). The snapshot is written once at run start and is immutable for the
+   life of the run.
+7. **StageRun granularity.** `stage_runs` is 1:1 with the 15 SDLC statuses:
+   one StageRun per state, not one per `Process.stages[]` entry. A
+   `Process.stages` entry may map to one or several SDLC statuses; the mapping
+   is deferred until the Registry exposes a process-to-SDLC mapping. That
+   mapping is the explicit revisit condition for this decision. One SDLC state
+   may therefore have several `stage_runs` rows for the same run across
+   feedback cycles; `(run_id, status)` is not unique, ordering is by creation
+   time.
+
+**Consequences.**
+- The API is stateless with respect to run status and cannot diverge from the
+  workflow. A failed API call does not leave a half-written run.
+- A concurrent status change is detected by the guarded `UPDATE` and resolved
+  by re-reading the row. The workflow never overwrites a status it did not
+  observe.
+- `runs.outcome` can be set without touching the status CHECK, so the 15-state
+  contract stays stable while terminal outcomes become queryable.
+- Transition history has the same retention and tamper-evidence as the rest of
+  the audit log; no new table and no new retention policy are introduced.
+- `specs_snapshot` makes a run reproducible after role, team or process
+  versions move on.
+- The 1:1 StageRun granularity is an explicit v1 simplification. If
+  `Process.stages` needs a different mapping, it is revisited with a new ADR
+  rather than silently changing the row model.
+
+**References:** `SDLC_STATE_MACHINE.md` §2, §3, §4, §9; `SYSTEM_DESIGN.md`
+§7.1, §8.1; ADR-002 (Temporal), ADR-010 (plane separation), ADR-013 (R0-R3);
+issues #169, #163, #164, #40.
+
+---
+
 ## Document changes
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.10 | 26.11.2026 | Added ADR-027 (run state authority and persistence). |
 | 1.9 | 16.11.2026 | Added ADR-026 (Redis for idempotency caches). |
 | 1.8 | 30.10.2026 | Added ADR-024 (data-only migrations) and ADR-025 (pinning exceptions). |
 | 1.7 | 27.10.2026 | Added ADR-023 (Sandbox isolation boundary) (#101) |

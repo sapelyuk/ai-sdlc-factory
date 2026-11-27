@@ -1,6 +1,6 @@
 # SDLC State Machine — ai-sdlc-factory
 
-**Version 1.1 · 16.10.2026**
+**Version 1.2 · 26.11.2026**
 
 ## 1. Overview
 
@@ -51,21 +51,42 @@ its full tool set.
 
 ## 3. Transitions and conditions
 
-### 3.9 InDev → CodeReview
+The authoritative machine-readable table is
+`packages/contracts/state-machine/sdlc_transitions.json`. The table below
+mirrors it; the migration contract test fails when the two drift. Section IDs
+are stable references: the four pre-existing IDs (3.9, 3.10, 3.12, 3.15) are
+preserved and the remaining IDs fill the gaps, so the numeric order is not the
+reading order. The reading order follows the state order of section 2.
 
-Condition: PR opened; CI green; new code coverage >= 80%; Conventional Commits observed.
+Every transition is executed by the run workflow (`RunWorkflow`), which is the
+only writer of `runs.status` (ADR-027). A transition that does not satisfy its
+condition or gate keeps the run in its current state, writes an audit event
+and never moves the run. Every transition is additionally bounded by the
+StageRun deadline and the circuit breakers of section 7.
 
-### 3.10 CodeReview → QA
+| ID | Transition | Initiator | Condition | Gate | On error |
+|---|---|---|---|---|---|
+| 3.1 | Idea → Research | run workflow | Run started with the owner goal; the problem description is captured (§2). | — | Stay in Idea; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.2 | Research → Requirements | run workflow | Research report produced from the hypothesis; findings recorded (§2). | — | Stay in Research; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.3 | Requirements → RequirementsReview | run workflow | PRD, SLPr v1 and user stories produced (§2). | — | Stay in Requirements; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.4 | RequirementsReview → Design | human approval | `requirements_approved` passes: approve plus resolved comments (§4). A rejection returns the notes to the PM. | `requirements_approved` | Stay in RequirementsReview; audit; timeout blocks; no escalation. |
+| 3.5 | Design → Architecture | run workflow | Mockups and prototypes produced (§2). | — | Stay in Design; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.6 | Architecture → ArchitectureReview | run workflow | AM v1, C4 diagrams and ADR produced (§2); the AM change passes the `semantic_valid` inference rules (§4). | `semantic_valid` | Stay in Architecture; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.7 | ArchitectureReview → Planning | human approval | `architecture_approved` passes: approve plus a valid AM (§4). A rejection returns the notes to the architect. | `architecture_approved` | Stay in ArchitectureReview; audit; timeout blocks; no escalation. |
+| 3.8 | Planning → InDev | run workflow | Epics, tasks and the sprint plan produced (§2). | — | Stay in Planning; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.9 | InDev → CodeReview | external evidence | PR opened; `ci_green` passes: all CI checks green (§4); new code coverage >= 80%; Conventional Commits observed. | `ci_green` | Stay in InDev; audit; CI failure blocks (§5); escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.10 | CodeReview → QA | run workflow (reviewer agent) | `review_approved` passes: approval from a reviewer that is not the PR author (§4); `max_rounds=3` (§7). Changes requested return the notes to the author. | `review_approved` | Stay in CodeReview; audit; escalate after `max_rounds` (§6). |
+| 3.12 | QA → Build | run workflow | `qa_passed` passes: all test levels green, coverage thresholds met, critical/high bugs closed (§4). Critical defects or test failures block the run (§5). | `qa_passed` | Stay in QA; audit; critical defects or test failure block (§5); escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.11 | Build → Release | external evidence | Image, RC and SBOM produced (§2); `sbom_signed` passes: SBOM present and image signed (§4). | `sbom_signed` | Stay in Build; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.15 | Release → Deploy | human approval | `prod_approved` passes: human approve (R3); release notes in KB; DB migrations verified (§4). A rejection returns the notes to the release manager. | `prod_approved` | Stay in Release; audit; timeout blocks; no escalation. |
+| 3.13 | Deploy → Monitoring | external evidence | `deploy_healthy` passes: healthcheck plus metrics normal (§4). | `deploy_healthy` | Stay in Deploy; audit; escalate on `max_steps`/`max_cost_usd` (§6). |
+| 3.14 | Monitoring → Research | scheduled | Monitoring reports produced feedback tasks; the scheduled feedback review starts the next Research cycle (same run: a new Research StageRun of the same run, not a new run; feedback loop of §1). | — | Stay in Monitoring; audit; no escalation. |
 
-Condition: approval from reviewer (not PR author); max_rounds=3.
-
-### 3.12 QA → Build
-
-Condition: all test levels green; coverage thresholds met; critical/high bugs closed.
-
-### 3.15 Release → Deploy
-
-Condition: `human_approval` gate for prod; release notes in KB; DB migrations verified.
+Error semantics in the table are the three dimensions of the contract:
+`stay in state` (the run never moves on a rejected transition), `audit` (the
+rejection is written to `audit_log`) and `escalate` (the condition that hands
+the run to a human, per section 6). The machine-readable form encodes them as
+`error.status`, `error.audit` and `error.escalation`.
 
 ## 4. Gates
 
@@ -133,5 +154,6 @@ Each Run pins: `role_versions[]`, `team_version`, `process_version`, `model_prof
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.2 | 26.11.2026 | Completed section 3 with all 15 transitions and linked it to the machine-readable contract |
 | 1.1 | 16.10.2026 | Added conformance_ok, semantic_valid gates |
 | 1.0 | 16.10.2026 | Initial specification |

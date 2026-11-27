@@ -7,6 +7,7 @@ import {
   type Run,
 } from '@/lib/tasks'
 import { useAuthStore } from '@/store/auth'
+import type { RunStatus } from '@/lib/sdlc'
 
 const IN_DEV_RUN: Run = {
   id: 'run-test',
@@ -41,6 +42,33 @@ describe('fixture board client', () => {
 
     const runs = await client.listRuns('token')
     expect(runs[0].status).toBe('code_review')
+  })
+
+  it('accepts every transition in the machine-readable contract', async () => {
+    const client = createFixtureBoardClient([{ ...IN_DEV_RUN, status: 'idea' }])
+
+    const chain: RunStatus[] = [
+      'research',
+      'requirements',
+      'requirements_review',
+      'design',
+      'architecture',
+      'architecture_review',
+      'planning',
+      'in_dev',
+      'code_review',
+      'qa',
+      'build',
+      'release',
+      'deploy',
+      'monitoring',
+      'research',
+    ]
+
+    for (const to of chain) {
+      const updated = await client.recordTransition('token', IN_DEV_RUN.id, to)
+      expect(updated.status).toBe(to)
+    }
   })
 
   it('rejects an undocumented transition without moving the run', async () => {

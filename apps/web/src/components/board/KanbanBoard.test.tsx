@@ -195,9 +195,35 @@ describe('KanbanBoard', () => {
     expect(screen.getByTestId('column-idea')).toHaveAttribute('aria-disabled', 'true')
   })
 
+  it('enables the newly documented idea -> research transition', async () => {
+    renderBoard()
+
+    await screen.findByTestId('column-idea')
+    dragStart('run-0006')
+
+    expect(screen.getByTestId('column-research')).toHaveAttribute('aria-disabled', 'false')
+    expect(screen.getByTestId('column-requirements')).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('enables the deploy -> monitoring transition from the contract', async () => {
+    const deployRun: Run = {
+      ...FIXTURE_RUNS[0],
+      id: 'run-deploy',
+      status: 'deploy',
+    }
+    vi.mocked(listRuns).mockResolvedValue([deployRun])
+    renderBoard()
+
+    await screen.findByTestId('column-deploy')
+    dragStart(deployRun.id)
+
+    expect(screen.getByTestId('column-monitoring')).toHaveAttribute('aria-disabled', 'false')
+    expect(screen.getByTestId('column-release')).toHaveAttribute('aria-disabled', 'true')
+  })
+
   it('rejects an undocumented drop and keeps the card in place', async () => {
     // Uses the real fixture client: run-0001 is in_dev and in_dev -> qa is not
-    // one of the four documented transitions.
+    // one of the 15 documented transitions.
     renderBoard()
 
     const inDevColumn = await screen.findByTestId('column-in_dev')
